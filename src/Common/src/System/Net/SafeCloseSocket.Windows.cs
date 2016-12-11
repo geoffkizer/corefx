@@ -4,10 +4,29 @@
 
 using Microsoft.Win32.SafeHandles;
 
+using System;
 using System.Diagnostics;
-using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Threading;
+
+
+// TODO: Move to common
+internal static partial class Interop
+{
+    internal static partial class Kernel32
+    {
+        [Flags]
+        internal enum FileCompletionNotificationModes : byte
+        {
+            None = 0,
+            SkipCompletionPortOnSuccess = 1,
+            SkipSetEventOnHandle = 2
+        }
+
+        [DllImport(Libraries.Kernel32, SetLastError = true)]
+        internal static unsafe extern bool SetFileCompletionNotificationModes(SafeHandle handle, FileCompletionNotificationModes flags);
+    }
+}
 
 namespace System.Net.Sockets
 {
@@ -19,6 +38,7 @@ namespace System.Net.Sockets
 #endif
     {
         private ThreadPoolBoundHandle _iocpBoundHandle;
+        private bool _skipCompletionPortOnSuccess;
         private object _iocpBindingLock = new object();
 
         public ThreadPoolBoundHandle IOCPBoundHandle
@@ -29,8 +49,15 @@ namespace System.Net.Sockets
             }
         }
 
-        // Binds the Socket Win32 Handle to the ThreadPool's CompletionPort.
+        // TODO: find callers and update
         public ThreadPoolBoundHandle GetOrAllocateThreadPoolBoundHandle()
+        {
+            return GetOrAllocateThreadPoolBoundHandle(false);
+        }
+
+
+        // Binds the Socket Win32 Handle to the ThreadPool's CompletionPort.
+        public ThreadPoolBoundHandle GetOrAllocateThreadPoolBoundHandle(bool trySkipCompletionPortOnSuccess)
         {
             if (_released)
             {
@@ -49,12 +76,13 @@ namespace System.Net.Sockets
                         // Bind the socket native _handle to the ThreadPool.
                         if (NetEventSource.IsEnabled) NetEventSource.Info(this, "calling ThreadPool.BindHandle()");
 
+                        ThreadPoolBoundHandle boundHandle;
                         try
                         {
                             // The handle (this) may have been already released:
                             // E.g.: The socket has been disposed in the main thread. A completion callback may
                             //       attempt starting another operation.
-                            _iocpBoundHandle = ThreadPoolBoundHandle.BindHandle(this);
+                            boundHandle = ThreadPoolBoundHandle.BindHandle(this);
                         }
                         catch (Exception exception)
                         {
@@ -62,11 +90,34 @@ namespace System.Net.Sockets
                             CloseAsIs();
                             throw;
                         }
+
+                        // Try to disable completions for synchronous success, if requested
+                        if (trySkipCompletionPortOnSuccess)
+                        {
+                            if (Interop.Kernel32.SetFileCompletionNotificationModes(boundHandle.Handle,
+                                Interop.Kernel32.FileCompletionNotificationModes.SkipCompletionPortOnSuccess |
+                                Interop.Kernel32.FileCompletionNotificationModes.SkipSetEventOnHandle))
+                            {
+                                _skipCompletionPortOnSuccess = true;
+                            }
+                        }
+
+                        // Don't set this until after we've configured the handle above (if we did)
+                        _iocpBoundHandle = boundHandle;
                     }
                 }
             }
 
             return _iocpBoundHandle;
+        }
+
+        public bool SkipCompletionPortOnSuccess
+        {
+            get
+            {
+                Debug.Assert(_iocpBoundHandle != null);
+                return _skipCompletionPortOnSuccess;
+            }
         }
 
         internal static unsafe SafeCloseSocket CreateWSASocket(byte* pinnedBuffer)

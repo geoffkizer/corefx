@@ -246,12 +246,9 @@ namespace System.Net.Sockets
             SocketError errorCode = SocketPal.SendFileAsync(_handle, fileStream, preBuffer, postBuffer, flags, asyncResult);
 
             // Check for synchronous exception
-            if (errorCode != SocketError.Success)
+            if (!CheckErrorAndUpdateStatus(errorCode))
             {
-                SocketException socketException = new SocketException((int)errorCode);
-                UpdateStatusAfterSocketError(socketException);
-                if (NetEventSource.IsEnabled) NetEventSource.Error(this, socketException);
-                throw socketException;
+                throw new SocketException((int)errorCode);
             }
 
             asyncResult.FinishPostingAsyncOp(ref Caches.SendClosureCache);

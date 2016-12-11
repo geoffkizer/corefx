@@ -23,16 +23,19 @@ namespace System.Net.Sockets
             if (NetEventSource.IsEnabled) NetEventSource.Info(this, socket);
         }
 
-        public void CompletionCallback(int numBytes, SocketError errorCode)
+        protected void CompletionCallback(int numBytes, SocketError errorCode)
         {
+#if false
+            // TODO: Kill this
+            if (errorCode == SocketErrorExt.SynchronousSuccess)
+            {
+                // We don't care if it's sync or async, we treat it the same
+                errorCode = SocketError.Success;
+            }
+#endif
+
             ErrorCode = (int)errorCode;
             InvokeCallback(PostCompletion(numBytes));
-        }
-
-        private void ReleaseUnmanagedStructures()
-        {
-            // NOTE: this method needs to exist to conform to the contract expected by the
-            //       platform-independent code in BaseOverlappedAsyncResult.CheckAsyncCallOverlappedResult.
         }
     }
 }

@@ -585,6 +585,7 @@ namespace System.Net.Sockets
             }
         }
 
+        // TODO: remove this entirely, I think
         internal void FinishOperationSyncFailure(SocketError socketError, int bytesTransferred, SocketFlags flags)
         {
             SetResults(socketError, bytesTransferred, flags);
@@ -598,6 +599,41 @@ namespace System.Net.Sockets
 
             Complete();
         }
+
+        // returns true for pending, false for complete
+        internal bool TryFinishOperation(SocketError socketError)
+        {
+            if (socketError == SocketError.Success)
+            {
+                // Synchronous success, so not pending
+                //                Debug.Assert(false, "Success in TryFinishOperation??");
+                //                return false;
+                //                return true;    // temp
+                return false;
+            }
+            else if (socketError == SocketError.IOPending)
+            {
+                // Pending
+                return true;
+            }
+            else
+            {
+                // Synchronous failure
+                SetResults(socketError, 0, SocketFlags.None);
+
+                // This will be null if we're doing a static ConnectAsync to a DnsEndPoint with AddressFamily.Unspecified;
+                // the attempt socket will be closed anyways, so not updating the state is OK.
+                if (_currentSocket != null)
+                {
+                    _currentSocket.UpdateStatusAfterSocketError(socketError);
+                }
+
+                Complete();
+
+                return false;
+            }
+        }
+
 
         internal void FinishConnectByNameSyncFailure(Exception exception, int bytesTransferred, SocketFlags flags)
         {
@@ -671,10 +707,14 @@ namespace System.Net.Sockets
             }
         }
 
-        internal void FinishOperationSuccess(SocketError socketError, int bytesTransferred, SocketFlags flags)
-        {
-            SetResults(socketError, bytesTransferred, flags);
+        // TODO: I think I need to call this in the sync completion case?
+        // TODO: get rid of flags everywhere
 
+        internal void FinishOperationSyncSuccess(int bytesTransferred)
+        {
+            SetResults(SocketError.Success, bytesTransferred, SocketFlags.None);
+
+            SocketError socketError = SocketError.Success;
             switch (_completedOperation)
             {
                 case SocketAsyncOperation.Accept:
@@ -867,12 +907,19 @@ namespace System.Net.Sockets
             if (socketError != SocketError.Success)
             {
                 // Asynchronous failure or something went wrong after async success.
-                SetResults(socketError, bytesTransferred, flags);
+                // TODO: flags
+                SetResults(socketError, bytesTransferred, SocketFlags.None);
                 _currentSocket.UpdateStatusAfterSocketError(socketError);
             }
 
             // Complete the operation and raise completion event.
             Complete();
+        }
+
+        internal void FinishOperationAsyncSuccess(int bytesTransferred)
+        {
+            FinishOperationSyncSuccess(bytesTransferred);
+
             if (_context == null)
             {
                 OnCompleted(this);

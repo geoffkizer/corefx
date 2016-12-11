@@ -92,9 +92,13 @@ namespace System.Net.Sockets
                 {
                     var tcs = new TaskCompletionSource<bool>();
 
+                    // CONSIDER: this is a little scary, having to check the sync success thing...
+                    // Is there a better way to do this?
+
                     // This can throw ObjectDisposedException.
                     errorCode = SocketPal.SendFileAsync(_handle, fileStream, (bytesTransferred, socketError) => 
                     {
+//                        if (socketError != SocketError.Success && socketError != SocketErrorExt.SynchronousSuccess)
                         if (socketError != SocketError.Success)
                         {
                             // Synchronous exception from SendFileAsync
