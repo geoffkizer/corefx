@@ -4,10 +4,29 @@
 
 using Microsoft.Win32.SafeHandles;
 
+using System;
 using System.Diagnostics;
-using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Threading;
+
+
+// TODO: Move to common
+internal static partial class Interop
+{
+    internal static partial class Kernel32
+    {
+        [Flags]
+        internal enum FileCompletionNotificationModes : byte
+        {
+            None = 0,
+            SkipCompletionPortOnSuccess = 1,
+            SkipSetEventOnHandle = 2
+        }
+
+        [DllImport(Libraries.Kernel32, SetLastError = true)]
+        internal static unsafe extern bool SetFileCompletionNotificationModes(SafeHandle handle, FileCompletionNotificationModes flags);
+    }
+}
 
 namespace System.Net.Sockets
 {
@@ -62,6 +81,20 @@ namespace System.Net.Sockets
                             CloseAsIs();
                             throw;
                         }
+
+                        // Try to disable completions for synchronous success, if requested
+                        if (tryEnableSyncCompletions)
+                        {
+                            if (Interop.Kernel32.SetFileCompletionNotificationModes(boundHandle.Handle,
+                                Interop.Kernel32.FileCompletionNotificationModes.SkipCompletionPortOnSuccess |
+                                Interop.Kernel32.FileCompletionNotificationModes.SkipSetEventOnHandle))
+                            {
+                                _syncCompletionsEnabled = true;
+                            }
+                        }
+
+                        // Don't set this until after we've configured the handle above (if we did)
+                        _iocpBoundHandle = boundHandle;
                     }
                 }
             }
