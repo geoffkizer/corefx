@@ -3,6 +3,7 @@
 // See the LICENSE file in the project root for more information.
 
 using System.Diagnostics;
+using System.Linq;
 using System.Net.Sockets.Tests;
 using System.Runtime.InteropServices;
 using System.Text;
@@ -206,7 +207,8 @@ namespace System.Net.Sockets.Performance.Tests
             _recvBufferIndex = 0;
 
             // Expect echo server.
-            if (!SocketTestMemcmp.Compare(_sendBuffer, _recvBuffer))
+            if (_sendBuffer.Length != _recvBuffer.Length ||
+                !Enumerable.SequenceEqual(_sendBuffer, _recvBuffer))
             {
                 _log.WriteLine("Received different data from echo server");
             }
