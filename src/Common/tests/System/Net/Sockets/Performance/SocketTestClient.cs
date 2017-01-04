@@ -68,7 +68,7 @@ namespace System.Net.Sockets.Performance.Tests
 
             _timeProgramStart = timeProgramStart;
 
-            if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows)) // on Unix, socket will be created in Socket.ConnectAsync
+//            if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows)) // on Unix, socket will be created in Socket.ConnectAsync
             {
                 _timeInit.Start();
                 _s = new Socket(SocketType.Stream, ProtocolType.Tcp);
