@@ -3927,17 +3927,12 @@ namespace System.Net.Sockets
             int socketAddressSize = _rightEndPoint.Serialize().Size;
             SocketError errorCode = SocketPal.AcceptAsync(this, _handle, acceptHandle, receiveSize, socketAddressSize, asyncResult);
 
-            errorCode = asyncResult.CheckAsyncCallOverlappedResult(errorCode);
-
             if (NetEventSource.IsEnabled) NetEventSource.Info(this, $"Interop.Winsock.AcceptEx returns:{errorCode} {asyncResult}");
 
             // Throw an appropriate SocketException if the native call fails synchronously.
-            if (errorCode != SocketError.Success)
+            if (!CheckErrorAndUpdateStatus(errorCode))
             {
-                SocketException socketException = new SocketException((int)errorCode);
-                UpdateStatusAfterSocketError(socketException);
-                if (NetEventSource.IsEnabled) NetEventSource.Error(this, socketException);
-                throw socketException;
+                throw new SocketException((int)errorCode);
             }
         }
 
