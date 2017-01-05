@@ -49,6 +49,13 @@ namespace System.Net.Sockets
             }
         }
 
+        // TODO: find callers and update
+        public ThreadPoolBoundHandle GetOrAllocateThreadPoolBoundHandle()
+        {
+            return GetOrAllocateThreadPoolBoundHandle(false);
+        }
+
+
         // Binds the Socket Win32 Handle to the ThreadPool's CompletionPort.
         public ThreadPoolBoundHandle GetOrAllocateThreadPoolBoundHandle(bool trySkipCompletionPortOnSuccess)
         {
@@ -69,12 +76,13 @@ namespace System.Net.Sockets
                         // Bind the socket native _handle to the ThreadPool.
                         if (NetEventSource.IsEnabled) NetEventSource.Info(this, "calling ThreadPool.BindHandle()");
 
+                        ThreadPoolBoundHandle boundHandle;
                         try
                         {
                             // The handle (this) may have been already released:
                             // E.g.: The socket has been disposed in the main thread. A completion callback may
                             //       attempt starting another operation.
-                            _iocpBoundHandle = ThreadPoolBoundHandle.BindHandle(this);
+                            boundHandle = ThreadPoolBoundHandle.BindHandle(this);
                         }
                         catch (Exception exception)
                         {
