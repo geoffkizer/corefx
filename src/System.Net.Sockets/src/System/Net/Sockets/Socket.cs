@@ -3272,28 +3272,12 @@ namespace System.Net.Sockets
 #if DEBUG
             IntPtr lastHandle = _handle.DangerousGetHandle();
 #endif
-            // Guarantee to call CheckAsyncCallOverlappedResult if we call SetUnamangedStructures with a cache in order to
-            // avoid a Socket leak in case of error.
-            SocketError errorCode = SocketError.SocketError;
-            try
-            {
-                errorCode = SocketPal.ReceiveAsync(_handle, buffers, socketFlags, asyncResult);
-                if (NetEventSource.IsEnabled) NetEventSource.Info(this, $"Interop.Winsock.WSARecv returns:{errorCode} returning AsyncResult:{asyncResult}");
-            }
-            finally
-            {
-                errorCode = asyncResult.CheckAsyncCallOverlappedResult(errorCode);
-            }
+            SocketError errorCode = SocketPal.ReceiveAsync(_handle, buffers, socketFlags, asyncResult);
 
-            // Throw an appropriate SocketException if the native call fails synchronously.
-            if (errorCode != SocketError.Success)
+            if (NetEventSource.IsEnabled) NetEventSource.Info(this, $"Interop.Winsock.WSARecv returns:{errorCode} returning AsyncResult:{asyncResult}");
+ 
+            if (CheckErrorAndUpdateStatus(errorCode))
             {
-                // Update the internal state of this socket according to the error before throwing.
-                UpdateStatusAfterSocketError(errorCode);
-                if (NetEventSource.IsEnabled)
-                {
-                    if (NetEventSource.IsEnabled) NetEventSource.Error(this, new SocketException((int)errorCode));
-                }
             }
 #if DEBUG
             else
