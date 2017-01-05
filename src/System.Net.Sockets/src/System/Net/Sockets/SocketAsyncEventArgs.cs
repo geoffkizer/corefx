@@ -585,6 +585,7 @@ namespace System.Net.Sockets
             }
         }
 
+        // TODO: remove this entirely, I think
         internal void FinishOperationSyncFailure(SocketError socketError, int bytesTransferred, SocketFlags flags)
         {
             SetResults(socketError, bytesTransferred, flags);
@@ -598,6 +599,38 @@ namespace System.Net.Sockets
 
             Complete();
         }
+
+        // returns true for pending, false for complete
+        internal bool TryFinishOperation(SocketError socketError)
+        {
+            if (socketError == SocketError.Success)
+            {
+                // Synchronous success, so not pending
+                return false;
+            }
+            else if (socketError == SocketError.IOPending)
+            {
+                // Pending
+                return true;
+            }
+            else
+            {
+                // Synchronous failure
+                SetResults(socketError, 0, SocketFlags.None);
+
+                // This will be null if we're doing a static ConnectAsync to a DnsEndPoint with AddressFamily.Unspecified;
+                // the attempt socket will be closed anyways, so not updating the state is OK.
+                if (_currentSocket != null)
+                {
+                    _currentSocket.UpdateStatusAfterSocketError(socketError);
+                }
+
+                Complete();
+
+                return false;
+            }
+        }
+
 
         internal void FinishConnectByNameSyncFailure(Exception exception, int bytesTransferred, SocketFlags flags)
         {

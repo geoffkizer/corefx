@@ -192,7 +192,7 @@ namespace System.Net.Sockets
             _socketAddressSize = 0;
         }
 
-        internal unsafe SocketError DoOperationSend(SafeCloseSocket handle, out int bytesTransferred)
+        internal unsafe SocketError DoOperationSend(SafeCloseSocket handle)
         {
             SocketError errorCode;
             if (_buffer != null)
@@ -204,7 +204,6 @@ namespace System.Net.Sockets
                 errorCode = handle.AsyncContext.SendAsync(_bufferList, _socketFlags, TransferCompletionCallback);
             }
 
-            bytesTransferred = 0;
             return errorCode;
         }
 

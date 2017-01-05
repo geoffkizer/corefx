@@ -157,48 +157,35 @@ namespace System.Net.Sockets
             }
         }
 
-        private void ProcessIOCPResult(bool success, int bytesTransferred)
+        private SocketError ProcessIOCPResult(bool success, int bytesTransferred)
         {
-            // TODO
-#if false
             if (success)
             {
                 // Synchronous success.
-                // TODO: Check if we can complete sync and do so
-                // But we can't for now
-                // So return IOPending
+                if (_currentSocket.SafeHandle.SkipCompletionPortOnSuccess)
+                {
+                    // The socket handle is configured to skip completion on success, 
+                    // so we can st the results right now.
+                    SetResults(SocketError.Success, bytesTransferred, SocketFlags.None);    // TODO: Figure out SocketFlags
+                    Complete();
+                    return SocketError.Success;
+                }
+
+                // Socket handle is going to post a completion to the completion port (may have done so already).
+                // Return pending and we will continue in the completion port callback.
                 return SocketError.IOPending;
             }
 
             // Get the socket error (which may be IOPending)
             SocketError errorCode = SocketPal.GetLastSocketError();
 
-            if (errorCode == SocketError.IOPending)
-            {
-                // Operation is pending.
-                // We will continue when the completion arrives (may have already at this point).
-                return SocketError.IOPending;
-            }
-            else
-            {
-                // Synchronous failure.
-                // Release overlapped and pinned structures.
-                ReleaseUnmanagedStructures();
-
-                return errorCode;
-            }
-#endif
+            // If there's an error, then the caller will handle this and set the result,
+            // and the Overlapped will be released in CompleteIOCPOperation below.
+            return errorCode;
         }
 
         private void CompleteIOCPOperation()
         {
-            // TODO #4900: Optimization to remove callbacks if the operations are completed synchronously:
-            //       Use SetFileCompletionNotificationModes(FILE_SKIP_COMPLETION_PORT_ON_SUCCESS).
-
-            // If SetFileCompletionNotificationModes(FILE_SKIP_COMPLETION_PORT_ON_SUCCESS) is not set on this handle
-            // it is guaranteed that the IOCP operation will be completed in the callback even if Socket.Success was 
-            // returned by the Win32 API.
-
             // Required to allow another IOCP operation for the same handle.  We release the native overlapped
             // in the safe handle, but keep the safe handle object around so as to be able to reuse it
             // for other operations.
@@ -534,11 +521,12 @@ namespace System.Net.Sockets
             //   An array of WSABuffer descriptors is allocated.
         }
 
-        internal unsafe SocketError DoOperationSend(SafeCloseSocket handle, out int bytesTransferred)
+        internal unsafe SocketError DoOperationSend(SafeCloseSocket handle)
         {
             PrepareIOCPOperation();
 
             SocketError socketError;
+            int bytesTransferred;
             if (_buffer != null)
             {
                 // Single buffer case.
@@ -564,12 +552,7 @@ namespace System.Net.Sockets
                     IntPtr.Zero);
             }
 
-            if (socketError == SocketError.SocketError)
-            {
-                socketError = SocketPal.GetLastSocketError();
-            }
-
-            return socketError;
+            return ProcessIOCPResult(socketError == SocketError.Success, bytesTransferred);
         }
 
         private void InnerStartOperationSendPackets()

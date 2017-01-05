@@ -51,6 +51,8 @@ namespace System.Net.Sockets
                 throw new ObjectDisposedException(s.GetType().FullName);
             }
 
+            // Disable for now, not sure what's up
+//            ThreadPoolBoundHandle boundHandle = s.SafeHandle.GetOrAllocateThreadPoolBoundHandle(true);
             ThreadPoolBoundHandle boundHandle = s.SafeHandle.GetOrAllocateThreadPoolBoundHandle();
 
             unsafe

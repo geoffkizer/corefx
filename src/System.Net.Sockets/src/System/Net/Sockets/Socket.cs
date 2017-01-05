@@ -4503,7 +4503,6 @@ namespace System.Net.Sockets
         public bool SendAsync(SocketAsyncEventArgs e)
         {
             if (NetEventSource.IsEnabled) NetEventSource.Enter(this, e);
-            bool retval;
 
             if (CleanedUp)
             {
@@ -4520,13 +4519,12 @@ namespace System.Net.Sockets
             e.StartOperationSend();
 
             // Local vars for sync completion of native call.
-            int bytesTransferred;
             SocketError socketError;
 
             // Wrap native methods with try/catch so event args object can be cleaned up.
             try
             {
-                socketError = e.DoOperationSend(_handle, out bytesTransferred);
+                socketError = e.DoOperationSend(_handle);
             }
             catch
             {
@@ -4535,20 +4533,14 @@ namespace System.Net.Sockets
                 throw;
             }
 
-            // Handle completion when completion port is not posted.
-            if (socketError != SocketError.Success && socketError != SocketError.IOPending)
-            {
-                e.FinishOperationSyncFailure(socketError, bytesTransferred, SocketFlags.None);
-                retval = false;
-            }
-            else
-            {
-                retval = true;
-            }
+            bool retval = e.TryFinishOperation(socketError);
 
             if (NetEventSource.IsEnabled) NetEventSource.Exit(this, retval);
+
             return retval;
         }
+
+        // Move this
 
         public bool SendPacketsAsync(SocketAsyncEventArgs e)
         {
