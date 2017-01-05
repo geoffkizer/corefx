@@ -606,6 +606,7 @@ namespace System.Net.Sockets
             if (socketError == SocketError.Success)
             {
                 // Synchronous success, so not pending
+                Debug.Assert(false, "Success in TryFinishOperation??");
                 return false;
             }
             else if (socketError == SocketError.IOPending)
