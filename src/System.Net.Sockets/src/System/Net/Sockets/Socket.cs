@@ -5394,21 +5394,22 @@ namespace System.Net.Sockets
             }
             catch
             {
-                // If ConnectEx throws we need to unpin the socketAddress buffer.
                 // _rightEndPoint will always equal oldEndPoint.
-                // TODO: Remove this...
-                asyncResult.InternalCleanup();
                 _rightEndPoint = oldEndPoint;
                 throw;
             }
 
             if (NetEventSource.IsEnabled) NetEventSource.Info(this, $"Interop.Winsock.connect returns:{errorCode}");
 
-            if (CheckErrorAndUpdateStatus(errorCode))
+            if (errorCode == SocketError.Success)
             {
+                // Synchronous success. Indicate that we're connected.
+                // TODO, I doubt this actually ever happens in practice, but just in case:
+                // How does this interact with sync completion?
                 SetToConnected();
             }
-            else
+
+            if (!CheckErrorAndUpdateStatus(errorCode))
             {
                 // Update the internal state of this socket according to the error before throwing.
                 _rightEndPoint = oldEndPoint;
