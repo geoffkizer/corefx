@@ -832,7 +832,7 @@ namespace System.Net.Sockets
         public static unsafe SocketError SendAsync(SafeCloseSocket handle, byte[] buffer, int offset, int count, SocketFlags socketFlags, OverlappedAsyncResult asyncResult)
         {
             // Set up unmanaged structures for overlapped WSASend.
-            SafeNativeOverlapped nativeOverlapped = asyncResult.SetUnmanagedStructures(buffer, offset, count, null, false /*don't pin null remoteEP*/);
+            asyncResult.SetUnmanagedStructures(buffer, offset, count, null, false /*don't pin null remoteEP*/);
             try
             {
                 // This can throw ObjectDisposedException.
@@ -843,7 +843,7 @@ namespace System.Net.Sockets
                     1, // There is only ever 1 buffer being sent.
                     out bytesTransferred,
                     socketFlags,
-                    nativeOverlapped,
+                    asyncResult.OverlappedHandle,
                     IntPtr.Zero);
 
                 return asyncResult.ProcessOverlappedResult(errorCode == SocketError.Success, bytesTransferred);
@@ -858,7 +858,7 @@ namespace System.Net.Sockets
         public static unsafe SocketError SendAsync(SafeCloseSocket handle, IList<ArraySegment<byte>> buffers, SocketFlags socketFlags, OverlappedAsyncResult asyncResult)
         {
             // Set up asyncResult for overlapped WSASend.
-            SafeNativeOverlapped nativeOverlapped = asyncResult.SetUnmanagedStructures(buffers);
+            asyncResult.SetUnmanagedStructures(buffers);
             try
             {
                 // This can throw ObjectDisposedException.
@@ -869,7 +869,7 @@ namespace System.Net.Sockets
                     asyncResult._wsaBuffers.Length,
                     out bytesTransferred,
                     socketFlags,
-                    nativeOverlapped,
+                    asyncResult.OverlappedHandle,
                     IntPtr.Zero);
 
                 return asyncResult.ProcessOverlappedResult(errorCode == SocketError.Success, bytesTransferred);

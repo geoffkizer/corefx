@@ -48,7 +48,7 @@ namespace System.Net.Sockets
         // These calls are outside the runtime and are unmanaged code, so we need
         // to prepare specific structures and ints that lie in unmanaged memory
         // since the overlapped calls may complete asynchronously.
-        internal SafeNativeOverlapped SetUnmanagedStructures(object objectsToPin)
+        internal void SetUnmanagedStructures(object objectsToPin)
         {
             Socket s = (Socket)AsyncObject;
 
@@ -70,8 +70,6 @@ namespace System.Net.Sockets
             }
 
             if (NetEventSource.IsEnabled) NetEventSource.Info(this, $"{boundHandle}::AllocateNativeOverlapped. return={_nativeOverlapped}");
-
-            return _nativeOverlapped;
         }
 
         private static unsafe void CompletionPortCallback(uint errorCode, uint numBytes, NativeOverlapped* nativeOverlapped)
