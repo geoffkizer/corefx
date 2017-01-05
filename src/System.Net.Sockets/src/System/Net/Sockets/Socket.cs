@@ -2415,17 +2415,10 @@ namespace System.Net.Sockets
 
             if (NetEventSource.IsEnabled) NetEventSource.Info(this, $"UnsafeNclNativeMethods.OSSOCK.DisConnectEx returns:{errorCode}");
 
-            // if the asynchronous native call fails synchronously
-            // we'll throw a SocketException
-            errorCode = asyncResult.CheckAsyncCallOverlappedResult(errorCode);
-
-            if (errorCode != SocketError.Success)
+            // If the call failed, update our status and throw
+            if (!CheckErrorAndUpdateStatus(errorCode))
             {
-                // update our internal state after this socket error and throw
-                SocketException socketException = new SocketException((int)errorCode);
-                UpdateStatusAfterSocketError(socketException);
-                if (NetEventSource.IsEnabled) NetEventSource.Error(this, socketException);
-                throw socketException;
+                throw new SocketException((int)errorCode);
             }
 
             if (NetEventSource.IsEnabled) NetEventSource.Exit(this, asyncResult);
@@ -2702,32 +2695,16 @@ namespace System.Net.Sockets
         {
             if (NetEventSource.IsEnabled) NetEventSource.Info(this, $"SRC:{LocalEndPoint} DST:{RemoteEndPoint} size:{size}");
 
-            // Guarantee to call CheckAsyncCallOverlappedResult if we call SetUnamangedStructures with a cache in order to
-            // avoid a Socket leak in case of error.
-            SocketError errorCode = SocketError.SocketError;
-            try
-            {
-                // Get the Send going.
-                if (NetEventSource.IsEnabled) NetEventSource.Info(this, $"asyncResult:{asyncResult} size:{size}");
+            // Get the Send going.
+            if (NetEventSource.IsEnabled) NetEventSource.Info(this, $"asyncResult:{asyncResult} size:{size}");
 
-                errorCode = SocketPal.SendAsync(_handle, buffer, offset, size, socketFlags, asyncResult);
+            SocketError errorCode = SocketPal.SendAsync(_handle, buffer, offset, size, socketFlags, asyncResult);
 
-                if (NetEventSource.IsEnabled) NetEventSource.Info(this, $"Interop.Winsock.WSASend returns:{errorCode} size:{size} returning AsyncResult:{asyncResult}");
-            }
-            finally
-            {
-                errorCode = asyncResult.CheckAsyncCallOverlappedResult(errorCode);
-            }
+            if (NetEventSource.IsEnabled) NetEventSource.Info(this, $"Interop.Winsock.WSASend returns:{errorCode} size:{size} returning AsyncResult:{asyncResult}");
 
-            // Throw an appropriate SocketException if the native call fails synchronously.
-            if (errorCode != SocketError.Success)
-            {
-                UpdateStatusAfterSocketError(errorCode);
-                if (NetEventSource.IsEnabled)
-                {
-                    if (NetEventSource.IsEnabled) NetEventSource.Error(this, new SocketException((int)errorCode));
-                }
-            }
+            // If the call failed, update our status 
+            CheckErrorAndUpdateStatus(errorCode);
+
             return errorCode;
         }
 
@@ -2784,29 +2761,15 @@ namespace System.Net.Sockets
         private SocketError DoBeginSend(IList<ArraySegment<byte>> buffers, SocketFlags socketFlags, OverlappedAsyncResult asyncResult)
         {
             if (NetEventSource.IsEnabled) NetEventSource.Info(this, $"SRC:{LocalEndPoint} DST:{RemoteEndPoint} buffers:{buffers}");
+            if (NetEventSource.IsEnabled) NetEventSource.Info(this, $"asyncResult:{asyncResult}");
 
-            // Guarantee to call CheckAsyncCallOverlappedResult if we call SetUnamangedStructures with a cache in order to
-            // avoid a Socket leak in case of error.
-            SocketError errorCode = SocketError.SocketError;
-            try
-            {
-                if (NetEventSource.IsEnabled) NetEventSource.Info(this, $"asyncResult:{asyncResult}");
+            SocketError errorCode = SocketPal.SendAsync(_handle, buffers, socketFlags, asyncResult);
 
-                errorCode = SocketPal.SendAsync(_handle, buffers, socketFlags, asyncResult);
+            if (NetEventSource.IsEnabled) NetEventSource.Info(this, $"Interop.Winsock.WSASend returns:{errorCode} returning AsyncResult:{asyncResult}");
 
-                if (NetEventSource.IsEnabled) NetEventSource.Info(this, $"Interop.Winsock.WSASend returns:{errorCode} returning AsyncResult:{asyncResult}");
-            }
-            finally
-            {
-                errorCode = asyncResult.CheckAsyncCallOverlappedResult(errorCode);
-            }
+            // If the call failed, update our status 
+            CheckErrorAndUpdateStatus(errorCode);
 
-            // Throw an appropriate SocketException if the native call fails synchronously.
-            if (errorCode != SocketError.Success)
-            {
-                UpdateStatusAfterSocketError(errorCode);
-                if (NetEventSource.IsEnabled) NetEventSource.Error(this, new SocketException((int)errorCode));
-            }
             return errorCode;
         }
 
@@ -5808,6 +5771,17 @@ namespace System.Net.Sockets
                 if (NetEventSource.IsEnabled) NetEventSource.Info(this, "Invalidating socket.");
                 SetToDisconnected();
             }
+        }
+
+        private bool CheckErrorAndUpdateStatus(SocketError errorCode)
+        {
+            if (errorCode == SocketError.Success || errorCode == SocketError.IOPending)
+            {
+                return true;
+            }
+
+            UpdateStatusAfterSocketError(errorCode);
+            return false;
         }
 
         // ValidateBlockingMode - called before synchronous calls to validate
