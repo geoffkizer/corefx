@@ -159,7 +159,35 @@ namespace System.Net.Sockets
 
         private void ProcessIOCPResult(bool success, int bytesTransferred)
         {
+            // TODO
+#if false
+            if (success)
+            {
+                // Synchronous success.
+                // TODO: Check if we can complete sync and do so
+                // But we can't for now
+                // So return IOPending
+                return SocketError.IOPending;
+            }
 
+            // Get the socket error (which may be IOPending)
+            SocketError errorCode = SocketPal.GetLastSocketError();
+
+            if (errorCode == SocketError.IOPending)
+            {
+                // Operation is pending.
+                // We will continue when the completion arrives (may have already at this point).
+                return SocketError.IOPending;
+            }
+            else
+            {
+                // Synchronous failure.
+                // Release overlapped and pinned structures.
+                ReleaseUnmanagedStructures();
+
+                return errorCode;
+            }
+#endif
         }
 
         private void CompleteIOCPOperation()

@@ -164,9 +164,17 @@ namespace System.Net.Sockets
             if (success)
             {
                 // Synchronous success.
-                // TODO: Check if we can complete sync and do so
-                // But we can't for now
-                // So return IOPending
+                Socket socket = (Socket)AsyncObject;
+                if (socket.SafeHandle.SkipCompletionPortOnSuccess)
+                {
+                    // The socket handle is configured to skip completion on success, 
+                    // so we can complete this asyncResult right now.
+                    CompletionCallback(bytesTransferred, SocketError.Success);
+                    return SocketError.Success;
+                }
+
+                // Socket handle is going to post a completion to the completion port (may have done so already).
+                // Return pending and we will continue in the completion port callback.
                 return SocketError.IOPending;
             }
 
