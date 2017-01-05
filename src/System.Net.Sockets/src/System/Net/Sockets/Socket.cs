@@ -5396,30 +5396,24 @@ namespace System.Net.Sockets
             {
                 // If ConnectEx throws we need to unpin the socketAddress buffer.
                 // _rightEndPoint will always equal oldEndPoint.
+                // TODO: Remove this...
                 asyncResult.InternalCleanup();
                 _rightEndPoint = oldEndPoint;
                 throw;
             }
 
+            if (NetEventSource.IsEnabled) NetEventSource.Info(this, $"Interop.Winsock.connect returns:{errorCode}");
 
-            if (errorCode == SocketError.Success)
+            if (CheckErrorAndUpdateStatus(errorCode))
             {
                 SetToConnected();
             }
-
-            if (NetEventSource.IsEnabled) NetEventSource.Info(this, $"Interop.Winsock.connect returns:{errorCode}");
-
-            errorCode = asyncResult.CheckAsyncCallOverlappedResult(errorCode);
-
-            // Throw an appropriate SocketException if the native call fails synchronously.
-            if (errorCode != SocketError.Success)
+            else
             {
                 // Update the internal state of this socket according to the error before throwing.
                 _rightEndPoint = oldEndPoint;
-                SocketException socketException = new SocketException((int)errorCode);
-                UpdateStatusAfterSocketError(socketException);
-                if (NetEventSource.IsEnabled) NetEventSource.Error(this, socketException);
-                throw socketException;
+
+                throw new SocketException((int)errorCode);
             }
 
             // We didn't throw, so indicate that we're returning this result to the user.  This may call the callback.
