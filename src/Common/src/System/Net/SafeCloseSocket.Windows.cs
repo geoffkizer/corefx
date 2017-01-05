@@ -38,6 +38,7 @@ namespace System.Net.Sockets
 #endif
     {
         private ThreadPoolBoundHandle _iocpBoundHandle;
+        private bool _skipCompletionPortOnSuccess;
         private object _iocpBindingLock = new object();
 
         public ThreadPoolBoundHandle IOCPBoundHandle
@@ -49,7 +50,7 @@ namespace System.Net.Sockets
         }
 
         // Binds the Socket Win32 Handle to the ThreadPool's CompletionPort.
-        public ThreadPoolBoundHandle GetOrAllocateThreadPoolBoundHandle()
+        public ThreadPoolBoundHandle GetOrAllocateThreadPoolBoundHandle(bool trySkipCompletionPortOnSuccess)
         {
             if (_released)
             {
@@ -83,13 +84,13 @@ namespace System.Net.Sockets
                         }
 
                         // Try to disable completions for synchronous success, if requested
-                        if (tryEnableSyncCompletions)
+                        if (trySkipCompletionPortOnSuccess)
                         {
                             if (Interop.Kernel32.SetFileCompletionNotificationModes(boundHandle.Handle,
                                 Interop.Kernel32.FileCompletionNotificationModes.SkipCompletionPortOnSuccess |
                                 Interop.Kernel32.FileCompletionNotificationModes.SkipSetEventOnHandle))
                             {
-                                _syncCompletionsEnabled = true;
+                                _skipCompletionPortOnSuccess = true;
                             }
                         }
 
@@ -100,6 +101,15 @@ namespace System.Net.Sockets
             }
 
             return _iocpBoundHandle;
+        }
+
+        public bool SkipCompletionPortOnSuccess
+        {
+            get
+            {
+                Debug.Assert(_iocpBoundHandle != null);
+                return _skipCompletionPortOnSuccess;
+            }
         }
 
         internal static unsafe SafeCloseSocket CreateWSASocket(byte* pinnedBuffer)

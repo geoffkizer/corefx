@@ -85,6 +85,9 @@ namespace System.Net.Sockets
             }
         }
 
+        // TODO: Remove
+        public bool SkipCompletionPortOnSuccess => false;
+
         public static unsafe SafeCloseSocket CreateSocket(IntPtr fileDescriptor)
         {
             return CreateSocket(InnerSafeCloseSocket.CreateSocket(fileDescriptor));
