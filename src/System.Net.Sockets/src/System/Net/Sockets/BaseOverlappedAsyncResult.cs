@@ -47,7 +47,7 @@ namespace System.Net.Sockets
         // 3) failed.
         internal unsafe SocketError CheckAsyncCallOverlappedResult(SocketError errorCode)
         {
-            if (NetEventSource.IsEnabled) NetEventSource.Info(this, errorCode);
+  //          if (NetEventSource.IsEnabled) NetEventSource.Info(this, errorCode);
 
             if (errorCode == SocketError.Success || errorCode == SocketError.IOPending)
             {
@@ -58,8 +58,8 @@ namespace System.Net.Sockets
 
             // In the remaining cases a completion packet will NOT be queued:
             // we have to call the callback explicitly signaling an error.
-            ErrorCode = (int)errorCode;
-            Result = -1;
+//            ErrorCode = (int)errorCode;
+//            Result = -1;
 
 //            ReleaseUnmanagedStructures();  // Additional release for the completion that won't happen.
             return errorCode;
