@@ -52,8 +52,8 @@ namespace System.Net.Sockets
             }
 
             // Disable for now, not sure what's up
-//            ThreadPoolBoundHandle boundHandle = s.SafeHandle.GetOrAllocateThreadPoolBoundHandle(true);
-            ThreadPoolBoundHandle boundHandle = s.SafeHandle.GetOrAllocateThreadPoolBoundHandle();
+            ThreadPoolBoundHandle boundHandle = s.SafeHandle.GetOrAllocateThreadPoolBoundHandle(true);
+//            ThreadPoolBoundHandle boundHandle = s.SafeHandle.GetOrAllocateThreadPoolBoundHandle();
 
             unsafe
             {
