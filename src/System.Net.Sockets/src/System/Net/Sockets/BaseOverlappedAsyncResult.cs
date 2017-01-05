@@ -37,6 +37,9 @@ namespace System.Net.Sockets
             return _numBytes;
         }
 
+#if true
+        // TODO: This should go away
+
         // This method is called after an asynchronous call is made for the user.
         // It checks and acts accordingly if the IO:
         // 1) completed synchronously.
@@ -61,5 +64,7 @@ namespace System.Net.Sockets
             ReleaseUnmanagedStructures();  // Additional release for the completion that won't happen.
             return errorCode;
         }
+
+#endif
     }
 }

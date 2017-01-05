@@ -30,6 +30,8 @@ namespace System.Net.Sockets
             if (NetEventSource.IsEnabled) NetEventSource.Info(this, socket);
         }
 
+        // TODO: What's this used for?
+
         internal SafeNativeOverlapped NativeOverlapped
         {
             get
@@ -46,7 +48,7 @@ namespace System.Net.Sockets
         // These calls are outside the runtime and are unmanaged code, so we need
         // to prepare specific structures and ints that lie in unmanaged memory
         // since the overlapped calls may complete asynchronously.
-        internal void SetUnmanagedStructures(object objectsToPin)
+        internal SafeNativeOverlapped SetUnmanagedStructures(object objectsToPin)
         {
             Socket s = (Socket)AsyncObject;
 
@@ -65,8 +67,11 @@ namespace System.Net.Sockets
             {
                 NativeOverlapped* overlapped = boundHandle.AllocateNativeOverlapped(s_ioCallback, this, objectsToPin);
                 _nativeOverlapped = new SafeNativeOverlapped(s.SafeHandle, overlapped);
-                if (NetEventSource.IsEnabled) NetEventSource.Info(this, $"{boundHandle}::AllocateNativeOverlapped. return={_nativeOverlapped}");
             }
+
+            if (NetEventSource.IsEnabled) NetEventSource.Info(this, $"{boundHandle}::AllocateNativeOverlapped. return={_nativeOverlapped}");
+
+            return _nativeOverlapped;
         }
 
         private static unsafe void CompletionPortCallback(uint errorCode, uint numBytes, NativeOverlapped* nativeOverlapped)
@@ -144,6 +149,8 @@ namespace System.Net.Sockets
 #endif
         }
 
+        // TODO: Get rid of this
+
         // The following property returns the Win32 unsafe pointer to
         // whichever Overlapped structure we're using for IO.
         internal SafeHandle OverlappedHandle
@@ -157,7 +164,42 @@ namespace System.Net.Sockets
             }
         }
 
-        private void ReleaseUnmanagedStructures()
+        internal SocketError CheckOverlappedResult(bool success, int bytesTransferred)
+        {
+            SocketError errorCode = SocketError.Success;
+            if (!success)
+            {
+                errorCode = SocketPal.GetLastSocketError();
+            }
+
+            if (NetEventSource.IsEnabled) NetEventSource.Info(this, errorCode);
+
+            if (errorCode == SocketError.Success)
+            {
+                // TODO: Check if we can complete sync and do so
+                // But we can't for now
+            }
+            else if (errorCode == SocketError.IOPending)
+            {
+                // Completion packet will be queued (may have already) so do nothing
+                // Note we never report IOPending to the user, only Success
+//                errorCode = SocketError.Success;
+            }
+            else
+            {
+                // This seems to be important; why?
+                // no, don't think it's important
+//                ErrorCode = (int)errorCode;
+
+                // Synchronous failure.
+                // Release overlapped and pinned structures.
+//                ReleaseUnmanagedStructures();
+            }
+
+            return errorCode;
+        }
+
+        internal void ReleaseUnmanagedStructures()
         {
             if (Interlocked.Decrement(ref _cleanupCount) == 0)
             {

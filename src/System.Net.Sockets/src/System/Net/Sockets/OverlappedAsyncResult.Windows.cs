@@ -42,8 +42,10 @@ namespace System.Net.Sockets
         // These calls are outside the runtime and are unmanaged code, so we need
         // to prepare specific structures and ints that lie in unmanaged memory
         // since the overlapped calls may complete asynchronously.
-        internal void SetUnmanagedStructures(byte[] buffer, int offset, int size, Internals.SocketAddress socketAddress, bool pinSocketAddress)
+        internal SafeNativeOverlapped SetUnmanagedStructures(byte[] buffer, int offset, int size, Internals.SocketAddress socketAddress, bool pinSocketAddress)
         {
+            SafeNativeOverlapped overlapped;
+
             // Fill in Buffer Array structure that will be used for our send/recv Buffer
             _socketAddress = socketAddress;
             if (pinSocketAddress && _socketAddress != null)
@@ -55,19 +57,23 @@ namespace System.Net.Sockets
                 _socketAddress.CopyAddressSizeIntoBuffer();
                 objectsToPin[1] = _socketAddress.Buffer;
 
-                base.SetUnmanagedStructures(objectsToPin);
+                overlapped = base.SetUnmanagedStructures(objectsToPin);
             }
             else
             {
-                base.SetUnmanagedStructures(buffer);
+                overlapped = base.SetUnmanagedStructures(buffer);
             }
 
             _singleBuffer.Length = size;
             _singleBuffer.Pointer = Marshal.UnsafeAddrOfPinnedArrayElement(buffer, offset);
+
+            return overlapped;
         }
 
-        internal void SetUnmanagedStructures(IList<ArraySegment<byte>> buffers)
+        internal SafeNativeOverlapped SetUnmanagedStructures(IList<ArraySegment<byte>> buffers)
         {
+            SafeNativeOverlapped overlapped;
+
             // Fill in Buffer Array structure that will be used for our send/recv Buffer.
             // Make sure we don't let the app mess up the buffer array enough to cause
             // corruption.
@@ -88,13 +94,15 @@ namespace System.Net.Sockets
                 objectsToPin[i] = buffersCopy[i].Array;
             }
 
-            base.SetUnmanagedStructures(objectsToPin);
+            overlapped = base.SetUnmanagedStructures(objectsToPin);
 
             for (int i = 0; i < count; i++)
             {
                 _wsaBuffers[i].Length = buffersCopy[i].Count;
                 _wsaBuffers[i].Pointer = Marshal.UnsafeAddrOfPinnedArrayElement(buffersCopy[i].Array, buffersCopy[i].Offset);
             }
+
+            return overlapped;
         }
 
         // This method is called after an asynchronous call is made for the user.
