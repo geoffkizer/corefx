@@ -178,6 +178,8 @@ namespace System.Net.Sockets
             {
                 // TODO: Check if we can complete sync and do so
                 // But we can't for now
+                // So return IOPending
+                errorCode = SocketError.IOPending;
             }
             else if (errorCode == SocketError.IOPending)
             {
