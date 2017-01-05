@@ -28,11 +28,5 @@ namespace System.Net.Sockets
             ErrorCode = (int)errorCode;
             InvokeCallback(PostCompletion(numBytes));
         }
-
-        private void ReleaseUnmanagedStructures()
-        {
-            // NOTE: this method needs to exist to conform to the contract expected by the
-            //       platform-independent code in BaseOverlappedAsyncResult.CheckAsyncCallOverlappedResult.
-        }
     }
 }
