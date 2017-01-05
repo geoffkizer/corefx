@@ -2990,20 +2990,14 @@ namespace System.Net.Sockets
                 _rightEndPoint = oldEndPoint;
                 throw;
             }
-            finally
-            {
-                errorCode = asyncResult.CheckAsyncCallOverlappedResult(errorCode);
-            }
 
             // Throw an appropriate SocketException if the native call fails synchronously.
-            if (errorCode != SocketError.Success)
+            if (!CheckErrorAndUpdateStatus(errorCode))
             {
                 // Update the internal state of this socket according to the error before throwing.
                 _rightEndPoint = oldEndPoint;
-                SocketException socketException = new SocketException((int)errorCode);
-                UpdateStatusAfterSocketError(socketException);
-                if (NetEventSource.IsEnabled) NetEventSource.Error(this, socketException);
-                throw socketException;
+
+                throw new SocketException((int)errorCode);
             }
 
             if (NetEventSource.IsEnabled) NetEventSource.Info(this, $"size:{size} returning AsyncResult:{asyncResult}");
