@@ -164,7 +164,7 @@ namespace System.Net.Sockets
             }
         }
 
-        internal SocketError CheckOverlappedResult(bool success, int bytesTransferred)
+        internal SocketError ProcessOverlappedResult(bool success, int bytesTransferred)
         {
             SocketError errorCode = SocketError.Success;
             if (!success)
@@ -193,7 +193,7 @@ namespace System.Net.Sockets
 
                 // Synchronous failure.
                 // Release overlapped and pinned structures.
-//                ReleaseUnmanagedStructures();
+                ReleaseUnmanagedStructures();
             }
 
             return errorCode;

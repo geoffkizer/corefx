@@ -820,7 +820,7 @@ namespace System.Net.Sockets
                     out ignoreBytesSent,
                     asyncResult.OverlappedHandle);
 
-                return asyncResult.CheckOverlappedResult(success, 0);
+                return asyncResult.ProcessOverlappedResult(success, 0);
             }
             catch
             {
@@ -846,7 +846,7 @@ namespace System.Net.Sockets
                     nativeOverlapped,
                     IntPtr.Zero);
 
-                return asyncResult.CheckOverlappedResult(errorCode == SocketError.Success, bytesTransferred);
+                return asyncResult.ProcessOverlappedResult(errorCode == SocketError.Success, bytesTransferred);
             }
             catch
             {
@@ -872,7 +872,7 @@ namespace System.Net.Sockets
                     nativeOverlapped,
                     IntPtr.Zero);
 
-                return asyncResult.CheckOverlappedResult(errorCode == SocketError.Success, bytesTransferred);
+                return asyncResult.ProcessOverlappedResult(errorCode == SocketError.Success, bytesTransferred);
             }
             catch
             {
@@ -927,7 +927,7 @@ namespace System.Net.Sockets
                     postBuffer, 
                     flags);
 
-                return asyncResult.CheckOverlappedResult(success, 0);
+                return asyncResult.ProcessOverlappedResult(success, 0);
             }
             catch
             {
@@ -954,7 +954,7 @@ namespace System.Net.Sockets
                     asyncResult.OverlappedHandle,
                     IntPtr.Zero);
 
-                return asyncResult.CheckOverlappedResult(errorCode == SocketError.Success, bytesTransferred);
+                return asyncResult.ProcessOverlappedResult(errorCode == SocketError.Success, bytesTransferred);
             }
             catch
             {
@@ -980,7 +980,7 @@ namespace System.Net.Sockets
                     asyncResult.OverlappedHandle,
                     IntPtr.Zero);
 
-                return asyncResult.CheckOverlappedResult(errorCode == SocketError.Success, bytesTransferred);
+                return asyncResult.ProcessOverlappedResult(errorCode == SocketError.Success, bytesTransferred);
             }
             catch
             {
@@ -1006,7 +1006,7 @@ namespace System.Net.Sockets
                     asyncResult.OverlappedHandle,
                     IntPtr.Zero);
 
-                return asyncResult.CheckOverlappedResult(errorCode == SocketError.Success, bytesTransferred);
+                return asyncResult.ProcessOverlappedResult(errorCode == SocketError.Success, bytesTransferred);
             }
             catch
             {
@@ -1033,7 +1033,7 @@ namespace System.Net.Sockets
                     asyncResult.OverlappedHandle,
                     IntPtr.Zero);
 
-                return asyncResult.CheckOverlappedResult(errorCode == SocketError.Success, bytesTransferred);
+                return asyncResult.ProcessOverlappedResult(errorCode == SocketError.Success, bytesTransferred);
             }
             catch
             {
@@ -1055,7 +1055,7 @@ namespace System.Net.Sockets
                     asyncResult.OverlappedHandle,
                     IntPtr.Zero);
 
-                return asyncResult.CheckOverlappedResult(errorCode == SocketError.Success, bytesTransfered);
+                return asyncResult.ProcessOverlappedResult(errorCode == SocketError.Success, bytesTransfered);
             }
             catch
             {
@@ -1088,7 +1088,7 @@ namespace System.Net.Sockets
                     out bytesTransferred,
                     asyncResult.OverlappedHandle);
 
-                return asyncResult.CheckOverlappedResult(success, 0);
+                return asyncResult.ProcessOverlappedResult(success, 0);
             }
             catch
             {
@@ -1114,7 +1114,7 @@ namespace System.Net.Sockets
                     (int)(reuseSocket ? TransmitFileOptions.ReuseSocket : 0), 
                     0);
 
-                return asyncResult.CheckOverlappedResult(success, 0);
+                return asyncResult.ProcessOverlappedResult(success, 0);
             }
             catch
             {
