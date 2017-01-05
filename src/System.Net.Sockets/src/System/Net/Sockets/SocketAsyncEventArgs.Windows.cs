@@ -157,6 +157,11 @@ namespace System.Net.Sockets
             }
         }
 
+        private void ProcessIOCPResult(bool success, int bytesTransferred)
+        {
+
+        }
+
         private void CompleteIOCPOperation()
         {
             // TODO #4900: Optimization to remove callbacks if the operations are completed synchronously:
