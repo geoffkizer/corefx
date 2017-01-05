@@ -59,7 +59,7 @@ namespace System.Net.Sockets
             CompletionCallback(0, socketError);
         }
 
-        internal unsafe SocketError DoOperationAccept(Socket socket, SafeCloseSocket handle, SafeCloseSocket acceptHandle, out int bytesTransferred)
+        internal unsafe SocketError DoOperationAccept(Socket socket, SafeCloseSocket handle, SafeCloseSocket acceptHandle)
         {
             if (_buffer != null)
             {
@@ -67,8 +67,6 @@ namespace System.Net.Sockets
             }
 
             Debug.Assert(acceptHandle == null, $"Unexpected acceptHandle: {acceptHandle}");
-
-            bytesTransferred = 0;
 
             return handle.AsyncContext.AcceptAsync(_acceptBuffer, _acceptAddressBufferCount / 2, AcceptCompletionCallback);
         }
@@ -83,10 +81,8 @@ namespace System.Net.Sockets
             CompletionCallback(0, socketError);
         }
 
-        internal unsafe SocketError DoOperationConnect(Socket socket, SafeCloseSocket handle, out int bytesTransferred)
+        internal unsafe SocketError DoOperationConnect(Socket socket, SafeCloseSocket handle)
         {
-            bytesTransferred = 0;
-
             return handle.AsyncContext.ConnectAsync(_socketAddress.Buffer, _socketAddress.Size, ConnectCompletionCallback);
         }
 
@@ -118,7 +114,7 @@ namespace System.Net.Sockets
             _socketAddressSize = 0;
         }
 
-        internal unsafe SocketError DoOperationReceive(SafeCloseSocket handle, out SocketFlags flags, out int bytesTransferred)
+        internal unsafe SocketError DoOperationReceive(SafeCloseSocket handle, out SocketFlags flags)
         {
             SocketError errorCode;
             if (_buffer != null)
@@ -131,7 +127,6 @@ namespace System.Net.Sockets
             }
 
             flags = _socketFlags;
-            bytesTransferred = 0;
             return errorCode;
         }
 
@@ -141,7 +136,7 @@ namespace System.Net.Sockets
             _socketAddressSize = 0;
         }
 
-        internal unsafe SocketError DoOperationReceiveFrom(SafeCloseSocket handle, out SocketFlags flags, out int bytesTransferred)
+        internal unsafe SocketError DoOperationReceiveFrom(SafeCloseSocket handle, out SocketFlags flags)
         {
             SocketError errorCode;
             if (_buffer != null)
@@ -154,7 +149,6 @@ namespace System.Net.Sockets
             }
 
             flags = _socketFlags;
-            bytesTransferred = 0;
             return errorCode;
         }
 
@@ -177,12 +171,11 @@ namespace System.Net.Sockets
             CompletionCallback(bytesTransferred, errorCode);
         }
 
-        internal unsafe SocketError DoOperationReceiveMessageFrom(Socket socket, SafeCloseSocket handle, out int bytesTransferred)
+        internal unsafe SocketError DoOperationReceiveMessageFrom(Socket socket, SafeCloseSocket handle)
         {
             bool isIPv4, isIPv6;
             Socket.GetIPProtocolInformation(socket.AddressFamily, _socketAddress, out isIPv4, out isIPv6);
 
-            bytesTransferred = 0;
             return handle.AsyncContext.ReceiveMessageFromAsync(_buffer, _offset, _count, _socketFlags, _socketAddress.Buffer, _socketAddress.Size, isIPv4, isIPv6, ReceiveMessageFromCompletionCallback);
         }
 
@@ -223,7 +216,7 @@ namespace System.Net.Sockets
             _socketAddressSize = 0;
         }
 
-        internal SocketError DoOperationSendTo(SafeCloseSocket handle, out int bytesTransferred)
+        internal SocketError DoOperationSendTo(SafeCloseSocket handle)
         {
             SocketError errorCode;
             if (_buffer != null)
@@ -235,7 +228,6 @@ namespace System.Net.Sockets
                 errorCode = handle.AsyncContext.SendToAsync(_bufferList, _socketFlags, _socketAddress.Buffer, _socketAddress.Size, TransferCompletionCallback);
             }
 
-            bytesTransferred = 0;
             return errorCode;
         }
 
@@ -292,7 +284,8 @@ namespace System.Net.Sockets
         {
             if (socketError == SocketError.Success)
             {
-                FinishOperationSuccess(socketError, bytesTransferred, _receivedFlags);
+                // TODO: I removed flags here, are they actually flowed?  Check
+                FinishOperationAsyncSuccess(bytesTransferred);
             }
             else
             {

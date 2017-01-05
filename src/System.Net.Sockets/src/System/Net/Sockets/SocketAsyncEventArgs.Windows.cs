@@ -165,9 +165,8 @@ namespace System.Net.Sockets
                 if (_currentSocket.SafeHandle.SkipCompletionPortOnSuccess)
                 {
                     // The socket handle is configured to skip completion on success, 
-                    // so we can st the results right now.
-                    SetResults(SocketError.Success, bytesTransferred, SocketFlags.None);    // TODO: Figure out SocketFlags
-                    Complete();
+                    // so we can set the results right now.
+                    FinishOperationSyncSuccess(bytesTransferred);
                     return SocketError.Success;
                 }
 
@@ -200,13 +199,12 @@ namespace System.Net.Sockets
             }
         }
 
-        internal unsafe SocketError DoOperationAccept(Socket socket, SafeCloseSocket handle, SafeCloseSocket acceptHandle, out int bytesTransferred)
+        internal unsafe SocketError DoOperationAccept(Socket socket, SafeCloseSocket handle, SafeCloseSocket acceptHandle)
         {
             PrepareIOCPOperation();
 
-            SocketError socketError = SocketError.Success;
-
-            if (!socket.AcceptEx(
+            int bytesTransferred;
+            bool success = socket.AcceptEx(
                 handle,
                 acceptHandle,
                 (_ptrSingleBuffer != IntPtr.Zero) ? _ptrSingleBuffer : _ptrAcceptBuffer,
@@ -214,12 +212,9 @@ namespace System.Net.Sockets
                 _acceptAddressBufferCount / 2,
                 _acceptAddressBufferCount / 2,
                 out bytesTransferred,
-                _ptrNativeOverlapped))
-            {
-                socketError = SocketPal.GetLastSocketError();
-            }
+                _ptrNativeOverlapped);
 
-            return socketError;
+            return ProcessIOCPResult(success, bytesTransferred);
         }
 
         private void InnerStartOperationConnect()
@@ -233,25 +228,21 @@ namespace System.Net.Sockets
             CheckPinNoBuffer();
         }
 
-        internal unsafe SocketError DoOperationConnect(Socket socket, SafeCloseSocket handle, out int bytesTransferred)
+        internal unsafe SocketError DoOperationConnect(Socket socket, SafeCloseSocket handle)
         {
             PrepareIOCPOperation();
 
-            SocketError socketError = SocketError.Success;
-
-            if (!socket.ConnectEx(
+            int bytesTransferred;
+            bool success = socket.ConnectEx(
                 handle,
                 _ptrSocketAddressBuffer,
                 _socketAddress.Size,
                 _ptrSingleBuffer,
                 Count,
                 out bytesTransferred,
-                _ptrNativeOverlapped))
-            {
-                socketError = SocketPal.GetLastSocketError();
-            }
+                _ptrNativeOverlapped);
 
-            return socketError;
+            return ProcessIOCPResult(success, bytesTransferred);
         }
 
         private void InnerStartOperationDisconnect()
@@ -263,18 +254,13 @@ namespace System.Net.Sockets
         {
             PrepareIOCPOperation();
 
-            SocketError socketError = SocketError.Success;
-
-            if (!socket.DisconnectEx(
+            bool success = socket.DisconnectEx(
                     handle,
                     _ptrNativeOverlapped,
                     (int)(DisconnectReuseSocket ? TransmitFileOptions.ReuseSocket : 0),
-                    0))
-            {
-                socketError = SocketPal.GetLastSocketError();
-            }
+                    0);
 
-            return socketError;
+            return ProcessIOCPResult(success, 0);
         }
 
         private void InnerStartOperationReceive()
@@ -294,12 +280,14 @@ namespace System.Net.Sockets
             //   An array of WSABuffer descriptors is allocated.
         }
 
-        internal unsafe SocketError DoOperationReceive(SafeCloseSocket handle, out SocketFlags flags, out int bytesTransferred)
+        // TODO: What's the deal with flags here?
+        internal unsafe SocketError DoOperationReceive(SafeCloseSocket handle, out SocketFlags flags)
         {
             PrepareIOCPOperation();
 
             flags = _socketFlags;
 
+            int bytesTransferred;
             SocketError socketError;
             if (_buffer != null)
             {
@@ -326,12 +314,7 @@ namespace System.Net.Sockets
                     IntPtr.Zero);
             }
 
-            if (socketError == SocketError.SocketError)
-            {
-                socketError = SocketPal.GetLastSocketError();
-            }
-
-            return socketError;
+            return ProcessIOCPResult(socketError == SocketError.Success, bytesTransferred);
         }
 
         private void InnerStartOperationReceiveFrom()
@@ -354,12 +337,13 @@ namespace System.Net.Sockets
             PinSocketAddressBuffer();
         }
 
-        internal unsafe SocketError DoOperationReceiveFrom(SafeCloseSocket handle, out SocketFlags flags, out int bytesTransferred)
+        internal unsafe SocketError DoOperationReceiveFrom(SafeCloseSocket handle, out SocketFlags flags)
         {
             PrepareIOCPOperation();
 
             flags = _socketFlags;
 
+            int bytesTransferred;
             SocketError socketError;
             if (_buffer != null)
             {
@@ -388,12 +372,7 @@ namespace System.Net.Sockets
                     IntPtr.Zero);
             }
 
-            if (socketError == SocketError.SocketError)
-            {
-                socketError = SocketPal.GetLastSocketError();
-            }
-
-            return socketError;
+            return ProcessIOCPResult(socketError == SocketError.Success, bytesTransferred);
         }
 
         private void InnerStartOperationReceiveMessageFrom()
@@ -485,10 +464,11 @@ namespace System.Net.Sockets
             }
         }
 
-        internal unsafe SocketError DoOperationReceiveMessageFrom(Socket socket, SafeCloseSocket handle, out int bytesTransferred)
+        internal unsafe SocketError DoOperationReceiveMessageFrom(Socket socket, SafeCloseSocket handle)
         {
             PrepareIOCPOperation();
 
+            int bytesTransferred;
             SocketError socketError = socket.WSARecvMsg(
                 handle,
                 _ptrWSAMessageBuffer,
@@ -496,12 +476,7 @@ namespace System.Net.Sockets
                 _ptrNativeOverlapped,
                 IntPtr.Zero);
 
-            if (socketError == SocketError.SocketError)
-            {
-                socketError = SocketPal.GetLastSocketError();
-            }
-
-            return socketError;
+            return ProcessIOCPResult(socketError == SocketError.Success, bytesTransferred);
         }
 
         private void InnerStartOperationSend()
@@ -656,7 +631,7 @@ namespace System.Net.Sockets
                 _ptrNativeOverlapped,
                 _sendPacketsFlags);
 
-            return result ? SocketError.Success : SocketPal.GetLastSocketError();
+            return ProcessIOCPResult(result, 0);
         }
 
         private void InnerStartOperationSendTo()
@@ -679,10 +654,11 @@ namespace System.Net.Sockets
             PinSocketAddressBuffer();
         }
 
-        internal SocketError DoOperationSendTo(SafeCloseSocket handle, out int bytesTransferred)
+        internal SocketError DoOperationSendTo(SafeCloseSocket handle)
         {
             PrepareIOCPOperation();
 
+            int bytesTransferred;
             SocketError socketError;
             if (_buffer != null)
             {
@@ -712,12 +688,7 @@ namespace System.Net.Sockets
                     IntPtr.Zero);
             }
 
-            if (socketError == SocketError.SocketError)
-            {
-                socketError = SocketPal.GetLastSocketError();
-            }
-
-            return socketError;
+            return ProcessIOCPResult(socketError == SocketError.Success, bytesTransferred);
         }
 
         // Ensures Overlapped object exists for operations that need no data buffer.
@@ -1226,7 +1197,6 @@ namespace System.Net.Sockets
             {
                 if (NetEventSource.IsEnabled) NetEventSource.Enter(this, $"errorCode:{errorCode}, numBytes:{numBytes}, overlapped:{(IntPtr)nativeOverlapped}");
 #endif
-                SocketFlags socketFlags = SocketFlags.None;
                 SocketError socketError = (SocketError)errorCode;
 
                 // This is the same NativeOverlapped* as we already have a SafeHandle for, re-use the original.
@@ -1234,7 +1204,7 @@ namespace System.Net.Sockets
 
                 if (socketError == SocketError.Success)
                 {
-                    FinishOperationSuccess(socketError, (int)numBytes, socketFlags);
+                    FinishOperationAsyncSuccess((int)numBytes);
                 }
                 else
                 {
@@ -1250,12 +1220,13 @@ namespace System.Net.Sockets
                             {
                                 // The Async IO completed with a failure.
                                 // here we need to call WSAGetOverlappedResult() just so GetLastSocketError() will return the correct error.
+                                SocketFlags ignore;
                                 bool success = Interop.Winsock.WSAGetOverlappedResult(
                                     _currentSocket.SafeHandle,
                                     _ptrNativeOverlapped,
                                     out numBytes,
                                     false,
-                                    out socketFlags);
+                                    out ignore);
                                 socketError = SocketPal.GetLastSocketError();
                             }
                             catch
@@ -1265,7 +1236,9 @@ namespace System.Net.Sockets
                             }
                         }
                     }
-                    FinishOperationAsyncFailure(socketError, (int)numBytes, socketFlags);
+
+                    // TODO: flags
+                    FinishOperationAsyncFailure(socketError, (int)numBytes, SocketFlags.None);
                 }
 
 #if DEBUG

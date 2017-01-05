@@ -704,10 +704,14 @@ namespace System.Net.Sockets
             }
         }
 
-        internal void FinishOperationSuccess(SocketError socketError, int bytesTransferred, SocketFlags flags)
-        {
-            SetResults(socketError, bytesTransferred, flags);
+        // TODO: I think I need to call this in the sync completion case?
+        // TODO: get rid of flags everywhere
 
+        internal void FinishOperationSyncSuccess(int bytesTransferred)
+        {
+            SetResults(SocketError.Success, bytesTransferred, SocketFlags.None);
+
+            SocketError socketError = SocketError.Success;
             switch (_completedOperation)
             {
                 case SocketAsyncOperation.Accept:
@@ -900,12 +904,19 @@ namespace System.Net.Sockets
             if (socketError != SocketError.Success)
             {
                 // Asynchronous failure or something went wrong after async success.
-                SetResults(socketError, bytesTransferred, flags);
+                // TODO: flags
+                SetResults(socketError, bytesTransferred, SocketFlags.None);
                 _currentSocket.UpdateStatusAfterSocketError(socketError);
             }
 
             // Complete the operation and raise completion event.
             Complete();
+        }
+
+        internal void FinishOperationAsyncSuccess(int bytesTransferred)
+        {
+            FinishOperationSyncSuccess(bytesTransferred);
+
             if (_context == null)
             {
                 OnCompleted(this);

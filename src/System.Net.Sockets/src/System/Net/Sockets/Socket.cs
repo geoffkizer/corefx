@@ -4051,13 +4051,12 @@ namespace System.Net.Sockets
             e.StartOperationAccept();
 
             // Local variables for sync completion.
-            int bytesTransferred;
             SocketError socketError = SocketError.Success;
 
             // Make the native call.
             try
             {
-                socketError = e.DoOperationAccept(this, _handle, acceptHandle, out bytesTransferred);
+                socketError = e.DoOperationAccept(this, _handle, acceptHandle);
             }
             catch
             {
@@ -4067,15 +4066,7 @@ namespace System.Net.Sockets
             }
 
             // Handle completion when completion port is not posted.
-            if (socketError != SocketError.Success && socketError != SocketError.IOPending)
-            {
-                e.FinishOperationSyncFailure(socketError, bytesTransferred, SocketFlags.None);
-                retval = false;
-            }
-            else
-            {
-                retval = true;
-            }
+            retval = e.TryFinishOperation(socketError);
 
             if (NetEventSource.IsEnabled) NetEventSource.Exit(this, retval);
             return retval;
@@ -4165,11 +4156,10 @@ namespace System.Net.Sockets
                 e.StartOperationConnect();
 
                 // Make the native call.
-                int bytesTransferred;
                 SocketError socketError = SocketError.Success;
                 try
                 {
-                    socketError = e.DoOperationConnect(this, _handle, out bytesTransferred);
+                    socketError = e.DoOperationConnect(this, _handle);
                 }
                 catch
                 {
@@ -4180,16 +4170,7 @@ namespace System.Net.Sockets
                     throw;
                 }
 
-                // Handle failure where completion port is not posted.
-                if (socketError != SocketError.Success && socketError != SocketError.IOPending)
-                {
-                    e.FinishOperationSyncFailure(socketError, bytesTransferred, SocketFlags.None);
-                    retval = false;
-                }
-                else
-                {
-                    retval = true;
-                }
+                retval = e.TryFinishOperation(socketError);
             }
 
             if (NetEventSource.IsEnabled)  NetEventSource.Exit(this, retval);
@@ -4329,13 +4310,12 @@ namespace System.Net.Sockets
 
             // Local vars for sync completion of native call.
             SocketFlags flags;
-            int bytesTransferred;
             SocketError socketError;
 
             // Wrap native methods with try/catch so event args object can be cleaned up.
             try
             {
-                socketError = e.DoOperationReceive(_handle, out flags, out bytesTransferred);
+                socketError = e.DoOperationReceive(_handle, out flags);
             }
             catch
             {
@@ -4344,17 +4324,7 @@ namespace System.Net.Sockets
                 throw;
             }
 
-            // Handle completion when completion port is not posted.
-            if (socketError != SocketError.Success && socketError != SocketError.IOPending)
-            {
-                e.FinishOperationSyncFailure(socketError, bytesTransferred, flags);
-                retval = false;
-            }
-            else
-            {
-                retval = true;
-            }
-
+            retval = e.TryFinishOperation(socketError);
             if (NetEventSource.IsEnabled) NetEventSource.Exit(this, retval);
             return retval;
         }
@@ -4362,7 +4332,6 @@ namespace System.Net.Sockets
         public bool ReceiveFromAsync(SocketAsyncEventArgs e)
         {
             if (NetEventSource.IsEnabled) NetEventSource.Enter(this, e);
-            bool retval;
 
             if (CleanedUp)
             {
@@ -4400,12 +4369,11 @@ namespace System.Net.Sockets
 
             // Make the native call.
             SocketFlags flags;
-            int bytesTransferred;
             SocketError socketError;
 
             try
             {
-                socketError = e.DoOperationReceiveFrom(_handle, out flags, out bytesTransferred);
+                socketError = e.DoOperationReceiveFrom(_handle, out flags);
             }
             catch
             {
@@ -4414,17 +4382,7 @@ namespace System.Net.Sockets
                 throw;
             }
 
-            // Handle completion when completion port is not posted.
-            if (socketError != SocketError.Success && socketError != SocketError.IOPending)
-            {
-                e.FinishOperationSyncFailure(socketError, bytesTransferred, flags);
-                retval = false;
-            }
-            else
-            {
-                retval = true;
-            }
-
+            bool retval = e.TryFinishOperation(socketError);
             if (NetEventSource.IsEnabled) NetEventSource.Exit(this, retval);
             return retval;
         }
@@ -4432,7 +4390,6 @@ namespace System.Net.Sockets
         public bool ReceiveMessageFromAsync(SocketAsyncEventArgs e)
         {
             if (NetEventSource.IsEnabled) NetEventSource.Enter(this, e);
-            bool retval;
 
             if (CleanedUp)
             {
@@ -4471,12 +4428,11 @@ namespace System.Net.Sockets
             e.StartOperationReceiveMessageFrom();
 
             // Make the native call.
-            int bytesTransferred;
             SocketError socketError;
 
             try
             {
-                socketError = e.DoOperationReceiveMessageFrom(this, _handle, out bytesTransferred);
+                socketError = e.DoOperationReceiveMessageFrom(this, _handle);
             }
             catch
             {
@@ -4486,16 +4442,7 @@ namespace System.Net.Sockets
             }
 
             // Handle completion when completion port is not posted.
-            if (socketError != SocketError.Success && socketError != SocketError.IOPending)
-            {
-                e.FinishOperationSyncFailure(socketError, bytesTransferred, SocketFlags.None);
-                retval = false;
-            }
-            else
-            {
-                retval = true;
-            }
-
+            bool retval = e.TryFinishOperation(socketError);
             if (NetEventSource.IsEnabled) NetEventSource.Exit(this, retval);
             return retval;
         }
@@ -4539,8 +4486,6 @@ namespace System.Net.Sockets
 
             return retval;
         }
-
-        // Move this
 
         public bool SendPacketsAsync(SocketAsyncEventArgs e)
         {
@@ -4588,21 +4533,12 @@ namespace System.Net.Sockets
                     throw;
                 }
 
-                // Handle completion when completion port is not posted.
-                if (socketError != SocketError.Success && socketError != SocketError.IOPending)
-                {
-                    e.FinishOperationSyncFailure(socketError, 0, SocketFlags.None);
-                    retval = false;
-                }
-                else
-                {
-                    retval = true;
-                }
+                retval = e.TryFinishOperation(socketError);
             }
             else
             {
                 // No buffers or files to send.
-                e.FinishOperationSuccess(SocketError.Success, 0, SocketFlags.None);
+                e.FinishOperationSyncSuccess(0);
                 retval = false;
             }
 
@@ -4613,7 +4549,6 @@ namespace System.Net.Sockets
         public bool SendToAsync(SocketAsyncEventArgs e)
         {
             if (NetEventSource.IsEnabled) NetEventSource.Enter(this, e);
-            bool retval;
 
             if (CleanedUp)
             {
@@ -4638,13 +4573,12 @@ namespace System.Net.Sockets
             e.StartOperationSendTo();
 
             // Make the native call.
-            int bytesTransferred;
             SocketError socketError;
 
             // Wrap native methods with try/catch so event args object can be cleaned up.
             try
             {
-                socketError = e.DoOperationSendTo(_handle, out bytesTransferred);
+                socketError = e.DoOperationSendTo(_handle);
             }
             catch
             {
@@ -4654,16 +4588,7 @@ namespace System.Net.Sockets
             }
 
             // Handle completion when completion port is not posted.
-            if (socketError != SocketError.Success && socketError != SocketError.IOPending)
-            {
-                e.FinishOperationSyncFailure(socketError, bytesTransferred, SocketFlags.None);
-                retval = false;
-            }
-            else
-            {
-                retval = true;
-            }
-
+            bool retval = e.TryFinishOperation(socketError);
             if (NetEventSource.IsEnabled) NetEventSource.Exit(this, retval);
             return retval;
         }
