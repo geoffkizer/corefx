@@ -61,7 +61,7 @@ namespace System.Net.Sockets
             ErrorCode = (int)errorCode;
             Result = -1;
 
-            ReleaseUnmanagedStructures();  // Additional release for the completion that won't happen.
+//            ReleaseUnmanagedStructures();  // Additional release for the completion that won't happen.
             return errorCode;
         }
 
