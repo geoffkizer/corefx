@@ -30,16 +30,6 @@ namespace System.Net.Sockets
             if (NetEventSource.IsEnabled) NetEventSource.Info(this, socket);
         }
 
-        // TODO: What's this used for?
-
-        internal SafeNativeOverlapped NativeOverlapped
-        {
-            get
-            {
-                return _nativeOverlapped;
-            }
-        }
-
         // SetUnmanagedStructures
         //
         // This needs to be called for overlapped IO to function properly.
@@ -116,7 +106,7 @@ namespace System.Net.Sockets
                             SocketFlags ignore;
                             bool success = Interop.Winsock.WSAGetOverlappedResult(
                                 socket.SafeHandle,
-                                asyncResult.NativeOverlapped,
+                                asyncResult._nativeOverlapped,
                                 out numBytes,
                                 false,
                                 out ignore);
