@@ -52,11 +52,16 @@ namespace System.Net.Sockets
 
         private void AcceptCompletionCallback(IntPtr acceptedFileDescriptor, byte[] socketAddress, int socketAddressSize, SocketError socketError)
         {
+            CompleteAcceptOperation(acceptedFileDescriptor, socketAddress, socketAddressSize, socketError);
+
+            CompletionCallback(0, socketError);
+        }
+
+        private void CompleteAcceptOperation(IntPtr acceptedFileDescriptor, byte[] socketAddress, int socketAddressSize, SocketError socketError)
+        {
             _acceptedFileDescriptor = acceptedFileDescriptor;
             Debug.Assert(socketAddress == null || socketAddress == _acceptBuffer, $"Unexpected socketAddress: {socketAddress}");
             _acceptAddressBufferCount = socketAddressSize;
-
-            CompletionCallback(0, socketError);
         }
 
         internal unsafe SocketError DoOperationAccept(Socket socket, SafeCloseSocket handle, SafeCloseSocket acceptHandle)
@@ -68,7 +73,17 @@ namespace System.Net.Sockets
 
             Debug.Assert(acceptHandle == null, $"Unexpected acceptHandle: {acceptHandle}");
 
-            return handle.AsyncContext.AcceptAsync(_acceptBuffer, _acceptAddressBufferCount / 2, AcceptCompletionCallback);
+            IntPtr acceptedFd;
+            int socketAddressLen = _acceptAddressBufferCount / 2;
+            SocketError socketError = handle.AsyncContext.AcceptAsync(_acceptBuffer, ref socketAddressLen, out acceptedFd, AcceptCompletionCallback);
+
+            if (socketError == SocketError.Success)
+            {
+                CompleteAcceptOperation(acceptedFd, _acceptBuffer, socketAddressLen, socketError);
+                FinishOperationSyncSuccess(0);
+            }
+
+            return socketError;
         }
 
         private void InnerStartOperationConnect()

@@ -1400,7 +1400,14 @@ namespace System.Net.Sockets
 
             byte[] socketAddressBuffer = new byte[socketAddressSize];
 
-            return handle.AsyncContext.AcceptAsync(socketAddressBuffer, socketAddressSize, asyncResult.CompletionCallback);
+            IntPtr acceptedFd;
+            SocketError socketError = handle.AsyncContext.AcceptAsync(socketAddressBuffer, ref socketAddressSize, out acceptedFd, asyncResult.CompletionCallback);
+            if (socketError == SocketError.Success)
+            {
+                asyncResult.CompletionCallback(acceptedFd, socketAddressBuffer, socketAddressSize, SocketError.Success);
+            }
+
+            return socketError;
         }
 
         internal static SocketError DisconnectAsync(Socket socket, SafeCloseSocket handle, bool reuseSocket, DisconnectOverlappedAsyncResult asyncResult)

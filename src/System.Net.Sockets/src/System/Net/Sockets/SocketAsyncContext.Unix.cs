@@ -670,7 +670,7 @@ namespace System.Net.Sockets
             }
         }
 
-        public SocketError AcceptAsync(byte[] socketAddress, int socketAddressLen, Action<IntPtr, byte[], int, SocketError> callback)
+        public SocketError AcceptAsync(byte[] socketAddress, ref int socketAddressLen, out IntPtr acceptedFd, Action<IntPtr, byte[], int, SocketError> callback)
         {
             Debug.Assert(socketAddress != null, "Expected non-null socketAddress");
             Debug.Assert(socketAddressLen > 0, $"Unexpected socketAddressLen: {socketAddressLen}");
@@ -678,16 +678,11 @@ namespace System.Net.Sockets
 
             SetNonBlocking();
 
-            IntPtr acceptedFd;
             SocketError errorCode;
             if (SocketPal.TryCompleteAccept(_socket, socketAddress, ref socketAddressLen, out acceptedFd, out errorCode))
             {
                 Debug.Assert(errorCode == SocketError.Success || acceptedFd == (IntPtr)(-1), $"Unexpected values: errorCode={errorCode}, acceptedFd={acceptedFd}");
 
-                if (errorCode == SocketError.Success)
-                {
-                    callback(acceptedFd, socketAddress, socketAddressLen, SocketErrorExt.SynchronousSuccess);
-                }
                 return errorCode;
             }
 

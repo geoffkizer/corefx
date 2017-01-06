@@ -34,5 +34,18 @@ namespace System.Net.Sockets
             ErrorCode = (int)errorCode;
             InvokeCallback(PostCompletion(numBytes));
         }
+
+#if false
+        // Check the result of the async operation.
+        // Handle synchronous success by completing the asyncResult here.
+        internal void ProcessAsyncResult(SocketError socketError, int bytesTransferred)
+        {
+            if (socketError == SocketError.Success)
+            {
+                // Synchronous success.
+                CompletionCallback(bytesTransferred, SocketError.Success);
+            }
+        }
+#endif
     }
 }
