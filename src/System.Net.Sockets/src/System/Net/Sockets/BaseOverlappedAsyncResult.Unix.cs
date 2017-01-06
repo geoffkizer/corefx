@@ -23,29 +23,19 @@ namespace System.Net.Sockets
             if (NetEventSource.IsEnabled) NetEventSource.Info(this, socket);
         }
 
-        public void CompletionCallback(int numBytes, SocketError errorCode)
+        protected void CompletionCallback(int numBytes, SocketError errorCode)
         {
+#if false
+            // TODO: Kill this
             if (errorCode == SocketErrorExt.SynchronousSuccess)
             {
                 // We don't care if it's sync or async, we treat it the same
                 errorCode = SocketError.Success;
             }
+#endif
 
             ErrorCode = (int)errorCode;
             InvokeCallback(PostCompletion(numBytes));
         }
-
-#if false
-        // Check the result of the async operation.
-        // Handle synchronous success by completing the asyncResult here.
-        internal void ProcessAsyncResult(SocketError socketError, int bytesTransferred)
-        {
-            if (socketError == SocketError.Success)
-            {
-                // Synchronous success.
-                CompletionCallback(bytesTransferred, SocketError.Success);
-            }
-        }
-#endif
     }
 }

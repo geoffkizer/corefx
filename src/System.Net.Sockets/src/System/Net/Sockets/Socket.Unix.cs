@@ -98,7 +98,8 @@ namespace System.Net.Sockets
                     // This can throw ObjectDisposedException.
                     errorCode = SocketPal.SendFileAsync(_handle, fileStream, (bytesTransferred, socketError) => 
                     {
-                        if (socketError != SocketError.Success && socketError != SocketErrorExt.SynchronousSuccess)
+//                        if (socketError != SocketError.Success && socketError != SocketErrorExt.SynchronousSuccess)
+                        if (socketError != SocketError.Success)
                         {
                             // Synchronous exception from SendFileAsync
                             SocketException socketException = new SocketException((int)errorCode);
