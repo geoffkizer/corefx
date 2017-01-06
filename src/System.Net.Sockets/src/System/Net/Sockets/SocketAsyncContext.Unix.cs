@@ -11,6 +11,14 @@ using System.Threading;
 
 namespace System.Net.Sockets
 {
+    // This is a sentinel value used to indicate to the caller that the call succeeded synchronously
+    internal static class SocketErrorExt
+    {
+        internal const SocketError SynchronousSuccess = (SocketError)1;
+    }
+
+    // TODO: Fix this comment
+
     //
     // NOTE: the publicly-exposed asynchronous methods should match the behavior of
     //       Winsock overlapped sockets as closely as possible. Especially important are
@@ -678,11 +686,7 @@ namespace System.Net.Sockets
 
                 if (errorCode == SocketError.Success)
                 {
-                    ThreadPool.QueueUserWorkItem(args =>
-                    {
-                        var tup = (Tuple<Action<IntPtr, byte[], int, SocketError>, IntPtr, byte[], int>)args;
-                        tup.Item1(tup.Item2, tup.Item3, tup.Item4, SocketError.Success);
-                    }, Tuple.Create(callback, acceptedFd, socketAddress, socketAddressLen));
+                    callback(acceptedFd, socketAddress, socketAddressLen, SocketErrorExt.SynchronousSuccess);
                 }
                 return errorCode;
             }
@@ -784,7 +788,7 @@ namespace System.Net.Sockets
 
                 if (errorCode == SocketError.Success)
                 {
-                    ThreadPool.QueueUserWorkItem(arg => ((Action<SocketError>)arg)(SocketError.Success), callback);
+                    callback(SocketErrorExt.SynchronousSuccess);
                 }
 
                 return errorCode;
@@ -912,11 +916,7 @@ namespace System.Net.Sockets
                 {
                     if (errorCode == SocketError.Success)
                     {
-                        ThreadPool.QueueUserWorkItem(args =>
-                        {
-                            var tup = (Tuple<Action<int, byte[], int, SocketFlags, SocketError>, int, byte[], int, SocketFlags>)args;
-                            tup.Item1(tup.Item2, tup.Item3, tup.Item4, tup.Item5, SocketError.Success);
-                        }, Tuple.Create(callback, bytesReceived, socketAddress, socketAddressLen, receivedFlags));
+                        callback(bytesReceived, socketAddress, socketAddressLen, receivedFlags, SocketErrorExt.SynchronousSuccess);
                     }
                     return errorCode;
                 }
@@ -1040,11 +1040,7 @@ namespace System.Net.Sockets
                 {
                     if (errorCode == SocketError.Success)
                     {
-                        ThreadPool.QueueUserWorkItem(args =>
-                        {
-                            var tup = (Tuple<Action<int, byte[], int, SocketFlags, SocketError>, int, byte[], int, SocketFlags>)args;
-                            tup.Item1(tup.Item2, tup.Item3, tup.Item4, tup.Item5, SocketError.Success);
-                        }, Tuple.Create(callback, bytesReceived, socketAddress, socketAddressLen, receivedFlags));
+                        callback(bytesReceived, socketAddress, socketAddressLen, receivedFlags, SocketErrorExt.SynchronousSuccess);
                     }
                     return errorCode;
                 }
@@ -1163,11 +1159,7 @@ namespace System.Net.Sockets
                 {
                     if (errorCode == SocketError.Success)
                     {
-                        ThreadPool.QueueUserWorkItem(args =>
-                        {
-                            var tup = (Tuple<Action<int, byte[], int, SocketFlags, IPPacketInformation, SocketError>, int, byte[], int, SocketFlags, IPPacketInformation>)args;
-                            tup.Item1(tup.Item2, tup.Item3, tup.Item4, tup.Item5, tup.Item6, SocketError.Success);
-                        }, Tuple.Create(callback, bytesReceived, socketAddress, socketAddressLen, receivedFlags, ipPacketInformation));
+                        callback(bytesReceived, socketAddress, socketAddressLen, receivedFlags, ipPacketInformation, SocketErrorExt.SynchronousSuccess);
                     }
                     return errorCode;
                 }
@@ -1288,11 +1280,14 @@ namespace System.Net.Sockets
                 {
                     if (errorCode == SocketError.Success)
                     {
+#if false
                         ThreadPool.QueueUserWorkItem(args =>
                         {
                             var tup = (Tuple<Action<int, byte[], int, SocketFlags, SocketError>, int, byte[], int>)args;
                             tup.Item1(tup.Item2, tup.Item3, tup.Item4, 0, SocketError.Success);
                         }, Tuple.Create(callback, bytesSent, socketAddress, socketAddressLen));
+#endif
+                        callback(bytesSent, socketAddress, socketAddressLen, SocketFlags.None, SocketErrorExt.SynchronousSuccess);
                     }
                     return errorCode;
                 }
@@ -1416,11 +1411,7 @@ namespace System.Net.Sockets
                 {
                     if (errorCode == SocketError.Success)
                     {
-                        ThreadPool.QueueUserWorkItem(args =>
-                        {
-                            var tup = (Tuple<Action<int, byte[], int, SocketFlags, SocketError>, int, byte[], int>)args;
-                            tup.Item1(tup.Item2, tup.Item3, tup.Item4, SocketFlags.None, SocketError.Success);
-                        }, Tuple.Create(callback, bytesSent, socketAddress, socketAddressLen));
+                        callback(bytesSent, socketAddress, socketAddressLen, SocketFlags.None, SocketErrorExt.SynchronousSuccess);
                     }
                     return errorCode;
                 }
@@ -1526,11 +1517,14 @@ namespace System.Net.Sockets
                 {
                     if (errorCode == SocketError.Success)
                     {
+#if false
                         ThreadPool.QueueUserWorkItem(args =>
                         {
                             var c = (Action<long, SocketError>)args;
                             c(bytesSent, SocketError.Success);
                         }, callback);
+#endif
+                        callback(bytesSent, SocketErrorExt.SynchronousSuccess);
                     }
                     return errorCode;
                 }

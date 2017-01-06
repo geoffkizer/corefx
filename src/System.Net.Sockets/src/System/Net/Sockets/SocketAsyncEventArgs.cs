@@ -608,7 +608,8 @@ namespace System.Net.Sockets
                 // Synchronous success, so not pending
                 //                Debug.Assert(false, "Success in TryFinishOperation??");
                 //                return false;
-                return true;    // temp
+                //                return true;    // temp
+                return false;
             }
             else if (socketError == SocketError.IOPending)
             {

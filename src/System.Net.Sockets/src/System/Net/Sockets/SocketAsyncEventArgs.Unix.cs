@@ -287,6 +287,10 @@ namespace System.Net.Sockets
                 // TODO: I removed flags here, are they actually flowed?  Check
                 FinishOperationAsyncSuccess(bytesTransferred);
             }
+            else if (socketError == SocketErrorExt.SynchronousSuccess)
+            {
+                FinishOperationSyncSuccess(bytesTransferred);
+            }
             else
             {
                 if (_currentSocket.CleanedUp)

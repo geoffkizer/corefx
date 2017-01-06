@@ -31,7 +31,7 @@ namespace System.Net.Sockets
             _buffer = null;
             _numBytes = 0;
 
-			if (errorCode == SocketError.Success)
+			if (errorCode == SocketError.Success || errorCode == SocketErrorExt.SynchronousSuccess)
 			{
 				Internals.SocketAddress remoteSocketAddress = IPEndPointExtensions.Serialize(_listenSocket._rightEndPoint);
 				System.Buffer.BlockCopy(socketAddress, 0, remoteSocketAddress.Buffer, 0, socketAddressLen);
