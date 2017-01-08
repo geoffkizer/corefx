@@ -11,35 +11,25 @@ using System.Threading;
 
 namespace System.Net.Sockets
 {
-    // This is a sentinel value used to indicate to the caller that the call succeeded synchronously
-    internal static class SocketErrorExt
-    {
-        internal const SocketError SynchronousSuccess = (SocketError)1;
-    }
+    // Note on asynchronous behavior here:
 
-    // TODO: Fix this comment
+    // The asynchronous socket operations here generally do the following:
+    // (1) If the operation queue is empty, try to perform the operation immediately, non-blocking.
+    // If this completes (i.e. does not return EWOULDBLOCK), then we return the results immediately
+    // for both success (SocketError.Success) or failure.
+    // No callback will happen; callers are expected to handle these synchronous completions themselves.
+    // (2) If EWOULDBLOCK is returned, or the queue is not empty, then we enqueue an operation to the 
+    // appropriate queue and return SocketError.IOPending.
+    // Enqueuing itself may fail because the socket is closed before the operation can be enqueued;
+    // in this case, we return SocketError.OperationAborted (which matches what Winsock would return in this case).
+    // (3) When the queue completes the operation, it will post a work item to the threadpool
+    // to call the callback with results (either success or failure).
 
-    //
-    // NOTE: the publicly-exposed asynchronous methods should match the behavior of
-    //       Winsock overlapped sockets as closely as possible. Especially important are
-    //       completion semantics, as the consuming code relies on the Winsock behavior.
-    //
-    //       Winsock queues a completion callback for an overlapped operation in two cases:
-    //         1. the operation successfully completes synchronously, or
-    //         2. the operation completes asynchronously, successfully or otherwise.
-    //       In other words, a completion callback is queued iff an operation does not
-    //       fail synchronously. The asynchronous methods below (e.g. ReceiveAsync) may
-    //       fail synchronously for either of the following reasons:
-    //         1. an underlying system call fails synchronously, or
-    //         2. an underlying system call returns EAGAIN, but the socket is closed before
-    //            the method is able to enqueue its corresponding operation.
-    //       In the first case, the async method should return the SocketError that
-    //       corresponds to the native error code; in the second, the method should return
-    //       SocketError.OperationAborted (which matches what Winsock would return in this
-    //       case). The publicly-exposed synchronous methods may also encounter the second
-    //       case. In this situation these methods should return SocketError.Interrupted
-    //       (which again matches Winsock).
-    //
+    // Synchronous operations generally do the same, except that instead of returning IOPending,
+    // they block on an event handle until the operation is processed by the queue.
+    // Also, synchronous methods return SocketError.Interrupted when enqueuing fails
+    // (which again matches Winsock behavior).
+
     internal sealed class SocketAsyncContext
     {
         private abstract class AsyncOperation

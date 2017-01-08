@@ -25,15 +25,6 @@ namespace System.Net.Sockets
 
         protected void CompletionCallback(int numBytes, SocketError errorCode)
         {
-#if false
-            // TODO: Kill this
-            if (errorCode == SocketErrorExt.SynchronousSuccess)
-            {
-                // We don't care if it's sync or async, we treat it the same
-                errorCode = SocketError.Success;
-            }
-#endif
-
             ErrorCode = (int)errorCode;
             InvokeCallback(PostCompletion(numBytes));
         }

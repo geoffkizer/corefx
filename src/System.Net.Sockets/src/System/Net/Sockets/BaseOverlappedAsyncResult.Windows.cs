@@ -189,14 +189,12 @@ namespace System.Net.Sockets
                 // We will continue when the completion arrives (may have already at this point).
                 return SocketError.IOPending;
             }
-            else
-            {
-                // Synchronous failure.
-                // Release overlapped and pinned structures.
-                ReleaseUnmanagedStructures();
 
-                return errorCode;
-            }
+            // Synchronous failure.
+            // Release overlapped and pinned structures.
+            ReleaseUnmanagedStructures();
+
+            return errorCode;
         }
 
         internal void ReleaseUnmanagedStructures()
