@@ -343,7 +343,13 @@ namespace System.Net.Sockets
             }
         }
 
-        private static Exception AttemptConnection(Socket attemptSocket, SocketAsyncEventArgs args)
+        private static void ThreadPoolCallback(object state)
+        {
+            MultipleConnectAsync multiConnect = (MultipleConnectAsync)state;
+            multiConnect.InternalConnectCallback(null, multiConnect._internalArgs);
+        }
+
+        private Exception AttemptConnection(Socket attemptSocket, SocketAsyncEventArgs args)
         {
             try
             {
@@ -354,7 +360,18 @@ namespace System.Net.Sockets
 
                 if (!attemptSocket.ConnectAsync(args))
                 {
-                    return new SocketException((int)args.SocketError);
+                    if (args.SocketError == SocketError.Success)
+                    {
+                        // Connect successfully completed synchronously.
+                        // Post a callback to the threadpool.
+                        // This isn't ideal (obviously), but the rest of the code here can't handle synchronous success,
+                        // and synchronous success is unlikely in any real scenarios (other than localhost testing).
+                        ThreadPool.QueueUserWorkItem(ThreadPoolCallback, this);
+                    }
+                    else
+                    {
+                        return new SocketException((int)args.SocketError);
+                    }
                 }
             }
             catch (ObjectDisposedException)
