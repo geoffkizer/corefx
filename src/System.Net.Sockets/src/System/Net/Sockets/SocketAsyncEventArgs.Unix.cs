@@ -54,7 +54,7 @@ namespace System.Net.Sockets
         {
             CompleteAcceptOperation(acceptedFileDescriptor, socketAddress, socketAddressSize, socketError);
 
-            CompletionCallback(0, socketError);
+            CompletionCallback(0, SocketFlags.None, socketError);
         }
 
         private void CompleteAcceptOperation(IntPtr acceptedFileDescriptor, byte[] socketAddress, int socketAddressSize, SocketError socketError)
@@ -77,10 +77,10 @@ namespace System.Net.Sockets
             int socketAddressLen = _acceptAddressBufferCount / 2;
             SocketError socketError = handle.AsyncContext.AcceptAsync(_acceptBuffer, ref socketAddressLen, out acceptedFd, AcceptCompletionCallback);
 
-            if (socketError == SocketError.Success)
+            if (socketError != SocketError.IOPending)
             {
                 CompleteAcceptOperation(acceptedFd, _acceptBuffer, socketAddressLen, socketError);
-                FinishOperationSyncSuccess(0);
+                FinishOperationSync(socketError, 0, SocketFlags.None);
             }
 
             return socketError;
@@ -93,15 +93,15 @@ namespace System.Net.Sockets
 
         private void ConnectCompletionCallback(SocketError socketError)
         {
-            CompletionCallback(0, socketError);
+            CompletionCallback(0, SocketFlags.None, socketError);
         }
 
         internal unsafe SocketError DoOperationConnect(Socket socket, SafeCloseSocket handle)
         {
             SocketError socketError = handle.AsyncContext.ConnectAsync(_socketAddress.Buffer, _socketAddress.Size, ConnectCompletionCallback);
-            if (socketError == SocketError.Success)
+            if (socketError != SocketError.IOPending)
             {
-                FinishOperationSyncSuccess(0);
+                FinishOperationSync(socketError, 0, SocketFlags.None);
             }
             return SocketError;
         }
@@ -123,7 +123,7 @@ namespace System.Net.Sockets
         {
             CompleteTransferOperation(bytesTransferred, socketAddress, socketAddressSize, receivedFlags, socketError);
 
-            CompletionCallback(bytesTransferred, socketError);
+            CompletionCallback(bytesTransferred, receivedFlags, socketError);
         }
 
         private void CompleteTransferOperation(int bytesTransferred, byte[] socketAddress, int socketAddressSize, SocketFlags receivedFlags, SocketError socketError)
@@ -152,10 +152,10 @@ namespace System.Net.Sockets
                 errorCode = handle.AsyncContext.ReceiveAsync(_bufferList, _socketFlags, out bytesReceived, out flags, TransferCompletionCallback);
             }
 
-            if (errorCode == SocketError.Success)
+            if (errorCode != SocketError.IOPending)
             {
-                CompleteTransferOperation(bytesReceived, null, 0, flags, SocketError.Success);
-                FinishOperationSyncSuccess(bytesReceived);
+                CompleteTransferOperation(bytesReceived, null, 0, flags, errorCode);
+                FinishOperationSync(errorCode, bytesReceived, flags);
             }
 
             return errorCode;
@@ -178,19 +178,13 @@ namespace System.Net.Sockets
             }
             else
             {
-                // TODO: Convert all these in AsyncContext at once, then go fix everything up.
-                // After I've done that and tests pass:
-                // (1) Squash everything
-                // (2) Look at the model holistically, and see what could be made simpler
-                // (3) Then finally, clean a bunch of shit up
                 errorCode = handle.AsyncContext.ReceiveFromAsync(_bufferList, _socketFlags, _socketAddress.Buffer, ref socketAddressLen, out bytesReceived, out flags, TransferCompletionCallback);
             }
 
-            // CONSIDER: Why don't I deal with failure here too?  Not sure exactly.  Compare to what windows does.
-            if (errorCode == SocketError.Success)
+            if (errorCode != SocketError.IOPending)
             {
-                CompleteTransferOperation(bytesReceived, _socketAddress.Buffer, socketAddressLen, flags, SocketError.Success);
-                FinishOperationSyncSuccess(bytesReceived);
+                CompleteTransferOperation(bytesReceived, _socketAddress.Buffer, socketAddressLen, flags, errorCode);
+                FinishOperationSync(errorCode, bytesReceived, flags);
             }
 
             return errorCode;
@@ -207,7 +201,7 @@ namespace System.Net.Sockets
         {
             CompleteReceiveMessageFromOperation(bytesTransferred, socketAddress, socketAddressSize, receivedFlags, ipPacketInformation, errorCode);
 
-            CompletionCallback(bytesTransferred, errorCode);
+            CompletionCallback(bytesTransferred, receivedFlags, errorCode);
         }
 
         private void CompleteReceiveMessageFromOperation(int bytesTransferred, byte[] socketAddress, int socketAddressSize, SocketFlags receivedFlags, IPPacketInformation ipPacketInformation, SocketError errorCode)
@@ -230,10 +224,10 @@ namespace System.Net.Sockets
             SocketFlags receivedFlags;
             IPPacketInformation ipPacketInformation;
             SocketError socketError = handle.AsyncContext.ReceiveMessageFromAsync(_buffer, _offset, _count, _socketFlags, _socketAddress.Buffer, ref socketAddressSize, isIPv4, isIPv6, out bytesReceived, out receivedFlags, out ipPacketInformation, ReceiveMessageFromCompletionCallback);
-            if (socketError == SocketError.Success)
+            if (socketError != SocketError.IOPending)
             {
-                CompleteReceiveMessageFromOperation(bytesReceived, _socketAddress.Buffer, socketAddressSize, receivedFlags, ipPacketInformation, SocketError.Success);
-                FinishOperationSyncSuccess(bytesReceived);
+                CompleteReceiveMessageFromOperation(bytesReceived, _socketAddress.Buffer, socketAddressSize, receivedFlags, ipPacketInformation, socketError);
+                FinishOperationSync(socketError, bytesReceived, receivedFlags);
             }
             return socketError;
         }
@@ -257,10 +251,10 @@ namespace System.Net.Sockets
                 errorCode = handle.AsyncContext.SendAsync(_bufferList, _socketFlags, out bytesSent, TransferCompletionCallback);
             }
 
-            if (errorCode == SocketError.Success)
+            if (errorCode != SocketError.IOPending)
             {
-                CompleteTransferOperation(bytesSent, null, 0, SocketFlags.None, SocketError.Success);
-                FinishOperationSyncSuccess(bytesSent);
+                CompleteTransferOperation(bytesSent, null, 0, SocketFlags.None, errorCode);
+                FinishOperationSync(errorCode, bytesSent, SocketFlags.None);
             }
 
             return errorCode;
@@ -296,10 +290,10 @@ namespace System.Net.Sockets
                 errorCode = handle.AsyncContext.SendToAsync(_bufferList, _socketFlags, _socketAddress.Buffer, ref socketAddressLen, out bytesSent, TransferCompletionCallback);
             }
 
-            if (errorCode == SocketError.Success)
+            if (errorCode != SocketError.IOPending)
             {
-                CompleteTransferOperation(bytesSent, _socketAddress.Buffer, socketAddressLen, SocketFlags.None, SocketError.Success);
-                FinishOperationSyncSuccess(bytesSent);
+                CompleteTransferOperation(bytesSent, _socketAddress.Buffer, socketAddressLen, SocketFlags.None, errorCode);
+                FinishOperationSync(errorCode, bytesSent, SocketFlags.None);
             }
 
             return errorCode;
@@ -354,12 +348,11 @@ namespace System.Net.Sockets
             throw new PlatformNotSupportedException();
         }
 
-        private void CompletionCallback(int bytesTransferred, SocketError socketError)
+        private void CompletionCallback(int bytesTransferred, SocketFlags flags, SocketError socketError)
         {
             if (socketError == SocketError.Success)
             {
-                // TODO: I removed flags here, are they actually flowed?  Check
-                FinishOperationAsyncSuccess(bytesTransferred);
+                FinishOperationAsyncSuccess(bytesTransferred, flags);
             }
             else
             {
@@ -368,7 +361,7 @@ namespace System.Net.Sockets
                     socketError = SocketError.OperationAborted;
                 }
 
-                FinishOperationAsyncFailure(socketError, bytesTransferred, _receivedFlags);
+                FinishOperationAsyncFailure(socketError, bytesTransferred, flags);
             }
         }
     }

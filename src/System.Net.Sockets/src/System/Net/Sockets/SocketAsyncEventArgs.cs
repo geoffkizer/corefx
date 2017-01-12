@@ -585,6 +585,20 @@ namespace System.Net.Sockets
             }
         }
 
+        internal void FinishOperationSync(SocketError socketError, int bytesTransferred, SocketFlags flags)
+        {
+            Debug.Assert(socketError != SocketError.IOPending);
+
+            if (socketError == SocketError.Success)
+            {
+                FinishOperationSyncSuccess(bytesTransferred, flags);
+            }
+            else
+            {
+                FinishOperationSyncFailure(socketError, bytesTransferred, flags);
+            }
+        }
+
         internal void FinishOperationSyncFailure(SocketError socketError, int bytesTransferred, SocketFlags flags)
         {
             SetResults(socketError, bytesTransferred, flags);
@@ -671,9 +685,9 @@ namespace System.Net.Sockets
             }
         }
 
-        internal void FinishOperationSyncSuccess(int bytesTransferred)
+        internal void FinishOperationSyncSuccess(int bytesTransferred, SocketFlags flags)
         {
-            SetResults(SocketError.Success, bytesTransferred, SocketFlags.None);
+            SetResults(SocketError.Success, bytesTransferred, flags);
 
             SocketError socketError = SocketError.Success;
             switch (_completedOperation)
@@ -877,9 +891,9 @@ namespace System.Net.Sockets
             Complete();
         }
 
-        internal void FinishOperationAsyncSuccess(int bytesTransferred)
+        internal void FinishOperationAsyncSuccess(int bytesTransferred, SocketFlags flags)
         {
-            FinishOperationSyncSuccess(bytesTransferred);
+            FinishOperationSyncSuccess(bytesTransferred, flags);
 
             if (_context == null)
             {

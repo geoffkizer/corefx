@@ -166,7 +166,7 @@ namespace System.Net.Sockets
                 {
                     // The socket handle is configured to skip completion on success, 
                     // so we can set the results right now.
-                    FinishOperationSyncSuccess(bytesTransferred);
+                    FinishOperationSyncSuccess(bytesTransferred, SocketFlags.None);
                     return SocketError.Success;
                 }
 
@@ -1210,7 +1210,7 @@ namespace System.Net.Sockets
 
                 if (socketError == SocketError.Success)
                 {
-                    FinishOperationAsyncSuccess((int)numBytes);
+                    FinishOperationAsyncSuccess((int)numBytes, SocketFlags.None);
                 }
                 else
                 {

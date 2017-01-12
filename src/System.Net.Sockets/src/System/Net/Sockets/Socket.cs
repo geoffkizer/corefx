@@ -4517,7 +4517,7 @@ namespace System.Net.Sockets
             else
             {
                 // No buffers or files to send.
-                e.FinishOperationSyncSuccess(0);
+                e.FinishOperationSyncSuccess(0, SocketFlags.None);
                 socketError = SocketError.Success;
             }
 
