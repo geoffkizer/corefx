@@ -178,8 +178,14 @@ namespace System.Net.Sockets
             // Get the socket error (which may be IOPending)
             SocketError errorCode = SocketPal.GetLastSocketError();
 
-            // If there's an error, then the caller will handle this and set the result,
-            // and the Overlapped will be released in CompleteIOCPOperation below.
+            if (errorCode == SocketError.IOPending)
+            {
+                return errorCode;
+            }
+
+            FinishOperationSyncFailure(errorCode, bytesTransferred, SocketFlags.None);
+
+            // Note, the overlapped will be release in CompleteIOCPOperation below, for either success or failure
             return errorCode;
         }
 

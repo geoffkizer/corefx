@@ -361,12 +361,6 @@ namespace System.Net.Sockets
                 // TODO: I removed flags here, are they actually flowed?  Check
                 FinishOperationAsyncSuccess(bytesTransferred);
             }
-#if false
-            else if (socketError == SocketErrorExt.SynchronousSuccess)
-            {
-                FinishOperationSyncSuccess(bytesTransferred);
-            }
-#endif
             else
             {
                 if (_currentSocket.CleanedUp)

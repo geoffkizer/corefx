@@ -4018,7 +4018,6 @@ namespace System.Net.Sockets
         public bool AcceptAsync(SocketAsyncEventArgs e)
         {
             if (NetEventSource.IsEnabled) NetEventSource.Enter(this, e);
-            bool retval;
 
             if (CleanedUp)
             {
@@ -4065,17 +4064,15 @@ namespace System.Net.Sockets
                 throw;
             }
 
-            // Handle completion when completion port is not posted.
-            retval = e.TryFinishOperation(socketError);
-
-            if (NetEventSource.IsEnabled) NetEventSource.Exit(this, retval);
-            return retval;
+            bool pending = (socketError == SocketError.IOPending);
+            if (NetEventSource.IsEnabled) NetEventSource.Exit(this, pending);
+            return pending;
         }
 
         public bool ConnectAsync(SocketAsyncEventArgs e)
         {
             if (NetEventSource.IsEnabled) NetEventSource.Enter(this, e);
-            bool retval;
+            bool pending;
 
             if (CleanedUp)
             {
@@ -4119,7 +4116,7 @@ namespace System.Net.Sockets
                 e.StartOperationCommon(this);
                 e.StartOperationWrapperConnect(multipleConnectAsync);
 
-                retval = multipleConnectAsync.StartConnectAsync(e, dnsEP);
+                pending = multipleConnectAsync.StartConnectAsync(e, dnsEP);
             }
             else
             {
@@ -4170,11 +4167,11 @@ namespace System.Net.Sockets
                     throw;
                 }
 
-                retval = e.TryFinishOperation(socketError);
+                pending = (socketError == SocketError.IOPending);
             }
 
-            if (NetEventSource.IsEnabled)  NetEventSource.Exit(this, retval);
-            return retval;
+            if (NetEventSource.IsEnabled) NetEventSource.Exit(this, pending);
+            return pending;
         }
 
         public static bool ConnectAsync(SocketType socketType, ProtocolType protocolType, SocketAsyncEventArgs e)
@@ -4250,7 +4247,6 @@ namespace System.Net.Sockets
         public bool DisconnectAsync(SocketAsyncEventArgs e)
         {
             if (NetEventSource.IsEnabled) NetEventSource.Enter(this);
-            bool retval;
 
             // Throw if socket disposed
             if (CleanedUp)
@@ -4274,17 +4270,7 @@ namespace System.Net.Sockets
                 throw;
             }
 
-            // Handle completion when completion port is not posted.
-            if (socketError != SocketError.Success && socketError != SocketError.IOPending)
-            {
-                e.FinishOperationSyncFailure(socketError, 0, SocketFlags.None);
-                retval = false;
-            }
-            else
-            {
-                retval = true;
-            }
-
+            bool retval = (socketError == SocketError.IOPending);
             if (NetEventSource.IsEnabled) NetEventSource.Exit(this, retval);
             return retval;
         }
@@ -4292,7 +4278,6 @@ namespace System.Net.Sockets
         public bool ReceiveAsync(SocketAsyncEventArgs e)
         {
             if (NetEventSource.IsEnabled) NetEventSource.Enter(this, e);
-            bool retval;
 
             if (CleanedUp)
             {
@@ -4324,9 +4309,9 @@ namespace System.Net.Sockets
                 throw;
             }
 
-            retval = e.TryFinishOperation(socketError);
-            if (NetEventSource.IsEnabled) NetEventSource.Exit(this, retval);
-            return retval;
+            bool pending = (socketError == SocketError.IOPending);
+            if (NetEventSource.IsEnabled) NetEventSource.Exit(this, pending);
+            return pending;
         }
 
         public bool ReceiveFromAsync(SocketAsyncEventArgs e)
@@ -4382,9 +4367,9 @@ namespace System.Net.Sockets
                 throw;
             }
 
-            bool retval = e.TryFinishOperation(socketError);
-            if (NetEventSource.IsEnabled) NetEventSource.Exit(this, retval);
-            return retval;
+            bool pending = (socketError == SocketError.IOPending);
+            if (NetEventSource.IsEnabled) NetEventSource.Exit(this, pending);
+            return pending;
         }
 
         public bool ReceiveMessageFromAsync(SocketAsyncEventArgs e)
@@ -4441,10 +4426,9 @@ namespace System.Net.Sockets
                 throw;
             }
 
-            // Handle completion when completion port is not posted.
-            bool retval = e.TryFinishOperation(socketError);
-            if (NetEventSource.IsEnabled) NetEventSource.Exit(this, retval);
-            return retval;
+            bool pending = (socketError == SocketError.IOPending);
+            if (NetEventSource.IsEnabled) NetEventSource.Exit(this, pending);
+            return pending;
         }
 
         public bool SendAsync(SocketAsyncEventArgs e)
@@ -4480,17 +4464,14 @@ namespace System.Net.Sockets
                 throw;
             }
 
-            bool retval = e.TryFinishOperation(socketError);
-
-            if (NetEventSource.IsEnabled) NetEventSource.Exit(this, retval);
-
-            return retval;
+            bool pending = (socketError == SocketError.IOPending);
+            if (NetEventSource.IsEnabled) NetEventSource.Exit(this, pending);
+            return pending;
         }
 
         public bool SendPacketsAsync(SocketAsyncEventArgs e)
         {
             if (NetEventSource.IsEnabled) NetEventSource.Enter(this, e);
-            bool retval;
 
             // Throw if socket disposed
             if (CleanedUp)
@@ -4532,18 +4513,17 @@ namespace System.Net.Sockets
                     e.Complete();
                     throw;
                 }
-
-                retval = e.TryFinishOperation(socketError);
             }
             else
             {
                 // No buffers or files to send.
                 e.FinishOperationSyncSuccess(0);
-                retval = false;
+                socketError = SocketError.Success;
             }
 
-            if (NetEventSource.IsEnabled) NetEventSource.Exit(this, retval);
-            return retval;
+            bool pending = (socketError == SocketError.IOPending);
+            if (NetEventSource.IsEnabled) NetEventSource.Exit(this, pending);
+            return pending;
         }
 
         public bool SendToAsync(SocketAsyncEventArgs e)
@@ -4587,8 +4567,7 @@ namespace System.Net.Sockets
                 throw;
             }
 
-            // Handle completion when completion port is not posted.
-            bool retval = e.TryFinishOperation(socketError);
+            bool retval = (socketError == SocketError.IOPending);
             if (NetEventSource.IsEnabled) NetEventSource.Exit(this, retval);
             return retval;
         }
