@@ -103,7 +103,7 @@ namespace System.Net.Sockets
             {
                 FinishOperationSync(socketError, 0, SocketFlags.None);
             }
-            return SocketError;
+            return socketError;
         }
 
         internal SocketError DoOperationDisconnect(Socket socket, SafeCloseSocket handle)
