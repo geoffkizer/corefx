@@ -887,7 +887,7 @@ namespace System.Net.Sockets
             SetNonBlocking();
 
             if (!Monitor.TryEnter(_receiveLock))
-                throw new Exception("Contention on _receiveLock??")
+                throw new Exception("Contention on _receiveLock??");
 
 //            lock (_receiveLock)
             try
