@@ -886,7 +886,11 @@ namespace System.Net.Sockets
         {
             SetNonBlocking();
 
-            lock (_receiveLock)
+            if (!Monitor.TryEnter(_receiveLock))
+                throw new Exception("Contention on _receiveLock??")
+
+//            lock (_receiveLock)
+            try
             {
                 SocketError errorCode;
 
@@ -926,6 +930,10 @@ namespace System.Net.Sockets
                     }
                 }
                 return SocketError.IOPending;
+            }
+            finally
+            {
+                Monitor.Exit(_receiveLock);
             }
         }
 
