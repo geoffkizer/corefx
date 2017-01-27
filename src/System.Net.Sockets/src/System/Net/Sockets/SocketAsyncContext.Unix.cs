@@ -925,8 +925,11 @@ namespace System.Net.Sockets
 
                     if (operation.TryComplete(this))
                     {
-                        operation.QueueCompletionCallback();
-                        break;
+                        // TODO: change setting of these so that they don't happen above
+                        socketAddressLen = operation.SocketAddressLen;
+                        flags = operation.ReceivedFlags;
+                        bytesReceived = operation.BytesTransferred;
+                        return operation.ErrorCode;
                     }
                 }
                 return SocketError.IOPending;
