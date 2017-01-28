@@ -4014,11 +4014,15 @@ namespace System.Net.Sockets
             if (NetEventSource.IsEnabled) NetEventSource.Exit(this);
         }
 
+        [DllImport("libc")] 
+        private static extern int printf(string format, string arg);
         #region Async methods
         public bool AcceptAsync(SocketAsyncEventArgs e)
         {
             if (NetEventSource.IsEnabled) NetEventSource.Enter(this, e);
 
+            printf("Socket::AcceptAsync called\n", null);
+            
             if (CleanedUp)
             {
                 throw new ObjectDisposedException(GetType().FullName);
@@ -4052,6 +4056,8 @@ namespace System.Net.Sockets
             // Local variables for sync completion.
             SocketError socketError = SocketError.Success;
 
+            printf("Socket::AcceptAsync before try\n", null);
+
             // Make the native call.
             try
             {
@@ -4063,6 +4069,8 @@ namespace System.Net.Sockets
                 e.Complete();
                 throw;
             }
+
+            printf("Socket::AcceptAsync socketError = %s\n", socketError.ToString());
 
             bool pending = (socketError == SocketError.IOPending);
             if (NetEventSource.IsEnabled) NetEventSource.Exit(this, pending);
