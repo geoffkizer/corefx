@@ -34,9 +34,16 @@ namespace System.Net.Sockets.Performance.Tests
             connectEventArgs.UserToken = onConnectCallback;
             connectEventArgs.Completed += OnConnect;
 
+#if false
             bool willRaiseEvent = _s != null ?
                 _s.ConnectAsync(connectEventArgs) :
                 Socket.ConnectAsync(SocketType.Stream, ProtocolType.Tcp, connectEventArgs);
+#endif
+            Console.WriteLine("_s is null? {0}", _s == null);
+            // Hack, I'm not sure when _s is initialized, look it up
+            _s = null;
+            bool willRaiseEvent = Socket.ConnectAsync(SocketType.Stream, ProtocolType.Tcp, connectEventArgs);
+            
             if (!willRaiseEvent)
             {
                 Console.WriteLine("Connect completed synchronously");
