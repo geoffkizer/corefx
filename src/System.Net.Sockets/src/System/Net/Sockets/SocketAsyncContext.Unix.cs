@@ -422,6 +422,8 @@ namespace System.Net.Sockets
                         Requeue(op);
                         return;
                     }
+
+                    printf("TryCompleteAsync on engine thread completed\n", null);
                 }
             }
 
