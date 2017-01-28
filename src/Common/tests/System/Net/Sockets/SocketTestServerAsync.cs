@@ -164,6 +164,8 @@ namespace System.Net.Sockets.Tests
                 }
             }
 
+            Console.WriteLine("AcceptAsync called, willRaiseEvent = {0}", willRaiseEvent);
+
             if (!willRaiseEvent)
             {
                 ProcessAccept(acceptEventArg);
@@ -179,6 +181,8 @@ namespace System.Net.Sockets.Tests
 
         private void ProcessAccept(SocketAsyncEventArgs e)
         {
+            Console.WriteLine("ProcessAccept called, errorCode = {0}", e.SocketError);
+            
             if (e.SocketError != SocketError.Success)
             {
                 _log.WriteLine(this.GetHashCode() + " ProcessAccept(_numConnectedSockets={0}): {1}", _numConnectedSockets, e.SocketError);
