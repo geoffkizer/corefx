@@ -897,13 +897,18 @@ namespace System.Net.Sockets
                 {
                     printf("Receive queue is empty, trying sync Receive", null);
                     if (SocketPal.TryCompleteReceiveFrom(_socket, buffer, offset, count, flags, socketAddress, ref socketAddressLen, out bytesReceived, out receivedFlags, out errorCode))
+                    {
+                        // Synchronous success or failure
+                        printf("Sync receive complete, result = %s", errorCode.ToString());
+                        return errorCode;
+                    }
+                    printf("Sync receive returned EWOULDBLOCK", null);
+                }
+                else
                 {
-                    // Synchronous success or failure
-                    printf("Sync receive complete, result = %s", errorCode.ToString());
-                    return errorCode;
+                    printf("Receive queue not empty", null);
                 }
 
-                printf("Sync receive returned EWOULDBLOCK", null);
 
                 bytesReceived = 0;
                 receivedFlags = SocketFlags.None;
