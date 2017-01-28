@@ -11,6 +11,8 @@ using System.Diagnostics;
 using System.Threading;
 using System.Threading.Tasks;
 
+using System.Runtime.InteropServices;
+
 namespace System.Net.Sockets
 {
     // This object is used to wrap a bunch of ConnectAsync operations
