@@ -115,6 +115,8 @@ namespace System.Net.Sockets.Tests
             _listenSocket = new Socket(localEndPoint.AddressFamily, SocketType.Stream, _protocolType);
             _listenSocket.Bind(localEndPoint);
 
+            Console.WriteLine("SocketTestAsyncServer::Start, localEndPoint = {0}", _listenSocket.LocalEndPoint);
+
             // Start the server with a listen backlog of 100 connections.
             _listenSocket.Listen(100);
 

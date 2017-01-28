@@ -4195,6 +4195,8 @@ namespace System.Net.Sockets
             if (NetEventSource.IsEnabled) NetEventSource.Enter(null);
             bool pending;
 
+            printf("static Socket::ConnectAsync called\n", null);
+
             if (e == null)
             {
                 throw new ArgumentNullException(nameof(e));
@@ -4213,6 +4215,8 @@ namespace System.Net.Sockets
 
             if (dnsEP != null)
             {
+                printf("static Socket::ConnectAsync, dnsEP != null\n", null);
+
                 Socket attemptSocket = null;
                 MultipleConnectAsync multipleConnectAsync = null;
                 if (dnsEP.AddressFamily == AddressFamily.Unspecified)
