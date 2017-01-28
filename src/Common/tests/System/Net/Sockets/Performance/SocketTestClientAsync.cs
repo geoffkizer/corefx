@@ -58,7 +58,7 @@ namespace System.Net.Sockets.Performance.Tests
 
         private void ProcessConnect(SocketAsyncEventArgs e)
         {
-            Console.WriteLine("ProcessConnect called");
+            Console.WriteLine("ProcessConnect called, error = {0}", e.SocketError);
             if (_s == null)
             {
                 _s = e.ConnectSocket;
