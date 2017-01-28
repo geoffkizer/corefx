@@ -36,7 +36,8 @@ namespace System.Net.Sockets.Performance.Tests
         {
             SocketImplementationType serverType = SocketImplementationType.Async;
             SocketImplementationType clientType = SocketImplementationType.Async;
-            int iterations = 10000 * _iterations;
+//            int iterations = 10000 * _iterations;
+            int iterations = 10;
             int bufferSize = 256;
             int socket_instances = 1;
 
@@ -58,9 +59,11 @@ namespace System.Net.Sockets.Performance.Tests
         {
             SocketImplementationType serverType = SocketImplementationType.Async;
             SocketImplementationType clientType = SocketImplementationType.Async;
-            int iterations = 2000 * _iterations;
+//            int iterations = 2000 * _iterations;
+            int iterations = 20;
             int bufferSize = 256;
-            int socket_instances = 500;
+//            int socket_instances = 500;
+            int socket_instances = 1;
 
             var test = new SocketPerformanceTests(_log);
 
