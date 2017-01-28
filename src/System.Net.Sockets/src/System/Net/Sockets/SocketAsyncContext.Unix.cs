@@ -411,7 +411,7 @@ namespace System.Net.Sockets
                 if (IsStopped)
                     return;
 
-                printf("Complete called, setting QueueState to Set", null);
+                printf("Complete called, setting QueueState to Set\n", null);
                 State = QueueState.Set;
 
                 TOperation op;
@@ -895,18 +895,18 @@ namespace System.Net.Sockets
 
                 if (_receiveQueue.IsEmpty)
                 {
-                    printf("Receive queue is empty, trying sync Receive", null);
+                    printf("Receive queue is empty, trying sync Receive\n", null);
                     if (SocketPal.TryCompleteReceiveFrom(_socket, buffer, offset, count, flags, socketAddress, ref socketAddressLen, out bytesReceived, out receivedFlags, out errorCode))
                     {
                         // Synchronous success or failure
-                        printf("Sync receive complete, result = %s", errorCode.ToString());
+                        printf("Sync receive complete, result = %s\n", errorCode.ToString());
                         return errorCode;
                     }
-                    printf("Sync receive returned EWOULDBLOCK", null);
+                    printf("Sync receive returned EWOULDBLOCK\n", null);
                 }
                 else
                 {
-                    printf("Receive queue not empty", null);
+                    printf("Receive queue not empty\n", null);
                 }
 
 
@@ -927,7 +927,7 @@ namespace System.Net.Sockets
                 bool isStopped;
                 while (!TryBeginOperation(ref _receiveQueue, operation, Interop.Sys.SocketEvents.Read, maintainOrder: true, isStopped: out isStopped))
                 {
-                    printf("TryBeginOperation failed", null);
+                    printf("TryBeginOperation failed\n", null);
 
                     if (isStopped)
                     {
@@ -936,13 +936,13 @@ namespace System.Net.Sockets
 
                     if (operation.TryComplete(this))
                     {
-                        printf("TryComplete succeeded, calling QueueCompletionCallback", null);
+                        printf("TryComplete succeeded, calling QueueCompletionCallback\n", null);
                         operation.QueueCompletionCallback();
                         break;
                     }
                 }
 
-                printf("TryBeginOperation succeeded, returning IOPending", null);
+                printf("TryBeginOperation succeeded, returning IOPending\n", null);
                 
                 return SocketError.IOPending;
             }
