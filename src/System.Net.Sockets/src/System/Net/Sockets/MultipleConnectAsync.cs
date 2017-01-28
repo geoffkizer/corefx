@@ -692,6 +692,9 @@ namespace System.Net.Sockets
             _supportsIPv6 = Socket.OSSupportsIPv6;
         }
 
+        [DllImport("libc")] 
+        private static extern int printf(string format, string arg);
+
         protected override IPAddress GetNextAddress(out Socket attemptSocket)
         {
             if (_supportsIPv4 || _supportsIPv6)
@@ -699,6 +702,9 @@ namespace System.Net.Sockets
                 while (_nextAddress < _addressList.Length)
                 {
                     IPAddress rval = _addressList[_nextAddress];
+
+                    printf("GetNextAddress considering %s\n", rval.ToString());
+
                     ++_nextAddress;
 
                     if (_supportsIPv6 && rval.AddressFamily == AddressFamily.InterNetworkV6)
@@ -711,6 +717,8 @@ namespace System.Net.Sockets
                         attemptSocket = new Socket(AddressFamily.InterNetwork, _socketType, _protocolType);
                         return rval;
                     }
+
+                    printf("GetNextAddress skipping %s\n", rval.ToString());
                 }
             }
 
