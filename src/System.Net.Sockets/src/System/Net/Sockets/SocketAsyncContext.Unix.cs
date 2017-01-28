@@ -940,6 +940,8 @@ namespace System.Net.Sockets
                         operation.QueueCompletionCallback();
                         break;
                     }
+
+                    printf("TryComplete failed, retry\n", null);
                 }
 
                 printf("TryBeginOperation succeeded, returning IOPending\n", null);
