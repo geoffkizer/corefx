@@ -182,7 +182,7 @@ namespace System.Net.Sockets.Tests
         private void ProcessAccept(SocketAsyncEventArgs e)
         {
             Console.WriteLine("ProcessAccept called, errorCode = {0}", e.SocketError);
-            
+
             if (e.SocketError != SocketError.Success)
             {
                 _log.WriteLine(this.GetHashCode() + " ProcessAccept(_numConnectedSockets={0}): {1}", _numConnectedSockets, e.SocketError);
@@ -190,7 +190,8 @@ namespace System.Net.Sockets.Tests
                 // If possible, retry the accept after a short wait.
                 if (e.SocketError == SocketError.OperationAborted || e.SocketError == SocketError.Interrupted)
                 {
-                    return;
+//                    return;
+                    throw new Exception("SocketError OperationAborted??");
                 }
 
                 if (Interlocked.Decrement(ref _acceptRetryCount) <= 0)

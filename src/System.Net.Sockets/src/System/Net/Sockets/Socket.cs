@@ -4082,6 +4082,8 @@ namespace System.Net.Sockets
             if (NetEventSource.IsEnabled) NetEventSource.Enter(this, e);
             bool pending;
 
+            printf("Socket::ConnectAsync called\n", null);
+
             if (CleanedUp)
             {
                 throw new ObjectDisposedException(GetType().FullName);
@@ -4124,6 +4126,8 @@ namespace System.Net.Sockets
                 e.StartOperationCommon(this);
                 e.StartOperationWrapperConnect(multipleConnectAsync);
 
+                printf("Socket::ConnectAsync dnsEP != null, calling StartConnectAsync\n", null);
+
                 pending = multipleConnectAsync.StartConnectAsync(e, dnsEP);
             }
             else
@@ -4160,6 +4164,8 @@ namespace System.Net.Sockets
                 e.StartOperationCommon(this);
                 e.StartOperationConnect();
 
+                printf("Socket::ConnectAsync calling DoOperationConnect\n", null);
+
                 // Make the native call.
                 SocketError socketError = SocketError.Success;
                 try
@@ -4174,6 +4180,8 @@ namespace System.Net.Sockets
                     e.Complete();
                     throw;
                 }
+
+                printf("Socket::ConnectAsync DoOperationConnect returned %s\n", socketError.ToString());
 
                 pending = (socketError == SocketError.IOPending);
             }
