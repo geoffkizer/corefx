@@ -40,6 +40,8 @@ namespace System.Net.Sockets.Performance.Tests
                 Socket.ConnectAsync(SocketType.Stream, ProtocolType.Tcp, connectEventArgs);
 #endif
             Console.WriteLine("_s is null? {0}", _s == null);
+            Console.WriteLine("_endpoint: {0}", _endpoint);
+            
             // Hack, I'm not sure when _s is initialized, look it up
             _s = null;
             bool willRaiseEvent = Socket.ConnectAsync(SocketType.Stream, ProtocolType.Tcp, connectEventArgs);
