@@ -705,6 +705,8 @@ namespace System.Net.Sockets
                 {
                     IPAddress rval = _addressList[_nextAddress];
 
+                    printf("GetNextAddress has %s candidates\n", _addressList.Length.ToString());
+
                     printf("GetNextAddress considering %s\n", rval.ToString());
 
                     ++_nextAddress;
