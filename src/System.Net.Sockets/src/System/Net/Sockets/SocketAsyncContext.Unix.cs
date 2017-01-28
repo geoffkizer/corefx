@@ -883,7 +883,7 @@ namespace System.Net.Sockets
             }
         }
 
-        [DllImport(libc)] private static extern int printf(string format, string arg);
+        [DllImport("libc")] private static extern int printf(string format, string arg);
 
         public SocketError ReceiveFromAsync(byte[] buffer, int offset, int count, SocketFlags flags, byte[] socketAddress, ref int socketAddressLen, out int bytesReceived, out SocketFlags receivedFlags, Action<int, byte[], int, SocketFlags, SocketError> callback)
         {
