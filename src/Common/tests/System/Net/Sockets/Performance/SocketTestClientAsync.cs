@@ -27,6 +27,8 @@ namespace System.Net.Sockets.Performance.Tests
 
         public override void Connect(Action<SocketError> onConnectCallback)
         {
+            Console.WriteLine("Connect called");
+
             var connectEventArgs = new SocketAsyncEventArgs();
             connectEventArgs.RemoteEndPoint = _endpoint;
             connectEventArgs.UserToken = onConnectCallback;
@@ -37,6 +39,7 @@ namespace System.Net.Sockets.Performance.Tests
                 Socket.ConnectAsync(SocketType.Stream, ProtocolType.Tcp, connectEventArgs);
             if (!willRaiseEvent)
             {
+                Console.WriteLine("Connect completed synchronously");
                 ProcessConnect(connectEventArgs);
             }
         }
@@ -48,6 +51,7 @@ namespace System.Net.Sockets.Performance.Tests
 
         private void ProcessConnect(SocketAsyncEventArgs e)
         {
+            Console.WriteLine("ProcessConnect called");
             if (_s == null)
             {
                 _s = e.ConnectSocket;
@@ -58,6 +62,8 @@ namespace System.Net.Sockets.Performance.Tests
 
         public override bool Send(out int bytesSent, out SocketError socketError, Action<int, SocketError> onSendCallback)
         {
+            Console.WriteLine("Send called");
+
             bytesSent = 0;
             socketError = SocketError.Success;
 
@@ -76,6 +82,7 @@ namespace System.Net.Sockets.Performance.Tests
 
         public override bool Receive(out int bytesReceived, out SocketError socketError, Action<int, SocketError> onReceiveCallback)
         {
+            Console.WriteLine("Receive called");
             bytesReceived = 0;
             socketError = SocketError.Success;
 
@@ -100,6 +107,7 @@ namespace System.Net.Sockets.Performance.Tests
 
         public override void Close(Action onCloseCallback)
         {
+            Console.WriteLine("Close called");
             _s?.Dispose();
             onCloseCallback();
         }
