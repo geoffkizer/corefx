@@ -25,6 +25,7 @@ namespace System.Net.Sockets.Performance.Tests
             if (env != null)
             {
                 _iterations = int.Parse(env);
+                Console.WriteLine("_iterations = {0}", _iterations);
             }
         }
 
