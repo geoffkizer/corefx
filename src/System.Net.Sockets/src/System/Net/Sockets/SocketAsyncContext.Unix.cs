@@ -269,6 +269,9 @@ namespace System.Net.Sockets
             {
                 bool completed = SocketPal.TryCompleteAccept(context._socket, SocketAddress, ref SocketAddressLen, out AcceptedFileDescriptor, out ErrorCode);
                 Debug.Assert(ErrorCode == SocketError.Success || AcceptedFileDescriptor == (IntPtr)(-1), $"Unexpected values: ErrorCode={ErrorCode}, AcceptedFileDescriptor={AcceptedFileDescriptor}");
+
+                printf("DoTryComplete called, errorCode = %s\n", ErrorCode.ToString());
+
                 return completed;
             }
 
@@ -660,6 +663,9 @@ namespace System.Net.Sockets
             }
         }
 
+        [DllImport("libc")] 
+        private static extern int printf(string format, string arg);
+
         public SocketError AcceptAsync(byte[] socketAddress, ref int socketAddressLen, out IntPtr acceptedFd, Action<IntPtr, byte[], int, SocketError> callback)
         {
             Debug.Assert(socketAddress != null, "Expected non-null socketAddress");
@@ -668,11 +674,14 @@ namespace System.Net.Sockets
 
             SetNonBlocking();
 
+            printf("AcceptAsync called\n", null);
+
             SocketError errorCode;
             if (SocketPal.TryCompleteAccept(_socket, socketAddress, ref socketAddressLen, out acceptedFd, out errorCode))
             {
                 Debug.Assert(errorCode == SocketError.Success || acceptedFd == (IntPtr)(-1), $"Unexpected values: errorCode={errorCode}, acceptedFd={acceptedFd}");
 
+                printf("AcceptAsync completed synchronously, errorCode = %s\n", errorCode.ToString());
                 return errorCode;
             }
 
