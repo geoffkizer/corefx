@@ -28,6 +28,7 @@ namespace System.Net.Sockets.Performance.Tests
             }
         }
 
+#if false
         [ActiveIssue(13349, TestPlatforms.OSX)]
         [OuterLoop]
         [Fact]
@@ -49,6 +50,7 @@ namespace System.Net.Sockets.Performance.Tests
                 bufferSize,
                 socket_instances);
         }
+#endif
 
         [ActiveIssue(13349, TestPlatforms.OSX)]
         [OuterLoop]

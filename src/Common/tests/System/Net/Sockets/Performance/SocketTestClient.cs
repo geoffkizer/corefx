@@ -16,8 +16,6 @@ namespace System.Net.Sockets.Performance.Tests
     {
         protected readonly ITestOutputHelper _log;
 
-        protected string _server;
-        protected int _port;
         protected EndPoint _endpoint;
 
         protected Socket _s;
@@ -47,17 +45,14 @@ namespace System.Net.Sockets.Performance.Tests
 
         public SocketTestClient(
             ITestOutputHelper log,
-            string server,
-            int port,
+            EndPoint endpoint,
             int iterations,
             string message,
             Stopwatch timeProgramStart)
         {
             _log = log;
 
-            _server = server;
-            _port = port;
-            _endpoint = new DnsEndPoint(server, _port);
+            _endpoint = endpoint;
 
             _sendString = message;
             _sendBuffer = Encoding.UTF8.GetBytes(_sendString);
@@ -67,21 +62,13 @@ namespace System.Net.Sockets.Performance.Tests
 
             _timeProgramStart = timeProgramStart;
 
-            if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows)) // on Unix, socket will be created in Socket.ConnectAsync
-            {
-                _timeInit.Start();
-                _s = new Socket(SocketType.Stream, ProtocolType.Tcp);
-                _timeInit.Stop();
-            }
-
             _iterations = iterations;
         }
 
         public static SocketTestClient SocketTestClientFactory(
             ITestOutputHelper log,
             SocketImplementationType type,
-            string server,
-            int port,
+            EndPoint endpoint,
             int iterations,
             string message,
             Stopwatch timeProgramStart)
@@ -89,11 +76,11 @@ namespace System.Net.Sockets.Performance.Tests
             switch (type)
             {
                 case SocketImplementationType.APM:
-                    var socketAPM = new SocketTestClientAPM(log, server, port, iterations, message, timeProgramStart);
+                    var socketAPM = new SocketTestClientAPM(log, endpoint, iterations, message, timeProgramStart);
                     log.WriteLine(socketAPM.GetHashCode() + " SocketTestClientAPM(..)");
                     return socketAPM;
                 case SocketImplementationType.Async:
-                    var socketAsync = new SocketTestClientAsync(log, server, port, iterations, message, timeProgramStart);
+                    var socketAsync = new SocketTestClientAsync(log, endpoint, iterations, message, timeProgramStart);
                     log.WriteLine(socketAsync.GetHashCode() + " SocketTestClientAsync(..)");
                     return socketAsync;
 
