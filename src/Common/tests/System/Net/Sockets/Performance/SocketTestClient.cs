@@ -8,6 +8,7 @@ using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading.Tasks;
 
+using Xunit;
 using Xunit.Abstractions;
 
 namespace System.Net.Sockets.Performance.Tests
@@ -96,6 +97,7 @@ namespace System.Net.Sockets.Performance.Tests
             _timeConnect.Stop();
             _log.WriteLine(this.GetHashCode() + " OnConnect({0}) _timeConnect={1}", error, _timeConnect.ElapsedMilliseconds);
 
+            Assert.Equal(SocketError.Success, error);
             // TODO: an error should fail the test.
             if (error != SocketError.Success)
             {
