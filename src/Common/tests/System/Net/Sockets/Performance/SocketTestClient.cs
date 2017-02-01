@@ -149,7 +149,7 @@ namespace System.Net.Sockets.Performance.Tests
 
         private Task<int> SendHelper()
         {
-            Console.WriteLine("Enter SendHelper");
+//            Console.WriteLine("Enter SendHelper");
 
             TaskCompletionSource<int> tcs = new TaskCompletionSource<int>();
 
@@ -177,7 +177,7 @@ namespace System.Net.Sockets.Performance.Tests
 
         private Task<int> ReceiveHelper()
         {
-            Console.WriteLine("Enter ReceiveHelper");
+//            Console.WriteLine("Enter ReceiveHelper");
 
             TaskCompletionSource<int> tcs = new TaskCompletionSource<int>();
 
@@ -223,7 +223,7 @@ namespace System.Net.Sockets.Performance.Tests
                 total_bytes_sent += bytesSent;
                 Assert.True(total_bytes_sent <= _current_bytes);
 
-                Console.WriteLine("Sent {0} bytes, total = {1}", bytesSent, total_bytes_sent);
+//                Console.WriteLine("Sent {0} bytes, total = {1}", bytesSent, total_bytes_sent);
             }
         }
 
@@ -244,7 +244,7 @@ namespace System.Net.Sockets.Performance.Tests
                 total_bytes_received += receivedBytes;
                 Assert.True(total_bytes_received <= _current_bytes);
 
-                Console.WriteLine("Received {0} bytes, total = {1}", receivedBytes, total_bytes_received);
+//                Console.WriteLine("Received {0} bytes, total = {1}", receivedBytes, total_bytes_received);
 
                 _recvBufferIndex += receivedBytes;
                 Assert.True(_recvBufferIndex <= _bufferLen);
