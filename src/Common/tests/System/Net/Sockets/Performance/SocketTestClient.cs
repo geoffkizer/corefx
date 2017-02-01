@@ -93,12 +93,59 @@ namespace System.Net.Sockets.Performance.Tests
 
         public abstract void Connect(Action<SocketError> onConnectCallback);
 
-        private async void OnConnect(SocketError error)
+        private Task ConnectHelper()
         {
-            _timeConnect.Stop();
-            _log.WriteLine(this.GetHashCode() + " OnConnect({0}) _timeConnect={1}", error, _timeConnect.ElapsedMilliseconds);
+            TaskCompletionSource<bool> tcs = new TaskCompletionSource<bool>();
 
-            Assert.Equal(SocketError.Success, error);
+            Connect(socketError => {
+                if (socketError == SocketError.Success)
+                {
+                    tcs.SetResult(true);
+                }
+                else
+                {
+                    tcs.SetException(new SocketException((int)socketError));
+                }
+            });
+
+            return tcs.Task;
+        }
+
+        public async Task RunTest()
+        {
+            int connectionAttempts = 0;
+            while (true)
+            {
+                try 
+                {
+                    await ConnectHelper();
+
+                    // Success, break out of loop
+                    break;
+                }
+                catch (SocketException e)
+                {
+                    // If we got ConnectionRefused, we want to fall through and retry
+                    // Otherwise, rethrow
+                    if (e.SocketErrorCode != SocketError.ConnectionRefused)
+                    {
+                        throw;
+                    }
+
+                    // Limit connection attempts
+                    if (connectionAttempts == 3)
+                    {
+                        throw;
+                    }
+                }
+
+                // Connection was refused.  
+                // The server may be temporarily overloaded, and the server OS is rejecting connections.
+                // Wait a bit and then retry.
+                await Task.Delay(200);
+
+                connectionAttempts++;
+            }
 
             _timeSendRecv.Start();
 
@@ -256,6 +303,7 @@ namespace System.Net.Sockets.Performance.Tests
             _tcs.TrySetResult(_timeSendRecv.ElapsedMilliseconds);
         }
 
+#if false
         public Task<long> RunTest()
         {
             _timeConnect.Start();
@@ -263,7 +311,7 @@ namespace System.Net.Sockets.Performance.Tests
 
             return _tcs.Task;
         }
-
+#endif
         protected abstract string ImplementationName();
     }
 }
