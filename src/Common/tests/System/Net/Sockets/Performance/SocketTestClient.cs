@@ -41,8 +41,6 @@ namespace System.Net.Sockets.Performance.Tests
         private Stopwatch _timeSendRecv = new Stopwatch();
         private Stopwatch _timeClose = new Stopwatch();
 
-        private TaskCompletionSource<long> _tcs = new TaskCompletionSource<long>();
-
         private Random _random = new Random();
 
         public SocketTestClient(
@@ -180,7 +178,7 @@ namespace System.Net.Sockets.Performance.Tests
                 await t2;
             }
 
-            Close(OnClose);
+            await CloseHelper();
         }
 
         public abstract bool Send(out int bytesTransferred, out SocketError socketError, Action<int, SocketError> onSendCallback);
@@ -296,22 +294,15 @@ namespace System.Net.Sockets.Performance.Tests
 
         public abstract void Close(Action onCloseCallback);
 
-        private void OnClose()
+        private Task CloseHelper()
         {
-            _timeClose.Stop();
+            TaskCompletionSource<bool> tcs = new TaskCompletionSource<bool>();
 
-            _tcs.TrySetResult(_timeSendRecv.ElapsedMilliseconds);
+            Close(() => { tcs.SetResult(true); });
+
+            return tcs.Task;
         }
 
-#if false
-        public Task<long> RunTest()
-        {
-            _timeConnect.Start();
-            Connect(OnConnect);
-
-            return _tcs.Task;
-        }
-#endif
         protected abstract string ImplementationName();
     }
 }
