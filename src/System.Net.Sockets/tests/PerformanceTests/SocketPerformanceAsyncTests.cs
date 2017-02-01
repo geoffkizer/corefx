@@ -62,7 +62,7 @@ namespace System.Net.Sockets.Performance.Tests
             int iterations = 200 * _iterations;
             int bufferSize = 256;
 //            int socket_instances = 500;
-            int socket_instances = 10;
+            int socket_instances = 100;
 
             var test = new SocketPerformanceTests(_log);
 
