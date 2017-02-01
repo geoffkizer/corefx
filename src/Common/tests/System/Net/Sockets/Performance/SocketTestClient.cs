@@ -127,7 +127,7 @@ namespace System.Net.Sockets.Performance.Tests
                 // necessarily always on buffer length boundaries.
                 _current_bytes = sends * _bufferLen;
 
-                Console.WriteLine("Starting iteration #{0}, _current_bytes = {1}", i, _current_bytes);
+//                Console.WriteLine("Starting iteration #{0}, _current_bytes = {1}", i, _current_bytes);
 
                 // 
                 // TODO: It might be more efficient to have more than one outstanding Send/Receive.
