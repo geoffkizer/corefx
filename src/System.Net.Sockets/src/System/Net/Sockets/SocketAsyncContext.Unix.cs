@@ -357,11 +357,20 @@ namespace System.Net.Sockets
         private struct OperationQueue<TOperation>
             where TOperation : AsyncOperation
         {
+            private object _queueLock;
             private AsyncOperation _tail;
 
             public QueueState State { get; set; }
             public bool IsStopped { get { return State == QueueState.Stopped; } }
             public bool IsEmpty { get { return _tail == null; } }
+            public object QueueLock { get { return _queueLock; } }
+
+            public void Init()
+            {
+                // TODO: Would be nice if this was the constructor.
+                // TODO: Limit access to this, and make it a spin lock
+                _queueLock = new object();
+            }
 
             public void Enqueue(TOperation operation)
             {
@@ -464,18 +473,14 @@ namespace System.Net.Sockets
         private bool _nonBlockingSet;
         private bool _connectFailed;
 
-        //
-        // We have separate locks for send and receive queues, so they can proceed concurrently.  Accept and connect
-        // use the same lock as send, since they can't happen concurrently anyway.  
-        //
-        private readonly object _sendLock = new object();
-        private readonly object _receiveLock = new object();
-
         private readonly object _registerLock = new object();
 
         public SocketAsyncContext(SafeCloseSocket socket)
         {
             _socket = socket;
+
+            _receiveQueue.Init();
+            _sendQueue.Init();
         }
 
         private void Register(Interop.Sys.SocketEvents events)
@@ -512,11 +517,11 @@ namespace System.Net.Sockets
         {
 
             // Drain queues
-            lock (_sendLock)
+            lock (_sendQueue.QueueLock)
             {
                 _sendQueue.StopAndAbort();
             }
-            lock (_receiveLock)
+            lock (_receiveQueue.QueueLock)
             {
                 _receiveQueue.StopAndAbort();
             }
@@ -571,7 +576,7 @@ namespace System.Net.Sockets
             where TOperation : AsyncOperation
         {
             // Exactly one of the two queue locks must be held by the caller
-            Debug.Assert(Monitor.IsEntered(_sendLock) ^ Monitor.IsEntered(_receiveLock));
+            Debug.Assert(Monitor.IsEntered(_sendQueue.QueueLock) ^ Monitor.IsEntered(_receiveQueue.QueueLock));
 
             switch (queue.State)
             {
@@ -626,7 +631,7 @@ namespace System.Net.Sockets
                 bool isStopped;
                 while (true)
                 {
-                    lock (_receiveLock)
+                    lock (_receiveQueue.QueueLock)
                     {
                         if (TryBeginOperation(ref _receiveQueue, operation, Interop.Sys.SocketEvents.Read, maintainOrder: false, isStopped: out isStopped))
                         {
@@ -685,7 +690,7 @@ namespace System.Net.Sockets
             bool isStopped;
             while (true)
             {
-                lock (_receiveLock)
+                lock (_receiveQueue.QueueLock)
                 {
                     if (TryBeginOperation(ref _receiveQueue, operation, Interop.Sys.SocketEvents.Read, maintainOrder: false, isStopped: out isStopped))
                     {
@@ -734,7 +739,7 @@ namespace System.Net.Sockets
                 bool isStopped;
                 while (true)
                 {
-                    lock (_sendLock)
+                    lock (_sendQueue.QueueLock)
                     {
                         if (TryBeginOperation(ref _sendQueue, operation, Interop.Sys.SocketEvents.Write, maintainOrder: false, isStopped: out isStopped))
                         {
@@ -784,7 +789,7 @@ namespace System.Net.Sockets
             bool isStopped;
             while (true)
             {
-                lock (_sendLock)
+                lock (_sendQueue.QueueLock)
                 {
                     if (TryBeginOperation(ref _sendQueue, operation, Interop.Sys.SocketEvents.Write, maintainOrder: false, isStopped: out isStopped))
                     {
@@ -825,7 +830,7 @@ namespace System.Net.Sockets
             try
             {
                 ReceiveOperation operation;
-                lock (_receiveLock)
+                lock (_receiveQueue.QueueLock)
                 {
                     SocketFlags receivedFlags;
                     SocketError errorCode;
@@ -886,7 +891,7 @@ namespace System.Net.Sockets
         {
             SetNonBlocking();
 
-            lock (_receiveLock)
+            lock (_receiveQueue.QueueLock)
             {
                 SocketError errorCode;
 
@@ -953,7 +958,7 @@ namespace System.Net.Sockets
             {
                 ReceiveOperation operation;
 
-                lock (_receiveLock)
+                lock (_receiveQueue.QueueLock)
                 {
                     SocketFlags receivedFlags;
                     SocketError errorCode;
@@ -1014,7 +1019,7 @@ namespace System.Net.Sockets
 
             ReceiveOperation operation;
 
-            lock (_receiveLock)
+            lock (_receiveQueue.QueueLock)
             {
                 SocketError errorCode;
                 if (_receiveQueue.IsEmpty &&
@@ -1067,7 +1072,7 @@ namespace System.Net.Sockets
             {
                 ReceiveMessageFromOperation operation;
 
-                lock (_receiveLock)
+                lock (_receiveQueue.QueueLock)
                 {
                     SocketFlags receivedFlags;
                     SocketError errorCode;
@@ -1133,7 +1138,7 @@ namespace System.Net.Sockets
         {
             SetNonBlocking();
 
-            lock (_receiveLock)
+            lock (_receiveQueue.QueueLock)
             {
                 SocketError errorCode;
 
@@ -1205,7 +1210,7 @@ namespace System.Net.Sockets
             {
                 SendOperation operation;
 
-                lock (_sendLock)
+                lock (_sendQueue.QueueLock)
                 {
                     bytesSent = 0;
                     SocketError errorCode;
@@ -1261,7 +1266,7 @@ namespace System.Net.Sockets
         {
             SetNonBlocking();
 
-            lock (_sendLock)
+            lock (_sendQueue.QueueLock)
             {
                 bytesSent = 0;
                 SocketError errorCode;
@@ -1324,7 +1329,7 @@ namespace System.Net.Sockets
             {
                 SendOperation operation;
 
-                lock (_sendLock)
+                lock (_sendQueue.QueueLock)
                 {
                     bytesSent = 0;
                     int bufferIndex = 0;
@@ -1384,7 +1389,7 @@ namespace System.Net.Sockets
         {
             SetNonBlocking();
 
-            lock (_sendLock)
+            lock (_sendQueue.QueueLock)
             {
                 bytesSent = 0;
                 int bufferIndex = 0;
@@ -1437,7 +1442,7 @@ namespace System.Net.Sockets
             {
                 SendFileOperation operation;
 
-                lock (_sendLock)
+                lock (_sendQueue.QueueLock)
                 {
                     bytesSent = 0;
                     SocketError errorCode;
@@ -1490,7 +1495,7 @@ namespace System.Net.Sockets
         {
             SetNonBlocking();
 
-            lock (_sendLock)
+            lock (_sendQueue.QueueLock)
             {
                 bytesSent = 0;
                 SocketError errorCode;
@@ -1541,7 +1546,7 @@ namespace System.Net.Sockets
 
             if ((events & Interop.Sys.SocketEvents.Read) != 0)
             {
-                lock (_receiveLock)
+                lock (_receiveQueue.QueueLock)
                 {
                     _receiveQueue.Complete(this);
                 }
@@ -1549,7 +1554,7 @@ namespace System.Net.Sockets
 
             if ((events & Interop.Sys.SocketEvents.Write) != 0)
             {
-                lock (_sendLock)
+                lock (_sendQueue.QueueLock)
                 {
                     _sendQueue.Complete(this);
                 }
