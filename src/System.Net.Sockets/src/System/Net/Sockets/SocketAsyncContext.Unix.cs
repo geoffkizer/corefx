@@ -427,14 +427,6 @@ namespace System.Net.Sockets
                 }
             }
 
-            public OperationQueue<TOperation> Stop()
-            {
-                OperationQueue<TOperation> result = this;
-                _tail = null;
-                State = QueueState.Stopped;
-                return result;
-            }
-
             public void Complete(SocketAsyncContext context)
             {
                 if (IsStopped)
@@ -455,12 +447,18 @@ namespace System.Net.Sockets
 
             public void StopAndAbort()
             {
-                OperationQueue<TOperation> queue = Stop();
+                // CONSIDER: I might not need to lock around the entire dequeue here
+                // But, not sure it really matters.
 
-                TOperation op;
-                while (queue.TryDequeue(out op))
+                lock (_queueLock)
                 {
-                    op.AbortAsync();
+                    State = QueueState.Stopped;
+
+                    TOperation op;
+                    while (TryDequeue(out op))
+                    {
+                        op.AbortAsync();
+                    }
                 }
             }
         }
@@ -515,16 +513,9 @@ namespace System.Net.Sockets
 
         public void Close()
         {
-
             // Drain queues
-            lock (_sendQueue.QueueLock)
-            {
-                _sendQueue.StopAndAbort();
-            }
-            lock (_receiveQueue.QueueLock)
-            {
-                _receiveQueue.StopAndAbort();
-            }
+            _sendQueue.StopAndAbort();
+            _receiveQueue.StopAndAbort();
 
             lock (_registerLock)
             { 
