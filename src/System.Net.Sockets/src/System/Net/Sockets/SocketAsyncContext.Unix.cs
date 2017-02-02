@@ -706,8 +706,9 @@ namespace System.Net.Sockets
 
                 if (operation.TryComplete(this))
                 {
-                    operation.QueueCompletionCallback();
-                    break;
+                    socketAddressLen = operation.SocketAddressLen;
+                    acceptedFd = operation.AcceptedFileDescriptor;
+                    return operation.ErrorCode;
                 }
             }
             return SocketError.IOPending;
@@ -804,8 +805,7 @@ namespace System.Net.Sockets
 
                 if (operation.TryComplete(this))
                 {
-                    operation.QueueCompletionCallback();
-                    break;
+                    return operation.ErrorCode;
                 }
             }
             return SocketError.IOPending;
@@ -903,9 +903,6 @@ namespace System.Net.Sockets
                     return errorCode;
                 }
 
-                bytesReceived = 0;
-                receivedFlags = SocketFlags.None;
-
                 var operation = new ReceiveOperation
                 {
                     Callback = callback,
@@ -922,15 +919,22 @@ namespace System.Net.Sockets
                 {
                     if (isStopped)
                     {
+                        bytesReceived = 0;
+                        receivedFlags = SocketFlags.None;
                         return SocketError.OperationAborted;
                     }
 
                     if (operation.TryComplete(this))
                     {
-                        operation.QueueCompletionCallback();
-                        break;
+                        socketAddressLen = operation.SocketAddressLen;
+                        receivedFlags = operation.ReceivedFlags;
+                        bytesReceived = operation.BytesTransferred;
+                        return operation.ErrorCode;
                     }
                 }
+
+                bytesReceived = 0;
+                receivedFlags = SocketFlags.None;
                 return SocketError.IOPending;
             }
         }
@@ -1026,9 +1030,6 @@ namespace System.Net.Sockets
                     return errorCode;
                 }
 
-                bytesReceived = 0;
-                receivedFlags = SocketFlags.None;
-
                 operation = new ReceiveOperation
                 {
                     Callback = callback,
@@ -1043,15 +1044,22 @@ namespace System.Net.Sockets
                 {
                     if (isStopped)
                     {
+                        bytesReceived = 0;
+                        receivedFlags = SocketFlags.None;
                         return SocketError.OperationAborted;
                     }
 
                     if (operation.TryComplete(this))
                     {
-                        operation.QueueCompletionCallback();
-                        break;
+                        socketAddressLen = operation.SocketAddressLen;
+                        receivedFlags = operation.ReceivedFlags;
+                        bytesReceived = operation.BytesTransferred;
+                        return operation.ErrorCode;
                     }
                 }
+
+                bytesReceived = 0;
+                receivedFlags = SocketFlags.None;
                 return SocketError.IOPending;
             }
         }
@@ -1133,7 +1141,6 @@ namespace System.Net.Sockets
 
             lock (_receiveLock)
             {
-                ipPacketInformation = default(IPPacketInformation);
                 SocketError errorCode;
 
                 if (_receiveQueue.IsEmpty &&
@@ -1142,9 +1149,6 @@ namespace System.Net.Sockets
                     // Synchronous success or failure
                     return errorCode;
                 }
-
-                bytesReceived = 0;
-                receivedFlags = SocketFlags.None;
 
                 var operation = new ReceiveMessageFromOperation
                 {
@@ -1164,15 +1168,25 @@ namespace System.Net.Sockets
                 {
                     if (isStopped)
                     {
+                        ipPacketInformation = default(IPPacketInformation);
+                        bytesReceived = 0;
+                        receivedFlags = SocketFlags.None;
                         return SocketError.OperationAborted;
                     }
 
                     if (operation.TryComplete(this))
                     {
-                        operation.QueueCompletionCallback();
-                        break;
+                        socketAddressLen = operation.SocketAddressLen;
+                        receivedFlags = operation.ReceivedFlags;
+                        ipPacketInformation = operation.IPPacketInformation;
+                        bytesReceived = operation.BytesTransferred;
+                        return operation.ErrorCode;
                     }
                 }
+
+                ipPacketInformation = default(IPPacketInformation);
+                bytesReceived = 0;
+                receivedFlags = SocketFlags.None;
                 return SocketError.IOPending;
             }
         }
@@ -1287,10 +1301,11 @@ namespace System.Net.Sockets
 
                     if (operation.TryComplete(this))
                     {
-                        operation.QueueCompletionCallback();
-                        break;
+                        bytesSent = operation.BytesTransferred;
+                        return operation.ErrorCode;
                     }
                 }
+                
                 return SocketError.IOPending;
             }
         }
@@ -1410,10 +1425,11 @@ namespace System.Net.Sockets
 
                     if (operation.TryComplete(this))
                     {
-                        operation.QueueCompletionCallback();
-                        break;
+                        bytesSent = operation.BytesTransferred;
+                        return operation.ErrorCode;
                     }
                 }
+
                 return SocketError.IOPending;
             }
         }
@@ -1511,10 +1527,11 @@ namespace System.Net.Sockets
 
                     if (operation.TryComplete(this))
                     {
-                        operation.QueueCompletionCallback();
-                        break;
+                        bytesSent = operation.BytesTransferred;
+                        return operation.ErrorCode;
                     }
                 }
+
                 return SocketError.IOPending;
             }
         }
