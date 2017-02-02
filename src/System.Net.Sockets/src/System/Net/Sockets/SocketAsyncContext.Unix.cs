@@ -429,18 +429,21 @@ namespace System.Net.Sockets
 
             public void Complete(SocketAsyncContext context)
             {
-                if (IsStopped)
-                    return;
-
-                State = QueueState.Set;
-
-                TOperation op;
-                while (TryDequeue(out op))
+                lock (_queueLock)
                 {
-                    if (!op.TryCompleteAsync(context))
-                    {
-                        Requeue(op);
+                    if (IsStopped)
                         return;
+
+                    State = QueueState.Set;
+
+                    TOperation op;
+                    while (TryDequeue(out op))
+                    {
+                        if (!op.TryCompleteAsync(context))
+                        {
+                            Requeue(op);
+                            return;
+                        }
                     }
                 }
             }
@@ -1537,18 +1540,12 @@ namespace System.Net.Sockets
 
             if ((events & Interop.Sys.SocketEvents.Read) != 0)
             {
-                lock (_receiveQueue.QueueLock)
-                {
-                    _receiveQueue.Complete(this);
-                }
+                _receiveQueue.Complete(this);
             }
 
             if ((events & Interop.Sys.SocketEvents.Write) != 0)
             {
-                lock (_sendQueue.QueueLock)
-                {
-                    _sendQueue.Complete(this);
-                }
+                _sendQueue.Complete(this);
             }
         }
     }
