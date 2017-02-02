@@ -347,18 +347,32 @@ namespace System.Net.Sockets
             }
         }
 
+#if false
         private enum QueueState
         {
             Clear = 0,
             Set = 1,
             Stopped = 2,
         }
+#endif
+
+        private enum QueueState
+        {
+            Empty = 0,          // Nothing in the queues
+            Pending = 1,        // Queue has entries and is waiting for epoll notification
+            Processing = 2,     // Queue entries are being processed
+            Stopped = 3,        // Queue has been stopped and no further I/O can occur
+                                // Note, we may still be draining entries from the queue and cancelling them
+        }
 
         private struct OperationQueue<TOperation>
             where TOperation : AsyncOperation
         {
+            // TODO: Make this a SpinLock
             private object _queueLock;
             private int _sequenceNumber;
+            
+            // Tail entry in queue.  Note the list is circular, so head = _tail.Next.
             private AsyncOperation _tail;
 
             // TODO: This public shit should go away
@@ -384,10 +398,12 @@ namespace System.Net.Sockets
                     // we need to retry the operation in EnqueueOperation below.
                     observedSequenceNumber = _sequenceNumber;
 
+                        // TODO: There's no sense in ever trying the operation if we're in Pending mode
+
                     // It's ok to try to to execute the operation on the caller thread if either
                     // the queue is empty, or we don't care about ordering (i.e. Accept).
                     // Otherwise, we need to preserve ordering and can't try the operation in the caller.
-                    return (State != QueueState.Stopped) && (_tail == null || !maintainOrder);
+                    return (State == QueueState.Empty || (!maintainOrder && !State == QueueState.Stopped));
                 }
             }
 
@@ -417,7 +433,7 @@ namespace System.Net.Sockets
                         // If these are both true, then a notification has come in and been processed
                         // since last we checked.
                         // Thus we need to retry here before enqueuing, or we may never get another notification.
-                        if (_tail == null && observedSequenceNumber != _sequenceNumber)
+                        if (State == QueueState.Empty && observedSequenceNumber != _sequenceNumber)
                         {
                             // Need to retry the operation.
                             // Update our sequence number for the next go-around.
@@ -439,15 +455,6 @@ namespace System.Net.Sockets
                         return false;
                     }
                 }
-
-// TODO move this
-#if false
-                // We suc
-                if ((_registeredEvents & events) == Interop.Sys.SocketEvents.None)
-                {
-                    context.Register(events);
-                }
-#endif
             }
 
             public void Enqueue(TOperation operation)
@@ -464,6 +471,7 @@ namespace System.Net.Sockets
                 _tail = operation;
             }
 
+#if false
             private bool TryDequeue(out TOperation operation)
             {
                 if (_tail == null)
@@ -504,6 +512,7 @@ namespace System.Net.Sockets
                     _tail.Next = operation;
                 }
             }
+#endif
 
             // TODO: make locking more granular
             public void HandleEvent(SocketAsyncContext context)
@@ -511,21 +520,25 @@ namespace System.Net.Sockets
                 AsyncOperation op; 
                 lock (_queueLock)
                 {
-                    // Make this symmetric to logic below
-                    if (IsStopped)
+                    if (State == QueueState.Stopped)
                     {
-                        // TODO, understand abort logic here
+                        Debug.Assert(_tail == null);
                         return;
                     }
 
-                    if (_tail == null)
+                    if (State == QueueState.Empty)
                     {
-                        // Queue is empty.
-                        // More comments here...
+                        Debug.Assert(_tail == null);
                         _sequenceNumber++;
                         return;
                     }
+                    
+                    // Shouldn't be processing at this point
+                    Debug.Assert(State == QueueState.Pending);
 
+                    State = QueueState.Processing;
+                    
+                    // Retrieve head of queue (in _tail.Next) for processing.                    
                     // Head is tail.Next.
                     op = _tail.Next;
                 }
@@ -536,20 +549,48 @@ namespace System.Net.Sockets
                     {
                         // Operation returned EWOULDBLOCK.
                         // We can't process any more operations.
-                        // Note we don't update the sequence number here, because blah blah blah
+                        
+                        lock (_queueLock)
+                        {
+                            if (State == QueueState.Stopped)
+                            {
+                                // Queue has been stopped.  Exit lock and abort below.
+                                Debug.Assert(_tail == null);
+                            }
+                            else
+                            {
+                                // Queue is still running.  Wait for the next epoll notification.
+                                Debug.Assert(op == _tail.Next);
+                                Debug.Assert(State == QueueState.Processing);
+                                
+                                State = QueueState.Pending;
+                                return;
+                            }
+                        }
+                        
+                        // Queue is stopped.  Abort this op.
+                        op.AbortAsync();
                         return;
                     }
 
+                    // Operation was successfully completed.
+                    // Remove it from the queue and see if there are any more entries to process.
                     lock (_queueLock)
                     {
+                        if (State == QueueState.Stopped)
+                        {
+                            Debug.Assert(_tail == null);
+                            return;
+                        }
+                        
                         // Head should not have changed.
                         Debug.Assert(op == _tail.Next);
 
                         if (op == _tail)
                         {
-                            // List had only one element in it
-                            // It's now empty, so increment the sequence number
+                            // List had only one element in it, now it's empty
                             _tail = null;
+                            State = QueueState.Empty;
                             _sequenceNumber++;
                             return;
                         }
@@ -557,32 +598,48 @@ namespace System.Net.Sockets
                         // Remove the operation we just completed
                         op = op.Next;
                         _tail.Next = op;
-
-                        if (IsStopped)
-                        {
-                            // TODO, understand abort logic here
-                            return;
-                        }
                     }
                 }
             }
 
-            // TODO: How do I coordinate between this and HandleEvent above?
-
             public void StopAndAbort()
             {
-                // CONSIDER: I might not need to lock around the entire dequeue here
-                // But, not sure it really matters.
-
+                TOperation head;
                 lock (_queueLock)
                 {
-                    State = QueueState.Stopped;
-
-                    TOperation op;
-                    while (TryDequeue(out op))
+                    Debug.Assert(State != QueueState.Stopped);
+                    
+                    if (State == QueueState.Empty)
                     {
-                        op.AbortAsync();
+                        Debug.Assert(_tail == null);
+                        State = QueueState.Stopped;
+                        return;
                     }
+                    
+                    Debug.Assert(_tail != null);
+
+                    // Grab queue list and clear it, so we can abort them below                    
+                    head = _tail->Next;
+                    
+                    // If we are currently processing, then the processing thread is trying to perform
+                    // the operation at the head of the queue.  Skip it here.
+                    
+                    if (State == QueueState.Processing)
+                    {
+                        head = (head == _tail) ? null : head->Next;
+                    }
+                    
+                    _tail->Next = null;
+                    _tail = null;
+                    
+                    State = QueueState.Stopped;
+                }
+
+                // Abort unprocessed requests                
+                while (head != null)
+                {
+                    head.AbortAsync();
+                    head = head->Next;
                 }
             }
         }
