@@ -358,7 +358,11 @@ namespace System.Net.Sockets
             where TOperation : AsyncOperation
         {
             private object _queueLock;
+            private int _sequenceNumber;
             private AsyncOperation _tail;
+
+            // TODO: This public shit should go away
+            // State should probably become isStopped
 
             public QueueState State { get; set; }
             public bool IsStopped { get { return State == QueueState.Stopped; } }
@@ -370,6 +374,80 @@ namespace System.Net.Sockets
                 // TODO: Would be nice if this was the constructor.
                 // TODO: Limit access to this, and make it a spin lock
                 _queueLock = new object();
+            }
+
+            public bool CanTryOperation(bool maintainOrder, out int observedSequenceNumber)
+            {
+                lock (_queueLock)
+                {
+                    // Remember the queue sequence number, to detect cases where
+                    // we need to retry the operation in EnqueueOperation below.
+                    observedSequenceNumber = _sequenceNumber;
+
+                    // It's ok to try to to execute the operation on the caller thread if either
+                    // the queue is empty, or we don't care about ordering (i.e. Accept).
+                    // Otherwise, we need to preserve ordering and can't try the operation in the caller.
+                    return (State != QueueState.Stopped) && (_tail == null || !maintainOrder);
+                }
+            }
+
+            // TODO:  
+            // add EnqueueReadOp and EnqueueWriteOp on Context
+            // Also, CanTryRead/WriteOp
+
+            // Due to retry logic, this may end up actually completing the operation.
+            // Returns true if the operation was enqueued, false if it was actually completed here.
+            public bool EnqueueOperation(SocketAsyncContext context, TOperation operation, int observedSequenceNumber, out bool isStopped)
+            {
+                isStopped = false;
+                while (true)
+                {
+                    lock (_queueLock)
+                    {
+                        if (State == QueueState.Stopped)
+                        {
+                            // Better way to report this?
+                            isStopped = true;
+                            return false;
+                        }
+
+                        // We want to enqueue here *unless* the following two things are true:
+                        // (1) The queue is empty.
+                        // (2) The sequence number has changed.
+                        // If these are both true, then a notification has come in and been processed
+                        // since last we checked.
+                        // Thus we need to retry here before enqueuing, or we may never get another notification.
+                        if (_tail == null && observedSequenceNumber != _sequenceNumber)
+                        {
+                            // Need to retry the operation.
+                            // Update our sequence number for the next go-around.
+                            observedSequenceNumber = _sequenceNumber;
+                        }
+                        else
+                        {
+                            // Ok to queue.
+                            // TODO: Move enqueue logic here
+                            Enqueue(operation);
+                            return true;
+                        }
+                    }
+
+                    // Retry the operation.
+                    if (operation.TryComplete(context))
+                    {
+                        // Operation completed.
+                        return false;
+                    }
+                }
+
+// TODO move this
+#if false
+                // We suc
+                if ((_registeredEvents & events) == Interop.Sys.SocketEvents.None)
+                {
+                    context.Register(events);
+                }
+#endif
             }
 
             public void Enqueue(TOperation operation)
@@ -427,26 +505,69 @@ namespace System.Net.Sockets
                 }
             }
 
-            public void Complete(SocketAsyncContext context)
+            // TODO: make locking more granular
+            public void HandleEvent(SocketAsyncContext context)
             {
+                AsyncOperation op; 
                 lock (_queueLock)
                 {
+                    // Make this symmetric to logic below
                     if (IsStopped)
-                        return;
-
-                    State = QueueState.Set;
-
-                    TOperation op;
-                    while (TryDequeue(out op))
                     {
-                        if (!op.TryCompleteAsync(context))
+                        // TODO, understand abort logic here
+                        return;
+                    }
+
+                    if (_tail == null)
+                    {
+                        // Queue is empty.
+                        // More comments here...
+                        _sequenceNumber++;
+                        return;
+                    }
+
+                    // Head is tail.Next.
+                    op = _tail.Next;
+                }
+
+                while (true)
+                {
+                    if (!op.TryCompleteAsync(context))
+                    {
+                        // Operation returned EWOULDBLOCK.
+                        // We can't process any more operations.
+                        // Note we don't update the sequence number here, because blah blah blah
+                        return;
+                    }
+
+                    lock (_queueLock)
+                    {
+                        // Head should not have changed.
+                        Debug.Assert(op == _tail.Next);
+
+                        if (op == _tail)
                         {
-                            Requeue(op);
+                            // List had only one element in it
+                            // It's now empty, so increment the sequence number
+                            _tail = null;
+                            _sequenceNumber++;
+                            return;
+                        }
+
+                        // Remove the operation we just completed
+                        op = op.Next;
+                        _tail.Next = op;
+
+                        if (IsStopped)
+                        {
+                            // TODO, understand abort logic here
                             return;
                         }
                     }
                 }
             }
+
+            // TODO: How do I coordinate between this and HandleEvent above?
 
             public void StopAndAbort()
             {
@@ -599,6 +720,38 @@ namespace System.Net.Sockets
             queue.Enqueue(operation);
             isStopped = false;
             return true;
+        }
+
+        // TODO: Change queue names to read/write
+
+        private bool CanTryReadOperation(bool maintainOrder, out int observedSequenceNumber)
+        {
+            return _receiveQueue.CanTryOperation(maintainOrder, out observedSequenceNumber);
+        }
+
+        private bool CanTryWriteOperation(bool maintainOrder, out int observedSequenceNumber)
+        {
+            return _sendQueue.CanTryOperation(maintainOrder, out observedSequenceNumber);
+        }
+
+        private bool EnqueueReadOperation(ReadOperation operation, int observedSequenceNumber, out bool isStopped)
+        {
+            if ((_registeredEvents & Interop.Sys.SocketEvents.Read) == Interop.Sys.SocketEvents.None)
+            {
+                Register(Interop.Sys.SocketEvents.Read);
+            }
+
+            return _receiveQueue.EnqueueOperation(this, operation, observedSequenceNumber, out isStopped);
+        }
+
+        private bool EnqueueWriteOperation(ReadOperation operation, int observedSequenceNumber, out bool isStopped)
+        {
+            if ((_registeredEvents & Interop.Sys.SocketEvents.Write) == Interop.Sys.SocketEvents.None)
+            {
+                Register(Interop.Sys.SocketEvents.Write);
+            }
+
+            return _receiveQueue.EnqueueOperation(this, operation, observedSequenceNumber, out isStopped);
         }
 
         public SocketError Accept(byte[] socketAddress, ref int socketAddressLen, int timeout, out IntPtr acceptedFd)
@@ -1540,12 +1693,12 @@ namespace System.Net.Sockets
 
             if ((events & Interop.Sys.SocketEvents.Read) != 0)
             {
-                _receiveQueue.Complete(this);
+                _receiveQueue.HandleEvent(this);
             }
 
             if ((events & Interop.Sys.SocketEvents.Write) != 0)
             {
-                _sendQueue.Complete(this);
+                _sendQueue.HandleEvent(this);
             }
         }
     }
