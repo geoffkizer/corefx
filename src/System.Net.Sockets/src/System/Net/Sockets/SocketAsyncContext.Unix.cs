@@ -66,17 +66,6 @@ namespace System.Net.Sockets
                 Next = this;
             }
 
-            public void QueueCompletionCallback()
-            {
-                Debug.Assert(!(CallbackOrEvent is ManualResetEventSlim), $"Unexpected CallbackOrEvent: {CallbackOrEvent}");
-                Debug.Assert(_state != (int)State.Cancelled, $"Unexpected _state: {_state}");
-#if DEBUG
-                Debug.Assert(Interlocked.CompareExchange(ref _callbackQueued, 1, 0) == 0, $"Unexpected _callbackQueued: {_callbackQueued}");
-#endif
-
-                ThreadPool.QueueUserWorkItem(o => ((AsyncOperation)o).InvokeCallback(), this);
-            }
-
             public bool TryComplete(SocketAsyncContext context)
             {
                 Debug.Assert(_state == (int)State.Waiting, $"Unexpected _state: {_state}");
@@ -131,7 +120,12 @@ namespace System.Net.Sockets
                     }
                     else
                     {
-                        QueueCompletionCallback();
+                        Debug.Assert(_state != (int)State.Cancelled, $"Unexpected _state: {_state}");
+#if DEBUG
+                        Debug.Assert(Interlocked.CompareExchange(ref _callbackQueued, 1, 0) == 0, $"Unexpected _callbackQueued: {_callbackQueued}");
+#endif
+
+                        ThreadPool.QueueUserWorkItem(o => ((AsyncOperation)o).InvokeCallback(), this);
                     }
 
                     Volatile.Write(ref _state, (int)State.Complete);
