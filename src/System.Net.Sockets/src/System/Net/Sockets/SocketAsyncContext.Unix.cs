@@ -460,25 +460,6 @@ namespace System.Net.Sockets
                     op.AbortAsync();
                 }
             }
-
-            public bool AllOfType<TCandidate>() where TCandidate : TOperation
-            {
-                bool tailIsCandidateType = _tail is TCandidate;
-#if DEBUG
-                // We assume that all items are of the specified type, or all are not.  Check this invariant.
-                if (_tail != null)
-                {
-                    AsyncOperation op = _tail;
-                    do
-                    {
-                        Debug.Assert((op is TCandidate) == tailIsCandidateType, $"Unexpected values: op={op}, tailIsCandidateType={tailIsCandidateType}");
-                        op = op.Next;
-                    }
-                    while (op != _tail);
-                }
-#endif
-                return tailIsCandidateType;
-            }
         }
 
         private SafeCloseSocket _socket;
