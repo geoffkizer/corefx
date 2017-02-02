@@ -255,6 +255,8 @@ namespace System.Net.Sockets
             }
         }
 
+        [DllImport("libc")] private static extern int printf(string format, string arg);
+
         private void EventLoop()
         {
             try
@@ -281,6 +283,8 @@ namespace System.Net.Sockets
                         }
                         else
                         {
+                            printf("%s\n", $"Received events {_buffer[i].Events} on handle {handle}");
+                            
                             SocketAsyncContext context = GetContextFromHandle(handle);
                             if (context != null)
                             {
