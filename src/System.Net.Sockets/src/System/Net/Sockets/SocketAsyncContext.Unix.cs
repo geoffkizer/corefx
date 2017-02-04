@@ -361,15 +361,12 @@ namespace System.Net.Sockets
 
             // TODO: Make this a SpinLock
             private object _queueLock;
+            private QueueState _queueState;
             private int _sequenceNumber;
             
             // Tail entry in queue.  Note the list is circular, so head = _tail.Next.
             private TOperation _tail;
 
-            // TODO: This public shit should go away
-            // State should probably become isStopped
-
-            private QueueState State { get; set; }
 
             public void Init()
             {
@@ -382,7 +379,7 @@ namespace System.Net.Sockets
             private void CheckQueueState()
             {
                 Debug.Assert(Monitor.IsEntered(_queueLock));
-                switch (State)
+                switch (_queueState)
                 {
                     case QueueState.Empty:
                     case QueueState.Stopped:
@@ -416,7 +413,7 @@ namespace System.Net.Sockets
                     // It's ok to try to to execute the operation on the caller thread if either
                     // the queue is empty, or we don't care about ordering (i.e. Accept).
                     // Otherwise, we need to preserve ordering and can't try the operation in the caller.
-                    return (State == QueueState.Empty || (!maintainOrder && State == QueueState.Processing));
+                    return (_queueState == QueueState.Empty || (!maintainOrder && _queueState == QueueState.Processing));
                 }
             }
 
@@ -431,7 +428,7 @@ namespace System.Net.Sockets
                     {
                         CheckQueueState();
 
-                        if (State == QueueState.Stopped)
+                        if (_queueState == QueueState.Stopped)
                         {
                             isStopped = true;
                             return false;
@@ -443,14 +440,14 @@ namespace System.Net.Sockets
                         // If these are both true, then a notification has come in and been processed
                         // since last we checked.
                         // Thus we need to retry here before enqueuing, or we may never get another notification.
-                        if (State == QueueState.Empty)
+                        if (_queueState == QueueState.Empty)
                         {
                             if (observedSequenceNumber == _sequenceNumber)
                             {
                                 // No new notification seen, ok to queue.
                                 operation.Next = operation;
                                 _tail = operation;
-                                State = QueueState.Pending;
+                                _queueState = QueueState.Pending;
                                 return true;
                             }
                             else
@@ -541,13 +538,13 @@ namespace System.Net.Sockets
                 AsyncOperation op; 
                 lock (_queueLock)
                 {
-                    if (State == QueueState.Stopped)
+                    if (_queueState == QueueState.Stopped)
                     {
                         Debug.Assert(_tail == null);
                         return;
                     }
 
-                    if (State == QueueState.Empty)
+                    if (_queueState == QueueState.Empty)
                     {
                         Debug.Assert(_tail == null);
                         _sequenceNumber++;
@@ -555,9 +552,9 @@ namespace System.Net.Sockets
                     }
                     
                     // Shouldn't be processing at this point
-                    Debug.Assert(State == QueueState.Pending);
+                    Debug.Assert(_queueState == QueueState.Pending);
 
-                    State = QueueState.Processing;
+                    _queueState = QueueState.Processing;
                     
                     // Retrieve head of queue (in _tail.Next) for processing.                    
                     // Head is tail.Next.
@@ -573,7 +570,7 @@ namespace System.Net.Sockets
                         
                         lock (_queueLock)
                         {
-                            if (State == QueueState.Stopped)
+                            if (_queueState == QueueState.Stopped)
                             {
                                 // Queue has been stopped.  Exit lock and abort below.
                                 Debug.Assert(_tail == null);
@@ -582,9 +579,9 @@ namespace System.Net.Sockets
                             {
                                 // Queue is still running.  Wait for the next epoll notification.
                                 Debug.Assert(op == _tail.Next);
-                                Debug.Assert(State == QueueState.Processing);
+                                Debug.Assert(_queueState == QueueState.Processing);
                                 
-                                State = QueueState.Pending;
+                                _queueState = QueueState.Pending;
                                 return;
                             }
                         }
@@ -598,7 +595,7 @@ namespace System.Net.Sockets
                     // Remove it from the queue and see if there are any more entries to process.
                     lock (_queueLock)
                     {
-                        if (State == QueueState.Stopped)
+                        if (_queueState == QueueState.Stopped)
                         {
                             Debug.Assert(_tail == null);
                             return;
@@ -611,7 +608,7 @@ namespace System.Net.Sockets
                         {
                             // List had only one element in it, now it's empty
                             _tail = null;
-                            State = QueueState.Empty;
+                            _queueState = QueueState.Empty;
                             _sequenceNumber++;
                             return;
                         }
@@ -628,12 +625,12 @@ namespace System.Net.Sockets
                 AsyncOperation head;
                 lock (_queueLock)
                 {
-                    Debug.Assert(State != QueueState.Stopped);
+                    Debug.Assert(_queueState != QueueState.Stopped);
                     
-                    if (State == QueueState.Empty)
+                    if (_queueState == QueueState.Empty)
                     {
                         Debug.Assert(_tail == null);
-                        State = QueueState.Stopped;
+                        _queueState = QueueState.Stopped;
                         return;
                     }
                     
@@ -645,7 +642,7 @@ namespace System.Net.Sockets
                     // If we are currently processing, then the processing thread is trying to perform
                     // the operation at the head of the queue.  Skip it here.
                     
-                    if (State == QueueState.Processing)
+                    if (_queueState == QueueState.Processing)
                     {
                         head = (head == _tail) ? null : head.Next;
                     }
@@ -653,7 +650,7 @@ namespace System.Net.Sockets
                     _tail.Next = null;
                     _tail = null;
                     
-                    State = QueueState.Stopped;
+                    _queueState = QueueState.Stopped;
                 }
 
                 // Abort unprocessed requests                
