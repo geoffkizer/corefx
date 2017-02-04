@@ -347,28 +347,18 @@ namespace System.Net.Sockets
             }
         }
 
-#if false
-        private enum QueueState
-        {
-            Clear = 0,
-            Set = 1,
-            Stopped = 2,
-        }
-#endif
-
-    // TODO: Move into OperationQueue
-        private enum QueueState
-        {
-            Empty = 0,          // Nothing in the queues
-            Pending = 1,        // Queue has entries and is waiting for epoll notification
-            Processing = 2,     // Queue entries are being processed
-            Stopped = 3,        // Queue has been stopped and no further I/O can occur
-                                // Note, we may still be draining entries from the queue and cancelling them
-        }
-
         private struct OperationQueue<TOperation>
             where TOperation : AsyncOperation
         {
+            private enum QueueState
+            {
+                Empty = 0,          // Nothing in the queues
+                Pending = 1,        // Queue has entries and is waiting for epoll notification
+                Processing = 2,     // Queue entries are being processed
+                Stopped = 3,        // Queue has been stopped and no further I/O can occur
+                                    // Note, we may still be draining entries from the queue and cancelling them
+            }
+
             // TODO: Make this a SpinLock
             private object _queueLock;
             private int _sequenceNumber;
@@ -379,10 +369,7 @@ namespace System.Net.Sockets
             // TODO: This public shit should go away
             // State should probably become isStopped
 
-            public QueueState State { get; set; }
-//            public bool IsStopped { get { return State == QueueState.Stopped; } }
-//            public bool IsEmpty { get { return _tail == null; } }
-//            public object QueueLock { get { return _queueLock; } }
+            private QueueState State { get; set; }
 
             public void Init()
             {
@@ -549,7 +536,6 @@ namespace System.Net.Sockets
             }
 #endif
 
-            // TODO: make locking more granular
             public void HandleEvent(SocketAsyncContext context)
             {
                 AsyncOperation op; 
