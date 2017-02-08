@@ -602,6 +602,9 @@ namespace System.Net.Sockets
                         }
                         
                         // Head should not have changed.
+                        Debug.Assert(_queueState == QueueState.Processing);
+                        Debug.Assert(_tail != null);
+                        Debug.Assert(_tail.Next != null);
                         Debug.Assert(op == _tail.Next);
 
                         if (op == _tail)
