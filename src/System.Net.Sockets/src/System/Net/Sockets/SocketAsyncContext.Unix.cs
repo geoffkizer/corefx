@@ -625,8 +625,12 @@ namespace System.Net.Sockets
                 AsyncOperation head;
                 lock (_queueLock)
                 {
-                    Debug.Assert(_queueState != QueueState.Stopped);
-                    
+//                    Debug.Assert(_queueState != QueueState.Stopped);
+                    if (_queueState == QueueState.Stopped)
+                    {
+                        return;
+                    }
+
                     if (_queueState == QueueState.Empty)
                     {
                         Debug.Assert(_tail == null);
