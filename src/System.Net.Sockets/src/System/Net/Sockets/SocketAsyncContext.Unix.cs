@@ -360,7 +360,8 @@ namespace System.Net.Sockets
             }
 
             // TODO: Make this a SpinLock
-            private object _queueLock;
+//            private object _queueLock;
+            private SpinLock _queueLock;
             private QueueState _queueState;
             private int _sequenceNumber;
             
@@ -372,7 +373,7 @@ namespace System.Net.Sockets
             {
                 // TODO: Would be nice if this was the constructor.
                 // TODO: Limit access to this, and make it a spin lock
-                _queueLock = new object();
+ //               _queueLock = new object();
             }
 
 #if false
@@ -404,8 +405,10 @@ namespace System.Net.Sockets
 
             public bool CanTryOperation(bool maintainOrder, out int observedSequenceNumber)
             {
-                lock (_queueLock)
+                bool gotLock = false;
+                try
                 {
+                    _queueLock.Enter(ref gotLock);
 //                    CheckQueueState();
 
                     // Remember the queue sequence number, to detect cases where
@@ -417,6 +420,10 @@ namespace System.Net.Sockets
                     // Otherwise, we need to preserve ordering and can't try the operation in the caller.
                     return (_queueState == QueueState.Empty || (!maintainOrder && _queueState == QueueState.Processing));
                 }
+                finally
+                {
+                    if (gotLock) { _queueLock.Exit(); }
+                }
             }
 
             // Due to retry logic, this may end up actually completing the operation.
@@ -426,8 +433,10 @@ namespace System.Net.Sockets
                 isStopped = false;
                 while (true)
                 {
-                    lock (_queueLock)
+                    bool gotLock = false;
+                    try
                     {
+                        _queueLock.Enter(ref gotLock);
 //                        CheckQueueState();
 
                         if (_queueState == QueueState.Stopped)
@@ -467,6 +476,10 @@ namespace System.Net.Sockets
                             _tail = operation;
                             return true;
                         }
+                    }
+                    finally
+                    {
+                        if (gotLock) { _queueLock.Exit(); }
                     }
 
                     // Retry the operation.
@@ -539,8 +552,11 @@ namespace System.Net.Sockets
             public void HandleEvent(SocketAsyncContext context)
             {
                 AsyncOperation op; 
-                lock (_queueLock)
+                bool gotLock = false;
+                try
                 {
+                    _queueLock.Enter(ref gotLock);
+
                     if (_queueState == QueueState.Stopped)
                     {
                         Debug.Assert(_tail == null);
@@ -563,6 +579,10 @@ namespace System.Net.Sockets
                     // Head is tail.Next.
                     op = _tail.Next;
                 }
+                finally
+                {
+                    if (gotLock) { _queueLock.Exit(); }
+                }
 
                 while (true)
                 {
@@ -571,8 +591,11 @@ namespace System.Net.Sockets
                         // Operation returned EWOULDBLOCK.
                         // We can't process any more operations.
                         
-                        lock (_queueLock)
+                        gotLock = false;
+                        try
                         {
+                            _queueLock.Enter(ref gotLock);
+
                             if (_queueState == QueueState.Stopped)
                             {
                                 // Queue has been stopped.  Exit lock and abort below.
@@ -588,6 +611,10 @@ namespace System.Net.Sockets
                                 return;
                             }
                         }
+                        finally
+                        {
+                            if (gotLock) { _queueLock.Exit(); }
+                        }
                         
                         // Queue is stopped.  Abort this op.
                         op.AbortAsync();
@@ -596,8 +623,11 @@ namespace System.Net.Sockets
 
                     // Operation was successfully completed.
                     // Remove it from the queue and see if there are any more entries to process.
-                    lock (_queueLock)
+                    gotLock = false;
+                    try
                     {
+                        _queueLock.Enter(ref gotLock);
+
                         if (_queueState == QueueState.Stopped)
                         {
                             Debug.Assert(_tail == null);
@@ -623,14 +653,20 @@ namespace System.Net.Sockets
                         op = op.Next;
                         _tail.Next = op;
                     }
+                    finally
+                    {
+                        if (gotLock) { _queueLock.Exit(); }
+                    }
                 }
             }
 
             public void StopAndAbort()
             {
                 AsyncOperation head;
-                lock (_queueLock)
+                bool gotLock = false;
+                try
                 {
+                    _queueLock.Enter(ref gotLock);
 //                    Debug.Assert(_queueState != QueueState.Stopped);
                     if (_queueState == QueueState.Stopped)
                     {
@@ -661,6 +697,10 @@ namespace System.Net.Sockets
                     _tail = null;
                     
                     _queueState = QueueState.Stopped;
+                }
+                finally
+                {
+                    if (gotLock) { _queueLock.Exit(); }
                 }
 
                 // Abort unprocessed requests                
