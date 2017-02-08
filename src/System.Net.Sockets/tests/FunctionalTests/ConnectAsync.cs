@@ -47,8 +47,10 @@ namespace System.Net.Sockets.Tests
 
                 using (Socket client = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp))
                 {
-                    Assert.True(client.ConnectAsync(args));
-                    Assert.True(completed.WaitOne(TestSettings.PassingTestTimeout), "IPv4: Timed out while waiting for connection");
+                    if (client.ConnectAsync(args))
+                    {
+                        Assert.True(completed.WaitOne(TestSettings.PassingTestTimeout), "IPv4: Timed out while waiting for connection");
+                    }
                     Assert.Equal<SocketError>(SocketError.Success, args.SocketError);
                 }
             }
