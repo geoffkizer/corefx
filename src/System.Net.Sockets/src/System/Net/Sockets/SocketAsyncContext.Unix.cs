@@ -375,6 +375,7 @@ namespace System.Net.Sockets
                 _queueLock = new object();
             }
 
+#if false
             [Conditional("DEBUG")]
             private void CheckQueueState()
             {
@@ -396,6 +397,7 @@ namespace System.Net.Sockets
                         break;
                 }
             } 
+#endif
 
             // CONSIDER: Change this, and other places, to switch on state, and remove CheckQueueState above
 
@@ -404,7 +406,7 @@ namespace System.Net.Sockets
             {
                 lock (_queueLock)
                 {
-                    CheckQueueState();
+//                    CheckQueueState();
 
                     // Remember the queue sequence number, to detect cases where
                     // we need to retry the operation in EnqueueOperation below.
@@ -426,7 +428,7 @@ namespace System.Net.Sockets
                 {
                     lock (_queueLock)
                     {
-                        CheckQueueState();
+//                        CheckQueueState();
 
                         if (_queueState == QueueState.Stopped)
                         {
