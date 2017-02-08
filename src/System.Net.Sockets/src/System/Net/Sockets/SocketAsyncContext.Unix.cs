@@ -462,6 +462,7 @@ namespace System.Net.Sockets
                             // Pending or Processing, so enqueue
                             operation.Next = _tail.Next;
                             _tail.Next = operation;
+                            _tail = operation;
                             return true;
                         }
                     }
