@@ -52,8 +52,11 @@ namespace System.Net.Sockets.Tests
                 ManualResetEvent complete = new ManualResetEvent(false);
                 args.UserToken = complete;
 
-                Assert.True(sock.ConnectAsync(args));
-                Assert.True(complete.WaitOne(TestSettings.PassingTestTimeout), "IPv4: Timed out while waiting for connection");
+                if (sock.ConnectAsync(args))
+                {
+                    Assert.True(complete.WaitOne(TestSettings.PassingTestTimeout), "IPv4: Timed out while waiting for connection");
+                }
+
                 Assert.True(args.SocketError == SocketError.Success);
 
                 sock.Dispose();
@@ -62,8 +65,10 @@ namespace System.Net.Sockets.Tests
                 args.RemoteEndPoint = new IPEndPoint(IPAddress.IPv6Loopback, port6);
                 complete.Reset();
 
-                Assert.True(sock.ConnectAsync(args));
-                Assert.True(complete.WaitOne(TestSettings.PassingTestTimeout), "IPv6: Timed out while waiting for connection");
+                if (sock.ConnectAsync(args))
+                {
+                    Assert.True(complete.WaitOne(TestSettings.PassingTestTimeout), "IPv6: Timed out while waiting for connection");
+                }
                 Assert.True(args.SocketError == SocketError.Success);
             }
             finally

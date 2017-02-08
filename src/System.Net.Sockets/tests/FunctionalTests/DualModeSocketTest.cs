@@ -552,9 +552,11 @@ namespace System.Net.Sockets.Tests
                 args.RemoteEndPoint = new IPEndPoint(connectTo, port);
                 args.UserToken = waitHandle;
 
-                socket.ConnectAsync(args);
+                if (socket.ConnectAsync(args))
+                {
+                    Assert.True(waitHandle.WaitOne(TestSettings.PassingTestTimeout), "Timed out while waiting for connection");
+                }
 
-                Assert.True(waitHandle.WaitOne(TestSettings.PassingTestTimeout), "Timed out while waiting for connection");
                 if (args.SocketError != SocketError.Success)
                 {
                     throw new SocketException((int)args.SocketError);
@@ -578,9 +580,11 @@ namespace System.Net.Sockets.Tests
                 args.RemoteEndPoint = new DnsEndPoint("localhost", port);
                 args.UserToken = waitHandle;
 
-                socket.ConnectAsync(args);
-
-                Assert.True(waitHandle.WaitOne(TestSettings.PassingTestTimeout), "Timed out while waiting for connection");
+                if (socket.ConnectAsync(args))
+                {
+                    Assert.True(waitHandle.WaitOne(TestSettings.PassingTestTimeout), "Timed out while waiting for connection");
+                }
+                
                 if (args.SocketError != SocketError.Success)
                 {
                     throw new SocketException((int)args.SocketError);
@@ -603,9 +607,11 @@ namespace System.Net.Sockets.Tests
                 args.RemoteEndPoint = new DnsEndPoint("localhost", port);
                 args.UserToken = waitHandle;
 
-                Socket.ConnectAsync(SocketType.Stream, ProtocolType.Tcp, args);
-
-                Assert.True(waitHandle.WaitOne(TestSettings.PassingTestTimeout), "Timed out while waiting for connection");
+                if (Socket.ConnectAsync(SocketType.Stream, ProtocolType.Tcp, args))
+                {
+                    Assert.True(waitHandle.WaitOne(TestSettings.PassingTestTimeout), "Timed out while waiting for connection");
+                }
+                
                 if (args.SocketError != SocketError.Success)
                 {
                     throw new SocketException((int)args.SocketError);
