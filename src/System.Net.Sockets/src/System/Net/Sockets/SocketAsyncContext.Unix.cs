@@ -629,6 +629,7 @@ namespace System.Net.Sockets
                 {
                     isStopped = false;
                     queue.State = QueueState.Clear;
+                    observedSequenceNumber = queue.SequenceNumber;
                     return false;
                 }
             }
@@ -952,7 +953,7 @@ namespace System.Net.Sockets
                 };
 
                 bool isStopped;
-                while (!TryBeginOperation(ref _receiveQueue, operation, Interop.Sys.SocketEvents.Read, maintainOrder: true, isStopped: out isStopped))
+                while (!TryBeginOperation2(ref _receiveQueue, operation, Interop.Sys.SocketEvents.Read, true, ref observedSequenceNumber, isStopped: out isStopped))
                 {
                     if (isStopped)
                     {
