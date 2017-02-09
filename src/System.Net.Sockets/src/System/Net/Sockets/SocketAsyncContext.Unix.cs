@@ -572,23 +572,21 @@ namespace System.Net.Sockets
             // Exactly one of the two queue locks must be held by the caller
             Debug.Assert(Monitor.IsEntered(_sendQueue.QueueLock) ^ Monitor.IsEntered(_receiveQueue.QueueLock));
 
-            switch (queue.State)
+            if (queue.IsStopped)
             {
-                case QueueState.Stopped:
-                    isStopped = true;
+                isStopped = true;
+                return false;
+            }
+
+            if (queue.State == QueueState.Set)
+            {
+//                if (queue.IsEmpty || !maintainOrder)
+                if (queue.IsEmpty)
+                {
+                    isStopped = false;
+                    queue.State = QueueState.Clear;
                     return false;
-
-                case QueueState.Clear:
-                    break;
-
-                case QueueState.Set:
-                    if (queue.IsEmpty || !maintainOrder)
-                    {
-                        isStopped = false;
-                        queue.State = QueueState.Clear;
-                        return false;
-                    }
-                    break;
+                }
             }
 
             if ((_registeredEvents & events) == Interop.Sys.SocketEvents.None)
