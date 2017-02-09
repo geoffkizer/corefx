@@ -945,7 +945,7 @@ namespace System.Net.Sockets
                     return errorCode;
                 }
 
-                printf("%s\n", "TryReceiveCompleteFrom on calling thread failed, OSN = {observedSequenceNumber}");
+                printf("%s\n", $"TryReceiveCompleteFrom on calling thread failed, OSN = {observedSequenceNumber}");
 
                 var operation = new ReceiveOperation
                 {
@@ -961,7 +961,7 @@ namespace System.Net.Sockets
                 bool isStopped;
                 while (!TryBeginOperation2(ref _receiveQueue, operation, Interop.Sys.SocketEvents.Read, true, ref observedSequenceNumber, isStopped: out isStopped))
                 {
-                    printf("%s\n", "TryBeginOperation2 on calling thread failed, OSN = {observedSequenceNumber}");
+                    printf("%s\n", $"TryBeginOperation2 on calling thread failed, OSN = {observedSequenceNumber}");
 
                     if (isStopped)
                     {
@@ -979,7 +979,7 @@ namespace System.Net.Sockets
                     }
                 }
 
-                printf("%s\n", "TryBeginOperation2 on calling thread succeeded, OSN = {observedSequenceNumber}");
+                printf("%s\n", $"TryBeginOperation2 on calling thread succeeded, OSN = {observedSequenceNumber}");
 
                 bytesReceived = 0;
                 receivedFlags = SocketFlags.None;
