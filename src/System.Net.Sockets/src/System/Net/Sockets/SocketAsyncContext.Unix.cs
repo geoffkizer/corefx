@@ -382,6 +382,16 @@ namespace System.Net.Sockets
                 return IsEmpty;
             }
 
+            // TODO: Understand if/how to add the maintainOrder == false behavior here
+            public bool CanTryOperation2(out int observedSequenceNumber)
+            {
+                lock (_queueLock)
+                {
+                    observedSequenceNumber = _sequenceNumber;
+                    return IsEmpty;
+                }
+            }
+
             public void Enqueue(TOperation operation)
             {
                 Debug.Assert(!IsStopped, "Expected !IsStopped");
@@ -614,34 +624,39 @@ namespace System.Net.Sockets
             where TOperation : AsyncOperation
         {
             // Exactly one of the two queue locks must be held by the caller
-            Debug.Assert(Monitor.IsEntered(_sendQueue.QueueLock) ^ Monitor.IsEntered(_receiveQueue.QueueLock));
+//            Debug.Assert(Monitor.IsEntered(_sendQueue.QueueLock) ^ Monitor.IsEntered(_receiveQueue.QueueLock));
 
-            if (queue.IsStopped)
+            // TODO: review what's under this lock
+            lock (queue.QueueLock)
             {
-                isStopped = true;
-                return false;
-            }
-
-            if (observedSequenceNumber != queue.SequenceNumber)
-            {
-//                if (queue.IsEmpty || !maintainOrder)
-                if (queue.IsEmpty)
+                if (queue.IsStopped)
                 {
-                    isStopped = false;
-                    queue.State = QueueState.Clear;
-                    observedSequenceNumber = queue.SequenceNumber;
+                    isStopped = true;
                     return false;
                 }
-            }
 
-            if ((_registeredEvents & events) == Interop.Sys.SocketEvents.None)
-            {
-                Register(events);
-            }
+                if (observedSequenceNumber != queue.SequenceNumber)
+                {
+    //                if (queue.IsEmpty || !maintainOrder)
+                    if (queue.IsEmpty)
+                    {
+                        isStopped = false;
+                        queue.State = QueueState.Clear;
+                        observedSequenceNumber = queue.SequenceNumber;
+                        return false;
+                    }
+                }
 
-            queue.Enqueue(operation);
-            isStopped = false;
-            return true;
+                // TODO: This shouldn't be under the lock
+                if ((_registeredEvents & events) == Interop.Sys.SocketEvents.None)
+                {
+                    Register(events);
+                }
+
+                queue.Enqueue(operation);
+                isStopped = false;
+                return true;
+            }
         }
 
         public SocketError Accept(byte[] socketAddress, ref int socketAddressLen, int timeout, out IntPtr acceptedFd)
@@ -928,7 +943,7 @@ namespace System.Net.Sockets
         {
             SetNonBlocking();
 
-            lock (_receiveQueue.QueueLock)
+//            lock (_receiveQueue.QueueLock)
             {
                 SocketError errorCode;
 
@@ -1254,8 +1269,7 @@ namespace System.Net.Sockets
                     bytesSent = 0;
                     SocketError errorCode;
 
-                    int observedSequenceNumber;
-                    if (_sendQueue.CanTryOperation(out observedSequenceNumber) &&
+                    if (_sendQueue.IsEmpty &&
                         SocketPal.TryCompleteSendTo(_socket, buffer, ref offset, ref count, flags, socketAddress, socketAddressLen, ref bytesSent, out errorCode))
                     {
                         return errorCode;
@@ -1276,7 +1290,7 @@ namespace System.Net.Sockets
                     };
 
                     bool isStopped;
-                    while (!TryBeginOperation2(ref _sendQueue, operation, Interop.Sys.SocketEvents.Write, true, ref observedSequenceNumber, isStopped: out isStopped))
+                    while (!TryBeginOperation(ref _sendQueue, operation, Interop.Sys.SocketEvents.Write, true, isStopped: out isStopped))
                     {
                         if (isStopped)
                         {
@@ -1306,7 +1320,7 @@ namespace System.Net.Sockets
         {
             SetNonBlocking();
 
-            lock (_sendQueue.QueueLock)
+//            lock (_sendQueue.QueueLock)
             {
                 bytesSent = 0;
                 SocketError errorCode;
