@@ -924,6 +924,8 @@ namespace System.Net.Sockets
             }
         }
 
+        [DllImport("libc")] private static extern int printf(string format, string arg);
+
         public SocketError ReceiveFromAsync(byte[] buffer, int offset, int count, SocketFlags flags, byte[] socketAddress, ref int socketAddressLen, out int bytesReceived, out SocketFlags receivedFlags, Action<int, byte[], int, SocketFlags, SocketError> callback)
         {
             SetNonBlocking();
@@ -937,9 +939,13 @@ namespace System.Net.Sockets
                 if (_receiveQueue.CanTryOperation(out observedSequenceNumber) &&
                     SocketPal.TryCompleteReceiveFrom(_socket, buffer, offset, count, flags, socketAddress, ref socketAddressLen, out bytesReceived, out receivedFlags, out errorCode))
                 {
+                    printf("%s\n", "TryReceiveCompleteFrom on calling thread succeeded");
+
                     // Synchronous success or failure
                     return errorCode;
                 }
+
+                printf("%s\n", "TryReceiveCompleteFrom on calling thread failed, OSN = {observedSequenceNumber}");
 
                 var operation = new ReceiveOperation
                 {
@@ -955,6 +961,8 @@ namespace System.Net.Sockets
                 bool isStopped;
                 while (!TryBeginOperation2(ref _receiveQueue, operation, Interop.Sys.SocketEvents.Read, true, ref observedSequenceNumber, isStopped: out isStopped))
                 {
+                    printf("%s\n", "TryBeginOperation2 on calling thread failed, OSN = {observedSequenceNumber}");
+
                     if (isStopped)
                     {
                         bytesReceived = 0;
@@ -970,6 +978,8 @@ namespace System.Net.Sockets
                         return operation.ErrorCode;
                     }
                 }
+
+                printf("%s\n", "TryBeginOperation2 on calling thread succeeded, OSN = {observedSequenceNumber}");
 
                 bytesReceived = 0;
                 receivedFlags = SocketFlags.None;
