@@ -359,11 +359,13 @@ namespace System.Net.Sockets
         {
             private object _queueLock;
             private AsyncOperation _tail;
+            private int _sequenceNumber;
 
             public QueueState State { get; set; }
             public bool IsStopped { get { return State == QueueState.Stopped; } }
             public bool IsEmpty { get { return _tail == null; } }
             public object QueueLock { get { return _queueLock; } }
+            public int SequenceNumber { get { return _sequenceNumber; } }
 
             public void Init()
             {
@@ -433,7 +435,8 @@ namespace System.Net.Sockets
                 {
                     if (IsStopped)
                         return;
-
+                    
+                    _sequenceNumber++;
                     State = QueueState.Set;
 
                     TOperation op;
