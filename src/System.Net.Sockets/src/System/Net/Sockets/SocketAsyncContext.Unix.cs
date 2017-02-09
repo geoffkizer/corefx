@@ -637,6 +637,7 @@ namespace System.Net.Sockets
 
                 if (observedSequenceNumber != queue.SequenceNumber)
                 {
+                    // TODO: Revert this change?  
     //                if (queue.IsEmpty || !maintainOrder)
                     if (queue.IsEmpty)
                     {
