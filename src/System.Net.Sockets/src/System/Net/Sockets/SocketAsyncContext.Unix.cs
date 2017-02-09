@@ -374,6 +374,14 @@ namespace System.Net.Sockets
                 _queueLock = new object();
             }
 
+            public bool CanTryOperation(out int observedSequenceNumber)
+            {
+                // Assume lock is held (should assert this)
+
+                observedSequenceNumber = _sequenceNumber;
+                return IsEmpty;
+            }
+
             public void Enqueue(TOperation operation)
             {
                 Debug.Assert(!IsStopped, "Expected !IsStopped");
@@ -582,6 +590,39 @@ namespace System.Net.Sockets
             }
 
             if (queue.State == QueueState.Set)
+            {
+//                if (queue.IsEmpty || !maintainOrder)
+                if (queue.IsEmpty)
+                {
+                    isStopped = false;
+                    queue.State = QueueState.Clear;
+                    return false;
+                }
+            }
+
+            if ((_registeredEvents & events) == Interop.Sys.SocketEvents.None)
+            {
+                Register(events);
+            }
+
+            queue.Enqueue(operation);
+            isStopped = false;
+            return true;
+        }
+
+        private bool TryBeginOperation2<TOperation>(ref OperationQueue<TOperation> queue, TOperation operation, Interop.Sys.SocketEvents events, bool maintainOrder, ref int observedSequenceNumber, out bool isStopped)
+            where TOperation : AsyncOperation
+        {
+            // Exactly one of the two queue locks must be held by the caller
+            Debug.Assert(Monitor.IsEntered(_sendQueue.QueueLock) ^ Monitor.IsEntered(_receiveQueue.QueueLock));
+
+            if (queue.IsStopped)
+            {
+                isStopped = true;
+                return false;
+            }
+
+            if (observedSequenceNumber != queue.SequenceNumber)
             {
 //                if (queue.IsEmpty || !maintainOrder)
                 if (queue.IsEmpty)
@@ -890,7 +931,9 @@ namespace System.Net.Sockets
             {
                 SocketError errorCode;
 
-                if (_receiveQueue.IsEmpty &&
+                int observedSequenceNumber;
+//                if (_receiveQueue.IsEmpty &&
+                if (_receiveQueue.CanTryOperation(out observedSequenceNumber) &&
                     SocketPal.TryCompleteReceiveFrom(_socket, buffer, offset, count, flags, socketAddress, ref socketAddressLen, out bytesReceived, out receivedFlags, out errorCode))
                 {
                     // Synchronous success or failure
