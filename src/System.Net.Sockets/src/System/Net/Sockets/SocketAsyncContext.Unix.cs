@@ -534,6 +534,8 @@ namespace System.Net.Sockets
             }
 #endif
 
+#if false // temporary
+            // This is the version of HandleEvent with fine locking
             public void HandleEvent(SocketAsyncContext context)
             {
                 AsyncOperation op; 
@@ -623,7 +625,92 @@ namespace System.Net.Sockets
                     }
                 }
             }
+#endif
 
+            public void HandleEvent(SocketAsyncContext context)
+            {
+                AsyncOperation op; 
+                lock (_queueLock)
+                {
+                    if (_queueState == QueueState.Stopped)
+                    {
+                        Debug.Assert(_tail == null);
+                        return;
+                    }
+
+                    if (_queueState == QueueState.Empty)
+                    {
+                        Debug.Assert(_tail == null);
+                        _sequenceNumber++;
+                        return;
+                    }
+                    
+                    // Shouldn't be processing at this point
+                    Debug.Assert(_queueState == QueueState.Pending);
+
+                    _queueState = QueueState.Processing;
+                    
+                    // Retrieve head of queue (in _tail.Next) for processing.                    
+                    // Head is tail.Next.
+                    op = _tail.Next;
+
+                    while (true)
+                    {
+                        if (!op.TryCompleteAsync(context))
+                        {
+                            // Operation returned EWOULDBLOCK.
+                            // We can't process any more operations.
+                        
+                            if (_queueState == QueueState.Stopped)
+                            {
+                                // Queue has been stopped.  Exit lock and abort below.
+                                Debug.Assert(_tail == null);
+                            }
+                            else
+                            {
+                                // Queue is still running.  Wait for the next epoll notification.
+                                Debug.Assert(op == _tail.Next);
+                                Debug.Assert(_queueState == QueueState.Processing);
+                                
+                                _queueState = QueueState.Pending;
+                                return;
+                            }
+                        
+                            // Queue is stopped.  Abort this op.
+                            op.AbortAsync();
+                            return;
+                        }
+
+                        // Operation was successfully completed.
+                        // Remove it from the queue and see if there are any more entries to process.
+                        if (_queueState == QueueState.Stopped)
+                        {
+                            Debug.Assert(_tail == null);
+                            return;
+                        }
+                        
+                        // Head should not have changed.
+                        Debug.Assert(_queueState == QueueState.Processing);
+                        Debug.Assert(_tail != null);
+                        Debug.Assert(_tail.Next != null);
+                        Debug.Assert(op == _tail.Next);
+
+                        if (op == _tail)
+                        {
+                            // List had only one element in it, now it's empty
+                            _tail = null;
+                            _queueState = QueueState.Empty;
+                            _sequenceNumber++;
+                            return;
+                        }
+
+                        // Remove the operation we just completed
+                        op = op.Next;
+                        _tail.Next = op;
+                    }
+                }
+            }
+            
             public void StopAndAbort()
             {
                 AsyncOperation head;
