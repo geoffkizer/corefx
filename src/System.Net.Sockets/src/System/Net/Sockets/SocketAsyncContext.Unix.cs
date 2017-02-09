@@ -1311,7 +1311,8 @@ namespace System.Net.Sockets
                 bytesSent = 0;
                 SocketError errorCode;
 
-                if (_sendQueue.IsEmpty &&
+                int observedSequenceNumber;
+                if (_sendQueue.CanTryOperation(out observedSequenceNumber) &&
                     SocketPal.TryCompleteSendTo(_socket, buffer, ref offset, ref count, flags, socketAddress, socketAddressLen, ref bytesSent, out errorCode))
                 {
                     // Synchronous success or failure
@@ -1331,7 +1332,7 @@ namespace System.Net.Sockets
                 };
 
                 bool isStopped;
-                while (!TryBeginOperation(ref _sendQueue, operation, Interop.Sys.SocketEvents.Write, maintainOrder: true, isStopped: out isStopped))
+                while (!TryBeginOperation2(ref _sendQueue, operation, Interop.Sys.SocketEvents.Write, true, ref observedSequenceNumber, isStopped: out isStopped))
                 {
                     if (isStopped)
                     {
