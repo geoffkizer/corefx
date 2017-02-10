@@ -629,9 +629,10 @@ namespace System.Net.Sockets
 
             public void HandleEvent(SocketAsyncContext context)
             {
-                AsyncOperation op; 
                 lock (_queueLock)
                 {
+                    _sequenceNumber++;
+
                     if (_queueState == QueueState.Stopped)
                     {
                         Debug.Assert(_tail == null);
@@ -641,15 +642,54 @@ namespace System.Net.Sockets
                     if (_queueState == QueueState.Empty)
                     {
                         Debug.Assert(_tail == null);
-                        _sequenceNumber++;
                         return;
                     }
+
+                    if (_queueState == QueueState.Processing)
+                    {
+                        // Already processing.  Don't send off another thread.
+                        return;
+                    }                    
                     
                     // Shouldn't be processing at this point
                     Debug.Assert(_queueState == QueueState.Pending);
 
                     _queueState = QueueState.Processing;
-                    
+                }
+
+                ThreadPool.QueueUserWorkItem(ProcessQueueCallback, context);
+            }
+
+            private static void ProcessQueueCallback(object o)
+            {
+                SocketAsyncContext context = (SocketAsyncContext)o;
+
+                Debug.Assert(typeof(TOperation) == typeof(ReadOperation) || typeof(TOperation) == typeof(WriteOperation));
+
+                if (typeof(TOperation) == typeof(ReadOperation))
+                {
+                    context._receiveQueue.ProcessQueue(context);
+                }
+                else
+                {
+                    context._sendQueue.ProcessQueue(context);
+                }
+
+            }
+            public void ProcessQueue(SocketAsyncContext context)
+            {
+                AsyncOperation op; 
+                lock (_queueLock)
+                {
+                    if (_queueState == QueueState.Stopped)
+                    {
+                        Debug.Assert(_tail == null);
+                        return;
+                    }
+
+                    // We should be in processing state, unless we stopped
+                    Debug.Assert(_queueState == QueueState.Processing);
+
                     // Retrieve head of queue (in _tail.Next) for processing.                    
                     // Head is tail.Next.
                     op = _tail.Next;
@@ -700,7 +740,7 @@ namespace System.Net.Sockets
                             // List had only one element in it, now it's empty
                             _tail = null;
                             _queueState = QueueState.Empty;
-                            _sequenceNumber++;
+//                            _sequenceNumber++;
                             return;
                         }
 
