@@ -95,6 +95,9 @@ namespace System.Net.Sockets
                     // correctly updating any state that would have been handled by
                     // AsyncOperation.Abort.
                     return true;
+
+                    // TODO: This isn't correct; we don't want to return true here because it will 
+                    // cause us to invoke the completion.  Figure this out later.
                 }
 
                 Debug.Assert(oldState != State.Complete && oldState != State.Running, $"Unexpected oldState: {oldState}");
@@ -113,6 +116,8 @@ namespace System.Net.Sockets
 
                 if (completed)
                 {
+#if false
+                    // Don't do this here anymore.  Defer it to ProcessEvents.
                     var @event = CallbackOrEvent as ManualResetEventSlim;
                     if (@event != null)
                     {
@@ -127,6 +132,7 @@ namespace System.Net.Sockets
 
                         ThreadPool.QueueUserWorkItem(o => ((AsyncOperation)o).InvokeCallback(), this);
                     }
+#endif
 
                     Volatile.Write(ref _state, (int)State.Complete);
                     return true;
@@ -134,6 +140,24 @@ namespace System.Net.Sockets
 
                 Volatile.Write(ref _state, (int)State.Waiting);
                 return false;
+            }
+
+            public void HandleCompletion()
+            {
+                var @event = CallbackOrEvent as ManualResetEventSlim;
+                if (@event != null)
+                {
+                    @event.Set();
+                }
+                else
+                {
+                    Debug.Assert(_state != (int)State.Cancelled, $"Unexpected _state: {_state}");
+#if DEBUG
+                    Debug.Assert(Interlocked.CompareExchange(ref _callbackQueued, 1, 0) == 0, $"Unexpected _callbackQueued: {_callbackQueued}");
+#endif
+
+                    InvokeCallback();
+                }
             }
 
             public bool Wait(int timeout)
@@ -559,7 +583,7 @@ namespace System.Net.Sockets
                     op = _tail.Next;
                 }
 
-                while (true)
+//                while (true)
                 {
                     if (!op.TryCompleteAsync(context))
                     {
@@ -591,33 +615,49 @@ namespace System.Net.Sockets
 
                     // Operation was successfully completed.
                     // Remove it from the queue and see if there are any more entries to process.
+                    bool shouldContinue = false;
                     lock (_queueLock)
                     {
                         if (_queueState == QueueState.Stopped)
                         {
                             Debug.Assert(_tail == null);
-                            return;
                         }
-                        
-                        // Head should not have changed.
-                        Debug.Assert(_queueState == QueueState.Processing);
-                        Debug.Assert(_tail != null);
-                        Debug.Assert(_tail.Next != null);
-                        Debug.Assert(op == _tail.Next);
-
-                        if (op == _tail)
+                        else
                         {
-                            // List had only one element in it, now it's empty
-                            _tail = null;
-                            _queueState = QueueState.Empty;
-//                            _sequenceNumber++;
-                            return;
-                        }
+                        
+                            // Head should not have changed.
+                            Debug.Assert(_queueState == QueueState.Processing);
+                            Debug.Assert(_tail != null);
+                            Debug.Assert(_tail.Next != null);
+                            Debug.Assert(op == _tail.Next);
 
-                        // Remove the operation we just completed
-                        op = op.Next;
-                        _tail.Next = op;
+                            if (op == _tail)
+                            {
+                                // List had only one element in it, now it's empty
+                                _tail = null;
+                                _queueState = QueueState.Empty;
+    //                            _sequenceNumber++;
+//                                return;
+                            }
+                            else
+                            {
+                                // Remove the operation we just completed
+                                op = op.Next;
+                                _tail.Next = op;
+                                shouldContinue = true;
+                            }
+                        }
+                            
                     }
+
+                    // If there's more to process, queue another worker
+                    if (shouldContinue)
+                    {
+                        ThreadPool.QueueUserWorkItem(ProcessQueueCallback, context);
+                    }
+ 
+                    // Invoke op callback
+                    op.HandleCompletion();
                 }
             }
 #endif
@@ -750,7 +790,7 @@ namespace System.Net.Sockets
 #endif
 
             // TODO: Not sure this logic is right anymore; revisit
-            
+
             public void StopAndAbort()
             {
                 AsyncOperation head;
