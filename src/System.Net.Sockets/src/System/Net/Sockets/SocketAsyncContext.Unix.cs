@@ -642,8 +642,7 @@ namespace System.Net.Sockets
                             else
                             {
                                 // Remove the operation we just completed
-                                op = op.Next;
-                                _tail.Next = op;
+                                _tail.Next = op.Next;
                                 shouldContinue = true;
                             }
                         }
