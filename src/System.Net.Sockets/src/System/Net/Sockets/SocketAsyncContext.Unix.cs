@@ -534,9 +534,13 @@ namespace System.Net.Sockets
             }
 #endif
 
-#if false // temporary
+            // TODO: Delete old queue access routines above
+            // TODO: Refactor some of this shit so that the locking is
+            // clearer; e.g. make separate functions for the locking.
+
+#if true 
             // This is the version of HandleEvent with fine locking
-            public void HandleEvent(SocketAsyncContext context)
+            public void ProcessQueue(SocketAsyncContext context)
             {
                 AsyncOperation op; 
                 lock (_queueLock)
@@ -547,18 +551,9 @@ namespace System.Net.Sockets
                         return;
                     }
 
-                    if (_queueState == QueueState.Empty)
-                    {
-                        Debug.Assert(_tail == null);
-                        _sequenceNumber++;
-                        return;
-                    }
-                    
-                    // Shouldn't be processing at this point
-                    Debug.Assert(_queueState == QueueState.Pending);
+                    // We should be in processing state, unless we stopped
+                    Debug.Assert(_queueState == QueueState.Processing);
 
-                    _queueState = QueueState.Processing;
-                    
                     // Retrieve head of queue (in _tail.Next) for processing.                    
                     // Head is tail.Next.
                     op = _tail.Next;
@@ -615,7 +610,7 @@ namespace System.Net.Sockets
                             // List had only one element in it, now it's empty
                             _tail = null;
                             _queueState = QueueState.Empty;
-                            _sequenceNumber++;
+//                            _sequenceNumber++;
                             return;
                         }
 
@@ -650,7 +645,7 @@ namespace System.Net.Sockets
                         // Already processing.  Don't send off another thread.
                         return;
                     }                    
-                    
+
                     // Shouldn't be processing at this point
                     Debug.Assert(_queueState == QueueState.Pending);
 
@@ -676,6 +671,8 @@ namespace System.Net.Sockets
                 }
 
             }
+
+#if false
             public void ProcessQueue(SocketAsyncContext context)
             {
                 AsyncOperation op; 
@@ -750,6 +747,9 @@ namespace System.Net.Sockets
                     }
                 }
             }
+#endif
+
+            // TODO: Not sure this logic is right anymore; revisit
             
             public void StopAndAbort()
             {
