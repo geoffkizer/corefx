@@ -39,6 +39,7 @@
     <Compile Include="System\Net\Http\DelegatingHandler.cs" />
     <Compile Include="System\Net\Http\FormUrlEncodedContent.cs" />
     <Compile Include="System\Net\Http\HttpClient.cs" />
+    <Compile Include="System\Net\Http\HttpClientHandler.Managed.cs" />
     <Compile Include="System\Net\Http\HttpCompletionOption.cs" />
     <Compile Include="System\Net\Http\HttpContent.cs" />
     <Compile Include="System\Net\Http\HttpMessageHandler.cs" />
@@ -50,6 +51,7 @@
     <Compile Include="System\Net\Http\HttpResponseMessage.cs" />
     <Compile Include="System\Net\Http\HttpRuleParser.cs" />
     <Compile Include="System\Net\Http\HttpUtilities.cs" />
+    <Compile Include="System\Net\Http\ManagedHttpClientHandler.cs" />
     <Compile Include="System\Net\Http\MessageProcessingHandler.cs" />
     <Compile Include="System\Net\Http\MultipartContent.cs" />
     <Compile Include="System\Net\Http\MultipartFormDataContent.cs" />
@@ -116,8 +118,8 @@
   </ItemGroup>
   <!-- Common, except for Windows net46 build -->
   <ItemGroup Condition="'$(TargetGroup)' != 'net46'  And '$(TargetGroup)' != 'netfx'">
-    <Compile Include="System\Net\Http\DiagnosticsHandler.cs" />    
-    <Compile Include="System\Net\Http\DiagnosticsHandlerLoggingStrings.cs"/>    
+    <Compile Include="System\Net\Http\DiagnosticsHandler.cs" />
+    <Compile Include="System\Net\Http\DiagnosticsHandlerLoggingStrings.cs" />
     <Compile Include="$(CommonPath)\System\Net\Mail\DomainLiteralReader.cs">
       <Link>Common\System\Net\Mail\DomainLiteralReader.cs</Link>
     </Compile>
@@ -372,7 +374,9 @@
     <Reference Include="Microsoft.Win32.Primitives" />
     <Reference Include="System.Buffers" />
     <Reference Include="System.Collections" />
+    <Reference Include="System.Collections.Concurrent" />
     <Reference Include="System.Collections.NonGeneric" />
+    <Reference Include="System.Console" />
     <Reference Include="System.Diagnostics.Contracts" />
     <Reference Include="System.Diagnostics.Debug" />
     <Reference Include="System.Diagnostics.DiagnosticSource" />
@@ -380,14 +384,19 @@
     <Reference Include="System.Diagnostics.Tracing" />
     <Reference Include="System.IO.Compression" />
     <Reference Include="System.Net.Primitives" />
+    <Reference Include="System.Net.Security" />
+    <Reference Include="System.Net.Sockets" />
     <Reference Include="System.Resources.ResourceManager" />
     <Reference Include="System.Runtime" />
     <Reference Include="System.Runtime.Extensions" />
     <Reference Include="System.Runtime.InteropServices" />
     <Reference Include="System.Security.Cryptography.OpenSsl" />
     <Reference Include="System.Security.Cryptography.X509Certificates" />
+    <Reference Include="System.Text.Encoding" />
+    <Reference Include="System.Text.Encoding.Extensions" />
     <Reference Include="System.Threading" />
     <Reference Include="System.Threading.Tasks" />
+    <Reference Include="System.Threading.Tasks.Extensions" />
   </ItemGroup>
   <ItemGroup Condition="'$(TargetsUnix)' == 'true'">
     <Reference Include="System.Security.Cryptography.Algorithms" />

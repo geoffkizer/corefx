@@ -11,13 +11,14 @@ using System.Security.Cryptography.X509Certificates;
 using System.Threading;
 using System.Threading.Tasks;
 
+#if false
 namespace System.Net.Http
 {
     // This implementation uses the System.Net.Http.WinHttpHandler class on Windows.  Other platforms will need to use
     // their own platform specific implementation.
     public class HttpClientHandler : HttpMessageHandler
     {
-        #region Properties
+#region Properties
 
         public virtual bool SupportsAutomaticDecompression
         {
@@ -187,9 +188,9 @@ namespace System.Net.Http
             get { return _winHttpHandler.Properties; }
         }
 
-        #endregion Properties
+#endregion Properties
 
-        #region De/Constructors
+#region De/Constructors
 
         public HttpClientHandler()
         {
@@ -230,9 +231,9 @@ namespace System.Net.Http
             base.Dispose(disposing);
         }
 
-        #endregion De/Constructors
+#endregion De/Constructors
 
-        #region Request Execution
+#region Request Execution
 
         protected internal override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request,
             CancellationToken cancellationToken)
@@ -273,15 +274,16 @@ namespace System.Net.Http
             return _winHttpHandler.SendAsync(request, cancellationToken);
         }
 
-        #endregion Request Execution
+#endregion Request Execution
 
-        #region Private
+#region Private
 
         private WinHttpHandler _winHttpHandler;
         private readonly DiagnosticsHandler _diagnosticsPipeline;
         private bool _useProxy;
         private volatile bool _disposed;
-        #endregion Private
+#endregion Private
 
     }
 }
+#endif
