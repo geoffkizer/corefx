@@ -1238,6 +1238,16 @@ namespace System.Net.Http
 
             HttpConnection connection = await GetOrCreateConnection(request, proxyUri, cancellationToken);
 
+            // Add cookies
+            if (_cookieContainer != null)
+            {
+                string cookieHeader = _cookieContainer.GetCookieHeader(request.RequestUri);
+                if (cookieHeader != null)
+                {
+                    request.Headers.Add("Cookie", cookieHeader);
+                }
+            }
+
             HttpResponseMessage response = await connection.SendAsync(request, cancellationToken);
 
             return response;
@@ -1466,7 +1476,7 @@ namespace System.Net.Http
             {
                 foreach (string setCookie in setCookies)
                 {
-                    Console.WriteLine($"Set-Cookie: {setCookie}");
+                    Trace($"Set-Cookie: {setCookie}");
 
                     CookieContainer.SetCookies(request.RequestUri, setCookie);
                 }
