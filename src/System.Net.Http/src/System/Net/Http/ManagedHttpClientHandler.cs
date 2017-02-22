@@ -38,7 +38,7 @@ namespace System.Net.Http
         private X509CertificateCollection _clientCertificates;
         private Func<HttpRequestMessage, X509Certificate2, X509Chain, SslPolicyErrors, bool> _serverCertificateCustomValidationCallback;
         private bool _checkCertificateRevocationList;
-        private SslProtocols _sslProtocols;
+        private SslProtocols _sslProtocols;         // TODO: Default?
         private IDictionary<String, object> _properties;
 
         private ConcurrentDictionary<string, HttpConnection> _connectionPool = new ConcurrentDictionary<string, HttpConnection>();
@@ -215,7 +215,17 @@ namespace System.Net.Http
         public SslProtocols SslProtocols
         {
             get { return _sslProtocols; }
-            set { _sslProtocols = value; }
+            set
+            {
+#pragma warning disable 0618 // obsolete warning
+                if ((value & (SslProtocols.Ssl2 | SslProtocols.Ssl3)) != 0)
+                {
+                    throw new NotSupportedException("unsupported SSL protocols");
+                }
+#pragma warning restore 0618
+
+                _sslProtocols = value;
+            }
         }
 
         public IDictionary<String, object> Properties
@@ -1084,8 +1094,28 @@ namespace System.Net.Http
             return uri.Scheme + ":" + uri.Host + ":" + uri.Port;
         }
 
-        private async Task<HttpConnection> GetOrCreateConnection(Uri uri, CancellationToken cancellationToken)
+        // Callback used by SslStream
+        public bool OnRemoteCertificateValidation(object sender, X509Certificate certificate, X509Chain chain, SslPolicyErrors sslPolicyErrors)
         {
+            if (_serverCertificateCustomValidationCallback != null)
+            {
+                // TODO: What HttpRequestMessage are we supposed to pass here?
+                // I suppose it's the one initiating this connection, so we have to mangle that through somehow.
+
+                // TODO: Not sure this is correct...
+                var cert2 = certificate as X509Certificate2;
+
+                // TODO: Diff b/w X509Certificate and X509Certificate2?
+                return _serverCertificateCustomValidationCallback(null, cert2, chain, sslPolicyErrors);
+            }
+
+            return true;
+        }
+
+        private async Task<HttpConnection> GetOrCreateConnection(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            Uri uri = request.RequestUri;
+
             bool isProxy = false;
             if (_useProxy && _proxy != null && !_proxy.IsBypassed(uri))
             {
@@ -1107,33 +1137,64 @@ namespace System.Net.Http
             // Connect
             TcpClient client;
 
-            // You would think TcpClient.Connect would just do this, but apparently not.
-            // It works for IPv4 addresses but seems to barf on IPv6.
-            // I need to explicitly invoke the constructor with AddressFamily = IPv6.
-            // Probably worth further investigation....
-            IPAddress ipAddress;
-            if (IPAddress.TryParse(uri.Host, out ipAddress))
+            try
             {
-                client = new TcpClient(ipAddress.AddressFamily);
-                await client.ConnectAsync(ipAddress, uri.Port);
+                // You would think TcpClient.Connect would just do this, but apparently not.
+                // It works for IPv4 addresses but seems to barf on IPv6.
+                // I need to explicitly invoke the constructor with AddressFamily = IPv6.
+                // Probably worth further investigation....
+                IPAddress ipAddress;
+                if (IPAddress.TryParse(uri.Host, out ipAddress))
+                {
+                    client = new TcpClient(ipAddress.AddressFamily);
+                    await client.ConnectAsync(ipAddress, uri.Port);
+                }
+                else
+                {
+                    client = new TcpClient();
+                    await client.ConnectAsync(uri.Host, uri.Port);
+                }
+
             }
-            else
+            catch (SocketException se)
             {
-                client = new TcpClient();
-                await client.ConnectAsync(uri.Host, uri.Port);
+                throw new HttpRequestException("could not connect", se);
             }
 
             client.NoDelay = true;
 
             Stream stream = client.GetStream();
+
             if (uri.Scheme == "https")
             {
-                // TODO: Policy here?
-                SslStream sslStream = new SslStream(stream, false);
+                if (isProxy)
+                    throw new NotImplementedException("no SSL proxy support");
 
-                await sslStream.AuthenticateAsClientAsync(uri.Host);
+                try
+                {
+                    RemoteCertificateValidationCallback callback = null;
+                    if (_serverCertificateCustomValidationCallback != null)
+                    {
+                        callback = (object sender, X509Certificate certificate, X509Chain chain, SslPolicyErrors sslPolicyErrors) =>
+                        {
+                            // TODO: Not sure this is correct...
+                            var cert2 = certificate as X509Certificate2;
 
-                stream = sslStream;
+                            return _serverCertificateCustomValidationCallback(request, cert2, chain, sslPolicyErrors);
+                        };
+                    }
+
+                    SslStream sslStream = new SslStream(stream, false, callback);
+
+                    // TODO: How is check for revocation controlled?
+                    await sslStream.AuthenticateAsClientAsync(uri.Host, null, _sslProtocols, true);
+
+                    stream = sslStream;
+                }
+                catch (AuthenticationException ae)
+                {
+                    throw new HttpRequestException("could not establish SSL connection", ae);
+                }
             }
 
             return new HttpConnection(this, key, client, stream, isProxy);
@@ -1156,9 +1217,7 @@ namespace System.Net.Http
                 throw new PlatformNotSupportedException($"Only HTTP 1.1 supported -- request.Version was {request.Version}");
             }
 
-            Uri uri = request.RequestUri;
-
-            HttpConnection connection = await GetOrCreateConnection(uri, cancellationToken);
+            HttpConnection connection = await GetOrCreateConnection(request, cancellationToken);
 
             HttpResponseMessage response = await connection.SendAsync(request, cancellationToken);
 
