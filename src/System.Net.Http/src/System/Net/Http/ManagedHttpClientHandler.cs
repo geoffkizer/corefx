@@ -778,12 +778,18 @@ namespace System.Net.Http
 
                     string headerValue = sb.ToString();
 
+                    // TryAddWithoutValidation will fail if the header name has trailing whitespace.
+                    // So, trim it here.
+                    // TODO: Not clear to me from the RFC that this is really correct; RFC seems to indicate this should be an error.
+                    headerName = headerName.TrimEnd();
+
                     // Add header to appropriate collection
                     // Don't ask me why this is the right API to call, but apparently it is
                     if (!response.Headers.TryAddWithoutValidation(headerName, headerValue))
                     {
                         if (!responseContent.Headers.TryAddWithoutValidation(headerName, headerValue))
                         {
+                            // TODO: Not sure why this would happen.  Invalid chars in header name?
                             throw new Exception($"could not add response header, {headerName}: {headerValue}");
                         }
                     }
@@ -1402,6 +1408,7 @@ namespace System.Net.Http
             _inUse = true;
 
             int redirectCount = 0;
+            HttpResponseMessage response;
             while (true)
             {
                 // Determine if we should use a proxy
@@ -1426,7 +1433,7 @@ namespace System.Net.Http
                     TrySetBasicAuthToken(request);
                 }
 
-                HttpResponseMessage response = await SendAsync2(request, proxyUri, cancellationToken);
+                response = await SendAsync2(request, proxyUri, cancellationToken);
 
                 // Handle proxy authentication
                 if (response.StatusCode == HttpStatusCode.ProxyAuthenticationRequired &&
@@ -1444,17 +1451,28 @@ namespace System.Net.Http
                 }
 
                 // Handle redirect
-                bool needRedirect = false;
-                if (_allowAutoRedirect)
+                if (!_allowAutoRedirect ||
+                    !CheckForRedirect(request, response, ref redirectCount))
                 {
-                    needRedirect = CheckForRedirect(request, response, ref redirectCount);
-                }
-
-                if (!needRedirect)
-                {
-                    return response;
+                    // No redirect
+                    break;
                 }
             }
+
+            // Handle Set-Cookie
+            // No typed property for this, apparently?
+            IEnumerable<string> setCookies;
+            if (response.Headers.TryGetValues("Set-Cookie", out setCookies))
+            {
+                foreach (string setCookie in setCookies)
+                {
+                    Console.WriteLine($"Set-Cookie: {setCookie}");
+
+                    CookieContainer.SetCookies(request.RequestUri, setCookie);
+                }
+            }
+
+            return response;
         }
 
         // TODO: Flow cancellation consistently
