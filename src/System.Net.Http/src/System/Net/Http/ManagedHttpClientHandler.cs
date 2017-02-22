@@ -1329,44 +1329,42 @@ namespace System.Net.Http
 
         private bool CheckForRedirect(HttpRequestMessage request, HttpResponseMessage response, ref int redirectCount)
         {
-            if (response.StatusCode == HttpStatusCode.Moved ||
-                response.StatusCode == HttpStatusCode.TemporaryRedirect)
+            switch (response.StatusCode)
             {
-                var location = response.Headers.Location;
-                if (location == null)
-                {
-                    throw new Exception("redirect missing Location header");
-                }
-                request.RequestUri = location;
-            }
-            else if (response.StatusCode == HttpStatusCode.Found || 
-                     response.StatusCode == HttpStatusCode.SeeOther)
-            {
-                var location = response.Headers.Location;
-                if (location == null)
-                {
-                    throw new Exception("redirect missing Location header");
-                }
+                case HttpStatusCode.Moved:
+                case HttpStatusCode.TemporaryRedirect:
+                    break;
 
-                request.RequestUri = location;
-                request.Method = HttpMethod.Get;
-                request.Content = null;
-            }
-            else if (response.StatusCode == HttpStatusCode.MultipleChoices)
-            {
-                var location = response.Headers.Location;
-                if (location == null)
-                {
-                    // Location header is optional, don't redirect if not present.
+                case HttpStatusCode.Found:
+                case HttpStatusCode.SeeOther:
+                    request.Method = HttpMethod.Get;
+                    request.Content = null;
+                    break;
+
+                case HttpStatusCode.MultipleChoices:
+                    if (response.Headers.Location == null)
+                    {
+                        // Don't redirect if no Location specified
+                        return false;
+                    }
+                    break;
+
+                default:
                     return false;
-                }
-                request.RequestUri = location;
             }
-            else
+
+            Uri location = response.Headers.Location;
+            if (location == null)
             {
-                // No redirect to handle.
-                return false;
+                throw new HttpRequestException("no Location header for redirect");
             }
+
+            if (!location.IsAbsoluteUri)
+            {
+                location = new Uri(request.RequestUri, location);
+            }
+
+            request.RequestUri = location;
 
             redirectCount++;
             if (redirectCount > _maxAutomaticRedirections)
