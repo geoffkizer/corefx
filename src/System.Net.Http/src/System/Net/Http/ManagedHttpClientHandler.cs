@@ -1304,16 +1304,65 @@ namespace System.Net.Http
                 // TODO: What's the right behavior here?
             }
 
-            HttpResponseMessage response = await SendAsync2(request, proxyUri, cancellationToken);
-
-            // Handle proxy authentication
-            if (response.StatusCode == HttpStatusCode.ProxyAuthenticationRequired &&
-                _proxy.Credentials != null)
+            int redirectCount = 0;
+//            while (true)
             {
-                response = await HandleProxyAuthenticationAsync(request, response, proxyUri, cancellationToken);
-            }
+                bool needRedirect = false;
 
-            return response;
+                HttpResponseMessage response = await SendAsync2(request, proxyUri, cancellationToken);
+
+                // Handle proxy authentication
+                if (response.StatusCode == HttpStatusCode.ProxyAuthenticationRequired &&
+                    _proxy.Credentials != null)
+                {
+                    response = await HandleProxyAuthenticationAsync(request, response, proxyUri, cancellationToken);
+                }
+
+                // Handle redirect
+                if (_allowAutoRedirect)
+                {
+                    if (response.StatusCode == HttpStatusCode.Moved ||
+                        response.StatusCode == HttpStatusCode.Found)
+                    {
+                        var location = response.Headers.Location;
+                        if (location == null)
+                        {
+                            throw new Exception("redirect missing Location header");
+                        }
+
+                        request.RequestUri = location;
+                        needRedirect = true;
+                    }
+                    else if (response.StatusCode == HttpStatusCode.SeeOther)
+                    {
+                        var location = response.Headers.Location;
+                        if (location == null)
+                        {
+                            throw new Exception("redirect missing Location header");
+                        }
+
+                        request.RequestUri = location;
+                        request.Method = HttpMethod.Get;
+                        needRedirect = true;
+                    }
+                }
+
+                if (needRedirect)
+                {
+                    redirectCount++;
+                    if (redirectCount > _maxAutomaticRedirections)
+                    {
+                        throw new Exception("max redirects exceeded");
+                    }
+
+                    // Temp
+                    throw new Exception("no redirect yet");
+                }
+                else
+                {
+                    return response;
+                }
+            }
         }
 
         // TODO: Flow cancellation consistently
