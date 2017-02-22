@@ -573,7 +573,7 @@ namespace System.Net.Http
                 }
             }
 
-            private sealed class ChunkedEncodingRequestStream : ReadOnlyStream
+            private sealed class ChunkedEncodingRequestStream : WriteOnlyStream
             {
                 private HttpConnection _connection;
                 private byte[] _chunkLengthBuffer;
