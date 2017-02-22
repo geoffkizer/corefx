@@ -1290,7 +1290,6 @@ namespace System.Net.Http
         private bool CheckForRedirect(HttpRequestMessage request, HttpResponseMessage response, ref int redirectCount)
         {
             if (response.StatusCode == HttpStatusCode.Moved ||
-                response.StatusCode == HttpStatusCode.Found ||
                 response.StatusCode == HttpStatusCode.TemporaryRedirect)
             {
                 var location = response.Headers.Location;
@@ -1301,7 +1300,8 @@ namespace System.Net.Http
 
                 request.RequestUri = location;
             }
-            else if (response.StatusCode == HttpStatusCode.SeeOther)
+            else if (response.StatusCode == HttpStatusCode.Found || 
+                     response.StatusCode == HttpStatusCode.SeeOther)
             {
                 var location = response.Headers.Location;
                 if (location == null)
@@ -1311,6 +1311,7 @@ namespace System.Net.Http
 
                 request.RequestUri = location;
                 request.Method = HttpMethod.Get;
+                request.Content = null;
             }
             else
             {
