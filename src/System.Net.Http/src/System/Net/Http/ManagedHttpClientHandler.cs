@@ -1222,6 +1222,70 @@ namespace System.Net.Http
             return response;
         }
 
+        private async Task<HttpResponseMessage> HandleProxyAuthenticationAsync(
+            HttpRequestMessage request, 
+            HttpResponseMessage response,
+            Uri proxyUri,
+            CancellationToken cancellationToken)
+        {
+            HttpHeaderValueCollection<AuthenticationHeaderValue> proxyAuthenticateValues = response.Headers.ProxyAuthenticate;
+            Trace($"407 received, ProxyAuthenticate: {proxyAuthenticateValues}");
+
+            if (proxyUri == null)
+            {
+                throw new HttpRequestException("407 received but no proxy");
+            }
+
+            foreach (AuthenticationHeaderValue h in proxyAuthenticateValues)
+            {
+                // We only support Basic auth against a proxy, ignore others
+                if (h.Scheme == "Basic")
+                {
+                    NetworkCredential credential = _proxy.Credentials.GetCredential(proxyUri, "Basic");
+
+                    if (credential == null)
+                    {
+                        continue;
+                    }
+
+                    // TODO: What about domain here?  I assume we should just add it, e.g. domain\username
+
+                    if (credential.UserName.IndexOf(':') != -1)
+                    {
+                        // TODO: What's the right way to handle this?
+                        //                            throw new NotImplementedException($"Proxy auth: can't handle ':' in username \"{credential.UserName}\"");
+                    }
+
+                    string userPass = credential.UserName + ":" + credential.Password;
+                    if (!string.IsNullOrEmpty(credential.Domain))
+                    {
+                        if (credential.UserName.IndexOf(':') != -1)
+                        {
+                            // TODO: What's the right way to handle this?
+                            //                            throw new NotImplementedException($"Proxy auth: can't handle ':' in domain \"{credential.Domain}\"");
+                        }
+
+                        userPass = credential.Domain + "\\" + userPass;
+                    }
+
+                    string encoded = Convert.ToBase64String(Encoding.UTF8.GetBytes(userPass));
+
+                    request.Headers.ProxyAuthorization = new AuthenticationHeaderValue("Basic", encoded);
+
+                    response = await SendAsync(request, cancellationToken);
+
+                    if (response.StatusCode != HttpStatusCode.ProxyAuthenticationRequired)
+                    {
+                        // Success
+                        break;
+                    }
+                }
+            }
+
+            // Return the last response we received, successful or not
+            return response;
+        }
+
         protected internal override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request,
             CancellationToken cancellationToken)
         {
@@ -1246,58 +1310,7 @@ namespace System.Net.Http
             if (response.StatusCode == HttpStatusCode.ProxyAuthenticationRequired &&
                 _proxy.Credentials != null)
             {
-                Trace($"407 received, ProxyAuthenticate: {response.Headers.ProxyAuthenticate}");
-
-                if (proxyUri == null)
-                {
-                    throw new HttpRequestException("407 received but no proxy");
-                }
-
-                foreach (AuthenticationHeaderValue h in response.Headers.ProxyAuthenticate)
-                {
-                    // We only support Basic auth against a proxy, ignore others
-                    if (h.Scheme == "Basic")
-                    {
-                        NetworkCredential credential = _proxy.Credentials.GetCredential(proxyUri, "Basic");
-
-                        if (credential == null)
-                        {
-                            continue;
-                        }
-
-                        // TODO: What about domain here?  I assume we should just add it, e.g. domain\username
-
-                        if (credential.UserName.IndexOf(':') != -1)
-                        {
-                            // TODO: What's the right way to handle this?
-//                            throw new NotImplementedException($"Proxy auth: can't handle ':' in username \"{credential.UserName}\"");
-                        }
-
-                        string userPass = credential.UserName + ":" + credential.Password;
-                        if (!string.IsNullOrEmpty(credential.Domain))
-                        {
-                            if (credential.UserName.IndexOf(':') != -1)
-                            {
-                                // TODO: What's the right way to handle this?
-//                            throw new NotImplementedException($"Proxy auth: can't handle ':' in domain \"{credential.Domain}\"");
-                            }
-
-                            userPass = credential.Domain + "\\" + userPass;
-                        }
-
-                        string encoded = Convert.ToBase64String(Encoding.UTF8.GetBytes(userPass));
-
-                        request.Headers.ProxyAuthorization = new AuthenticationHeaderValue("Basic", encoded);
-
-                        response = await SendAsync(request, cancellationToken);
-
-                        if (response.StatusCode != HttpStatusCode.ProxyAuthenticationRequired)
-                        {
-                            // Successful proxy autorization
-                            break;
-                        }
-                    }
-                }
+                response = await HandleProxyAuthenticationAsync(request, response, proxyUri, cancellationToken);
             }
 
             return response;
