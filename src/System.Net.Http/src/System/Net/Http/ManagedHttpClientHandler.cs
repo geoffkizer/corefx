@@ -818,7 +818,7 @@ namespace System.Net.Http
                 return response;
             }
 
-            public async Task<HttpResponseMessage> SendRequestAsync(HttpRequestMessage request,
+            public async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request,
                 CancellationToken cancellationToken)
             {
                 HttpContent requestContent = request.Content;
@@ -942,57 +942,6 @@ namespace System.Net.Http
                 }
 
                 return await ParseResponse(request, cancellationToken);
-            }
-
-            public async Task<HttpResponseMessage> SendRequestAndProcessResponseAsync(HttpRequestMessage request,
-                CancellationToken cancellationToken)
-            {
-                HttpResponseMessage response = await SendRequestAsync(request, cancellationToken);
-
-                // Handle proxy authentication
-                if (response.StatusCode == HttpStatusCode.ProxyAuthenticationRequired)
-                {
-                    Console.WriteLine($"407 received, ProxyAuthenticate: {response.Headers.ProxyAuthenticate}");
-
-                    if (_proxyUri == null)
-                    {
-                        throw new HttpRequestException("407 received but no proxy");
-                    }
-
-                    IWebProxy proxy = _handler._proxy;
-                    foreach (AuthenticationHeaderValue h in response.Headers.ProxyAuthenticate)
-                    {
-                        // We only support Basic auth against a proxy, ignore others
-                        if (h.Scheme == "Basic")
-                        {
-                            NetworkCredential credential = proxy.Credentials.GetCredential(_proxyUri, "Basic");
-
-                            // TODO: What about domain here?  I assume we should just add it, e.g. domain\username
-
-                            if (credential.UserName.IndexOf(':') != -1)
-                            {
-                                // TODO: What's the right way to handle this?
-                                throw new NotImplementedException($"Proxy auth: can't handle ':' in username \"{credential.UserName}\"");
-                            }
-
-                            string userPass = credential.UserName + ":" + credential.Password;
-
-                            string encoded = Convert.ToBase64String(Encoding.UTF8.GetBytes(userPass));
-
-                            request.Headers.ProxyAuthorization = new AuthenticationHeaderValue("Basic", encoded);
-
-                            response = await SendRequestAsync(request, cancellationToken);
-
-                            if (response.StatusCode != HttpStatusCode.ProxyAuthenticationRequired)
-                            {
-                                // Successful proxy autorization
-                                break;
-                            }
-                        }
-                    }
-                }
-
-                return response;
             }
 
             private async Task WriteAsync(byte[] buffer, int offset, int count)
@@ -1163,20 +1112,9 @@ namespace System.Net.Http
             return true;
         }
 
-        private async Task<HttpConnection> GetOrCreateConnection(HttpRequestMessage request, CancellationToken cancellationToken)
+        private async Task<HttpConnection> GetOrCreateConnection(HttpRequestMessage request, Uri proxyUri, CancellationToken cancellationToken)
         {
-            Uri uri = request.RequestUri;
-            Uri proxyUri = null;
-
-            // Determine if we should use a proxy
-            if (_useProxy && _proxy != null && !_proxy.IsBypassed(uri))
-            {
-                proxyUri = _proxy.GetProxy(uri);
-                if (proxyUri != null)
-                {
-                    uri = proxyUri;
-                }
-            }
+            Uri uri = proxyUri ?? request.RequestUri;
 
             // Very simple connection "pool"; only 1 connection ever held, and no timeout ever
 
@@ -1264,7 +1202,7 @@ namespace System.Net.Http
             }
         }
 
-        protected internal override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request,
+        private async Task<HttpResponseMessage> SendAsync2(HttpRequestMessage request, Uri proxyUri,
             CancellationToken cancellationToken)
         {
             if (request.Version.Major != 1 || request.Version.Minor != 1)
@@ -1272,9 +1210,76 @@ namespace System.Net.Http
                 throw new PlatformNotSupportedException($"Only HTTP 1.1 supported -- request.Version was {request.Version}");
             }
 
-            HttpConnection connection = await GetOrCreateConnection(request, cancellationToken);
+            HttpConnection connection = await GetOrCreateConnection(request, proxyUri, cancellationToken);
 
-            HttpResponseMessage response = await connection.SendRequestAndProcessResponseAsync(request, cancellationToken);
+            HttpResponseMessage response = await connection.SendAsync(request, cancellationToken);
+
+            return response;
+        }
+
+        protected internal override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request,
+            CancellationToken cancellationToken)
+        {
+            // Determine if we should use a proxy
+            Uri proxyUri = null;
+            if (_useProxy && _proxy != null && !_proxy.IsBypassed(request.RequestUri))
+            {
+                proxyUri = _proxy.GetProxy(request.RequestUri);
+            }
+
+            HttpResponseMessage response = await SendAsync2(request, proxyUri, cancellationToken);
+
+            // Handle proxy authentication
+            if (response.StatusCode == HttpStatusCode.ProxyAuthenticationRequired)
+            {
+                Console.WriteLine($"407 received, ProxyAuthenticate: {response.Headers.ProxyAuthenticate}");
+
+                if (proxyUri == null)
+                {
+                    throw new HttpRequestException("407 received but no proxy");
+                }
+
+                foreach (AuthenticationHeaderValue h in response.Headers.ProxyAuthenticate)
+                {
+                    // We only support Basic auth against a proxy, ignore others
+                    if (h.Scheme == "Basic")
+                    {
+                        NetworkCredential credential = _proxy.Credentials.GetCredential(proxyUri, "Basic");
+
+                        // TODO: What about domain here?  I assume we should just add it, e.g. domain\username
+
+                        if (credential.UserName.IndexOf(':') != -1)
+                        {
+                            // TODO: What's the right way to handle this?
+//                            throw new NotImplementedException($"Proxy auth: can't handle ':' in username \"{credential.UserName}\"");
+                        }
+
+                        string userPass = credential.UserName + ":" + credential.Password;
+                        if (!string.IsNullOrEmpty(credential.Domain))
+                        {
+                            if (credential.UserName.IndexOf(':') != -1)
+                            {
+                                // TODO: What's the right way to handle this?
+//                            throw new NotImplementedException($"Proxy auth: can't handle ':' in domain \"{credential.Domain}\"");
+                            }
+
+                            userPass = credential.Domain + "\\" + userPass;
+                        }
+
+                        string encoded = Convert.ToBase64String(Encoding.UTF8.GetBytes(userPass));
+
+                        request.Headers.ProxyAuthorization = new AuthenticationHeaderValue("Basic", encoded);
+
+                        response = await SendAsync(request, cancellationToken);
+
+                        if (response.StatusCode != HttpStatusCode.ProxyAuthenticationRequired)
+                        {
+                            // Successful proxy autorization
+                            break;
+                        }
+                    }
+                }
+            }
 
             return response;
         }
