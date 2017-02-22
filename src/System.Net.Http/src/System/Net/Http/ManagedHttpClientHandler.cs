@@ -667,6 +667,7 @@ namespace System.Net.Http
             private async Task<HttpResponseMessage> ParseResponse(HttpRequestMessage request, CancellationToken cancellationToken)
             {
                 HttpResponseMessage response = new HttpResponseMessage();
+                response.RequestMessage = request;
 
                 if (await ReadByteAsync() != (byte)'H' ||
                     await ReadByteAsync() != (byte)'T' ||
@@ -1286,28 +1287,67 @@ namespace System.Net.Http
             return response;
         }
 
+        private bool CheckForRedirect(HttpRequestMessage request, HttpResponseMessage response, ref int redirectCount)
+        {
+            if (response.StatusCode == HttpStatusCode.Moved ||
+                response.StatusCode == HttpStatusCode.Found ||
+                response.StatusCode == HttpStatusCode.TemporaryRedirect)
+            {
+                var location = response.Headers.Location;
+                if (location == null)
+                {
+                    throw new Exception("redirect missing Location header");
+                }
+
+                request.RequestUri = location;
+            }
+            else if (response.StatusCode == HttpStatusCode.SeeOther)
+            {
+                var location = response.Headers.Location;
+                if (location == null)
+                {
+                    throw new Exception("redirect missing Location header");
+                }
+
+                request.RequestUri = location;
+                request.Method = HttpMethod.Get;
+            }
+            else
+            {
+                // No redirect to handle.
+                return false;
+            }
+
+            redirectCount++;
+            if (redirectCount > _maxAutomaticRedirections)
+            {
+                throw new Exception("max redirects exceeded");
+            }
+
+            return true;
+        }
+
         protected internal override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request,
             CancellationToken cancellationToken)
         {
-            // Determine if we should use a proxy
-            Uri proxyUri = null;
-            try
-            {
-                if (_useProxy && _proxy != null && !_proxy.IsBypassed(request.RequestUri))
-                {
-                    proxyUri = _proxy.GetProxy(request.RequestUri);
-                }
-            }
-            catch (Exception)
-            {
-                // Tests expect exceptions from calls to _proxy to be eaten, apparently.
-                // TODO: What's the right behavior here?
-            }
-
             int redirectCount = 0;
-//            while (true)
+            while (true)
             {
-                bool needRedirect = false;
+                // Determine if we should use a proxy
+                // CONSIDER: Factor into separate function
+                Uri proxyUri = null;
+                try
+                {
+                    if (_useProxy && _proxy != null && !_proxy.IsBypassed(request.RequestUri))
+                    {
+                        proxyUri = _proxy.GetProxy(request.RequestUri);
+                    }
+                }
+                catch (Exception)
+                {
+                    // Tests expect exceptions from calls to _proxy to be eaten, apparently.
+                    // TODO: What's the right behavior here?
+                }
 
                 HttpResponseMessage response = await SendAsync2(request, proxyUri, cancellationToken);
 
@@ -1319,46 +1359,13 @@ namespace System.Net.Http
                 }
 
                 // Handle redirect
+                bool needRedirect = false;
                 if (_allowAutoRedirect)
                 {
-                    if (response.StatusCode == HttpStatusCode.Moved ||
-                        response.StatusCode == HttpStatusCode.Found)
-                    {
-                        var location = response.Headers.Location;
-                        if (location == null)
-                        {
-                            throw new Exception("redirect missing Location header");
-                        }
-
-                        request.RequestUri = location;
-                        needRedirect = true;
-                    }
-                    else if (response.StatusCode == HttpStatusCode.SeeOther)
-                    {
-                        var location = response.Headers.Location;
-                        if (location == null)
-                        {
-                            throw new Exception("redirect missing Location header");
-                        }
-
-                        request.RequestUri = location;
-                        request.Method = HttpMethod.Get;
-                        needRedirect = true;
-                    }
+                    needRedirect = CheckForRedirect(request, response, ref redirectCount);
                 }
 
-                if (needRedirect)
-                {
-                    redirectCount++;
-                    if (redirectCount > _maxAutomaticRedirections)
-                    {
-                        throw new Exception("max redirects exceeded");
-                    }
-
-                    // Temp
-                    throw new Exception("no redirect yet");
-                }
-                else
+                if (!needRedirect)
                 {
                     return response;
                 }
