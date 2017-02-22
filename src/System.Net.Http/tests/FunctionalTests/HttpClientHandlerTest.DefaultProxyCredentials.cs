@@ -39,7 +39,7 @@ namespace System.Net.Http.Functional.Tests
 
         [OuterLoop] // TODO: Issue #11345
         [Fact]
-        public void ProxyExplicitlyProvided_DefaultCredentials_Ignored()
+        public async Task ProxyExplicitlyProvided_DefaultCredentials_Ignored()
         {
             int port;
             Task<LoopbackGetRequestHttpProxy.ProxyResult> proxyTask = LoopbackGetRequestHttpProxy.StartAsync(out port, requireAuth: true, expectCreds: true);
@@ -54,15 +54,18 @@ namespace System.Net.Http.Functional.Tests
                 handler.Proxy = new UseSpecifiedUriWebProxy(proxyUrl, rightCreds);
                 handler.DefaultProxyCredentials = wrongCreds;
 
-                Task<HttpResponseMessage> responseTask = client.GetAsync(Configuration.Http.RemoteEchoServer);
-                Task<string> responseStringTask = responseTask.ContinueWith(t =>
-                {
-                    using (t.Result) return t.Result.Content.ReadAsStringAsync();
-                }, TaskScheduler.Default).Unwrap();
-                Task.WaitAll(proxyTask, responseTask, responseStringTask);
+                HttpResponseMessage responseMessage = await client.GetAsync(Configuration.Http.RemoteEchoServer);
 
-                TestHelper.VerifyResponseBody(responseStringTask.Result, responseTask.Result.Content.Headers.ContentMD5, false, null);
-                Assert.Equal(Encoding.ASCII.GetString(proxyTask.Result.ResponseContent), responseStringTask.Result);
+                string responseString;
+                using (responseMessage)
+                {
+                    responseString = await responseMessage.Content.ReadAsStringAsync();
+                }
+
+                TestHelper.VerifyResponseBody(responseString, responseMessage.Content.Headers.ContentMD5, false, null);
+
+                var proxyResult = await proxyTask;
+                Assert.Equal(Encoding.ASCII.GetString(proxyResult.ResponseContent), responseString);
 
                 string expectedAuth = $"{rightCreds.UserName}:{rightCreds.Password}";
                 Assert.Equal(expectedAuth, proxyTask.Result.AuthenticationHeaderValue);

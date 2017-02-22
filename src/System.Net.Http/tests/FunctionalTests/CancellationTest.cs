@@ -128,8 +128,11 @@ namespace System.Net.Http.Functional.Tests
 
                         // Now do a read that'll need to be canceled
                         var stopwatch = Stopwatch.StartNew();
+
                         await Assert.ThrowsAnyAsync<OperationCanceledException>(
-                            () => responseStream.ReadAsync(buffer, 0, buffer.Length, new CancellationTokenSource(1000).Token));
+                            () => responseStream.ReadAsync(buffer, 0, buffer.Length, new CancellationTokenSource(1000).Token))
+                            .TimeoutAfter(3000);
+
                         stopwatch.Stop();
 
                         triggerResponseWrite.SetResult(true);
