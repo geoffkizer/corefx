@@ -678,7 +678,7 @@ namespace System.Net.Http
                     await ReadByteAsync() != (byte)'.' ||
                     await ReadByteAsync() != (byte)'1')
                 {
-                    throw new Exception("could not read response HTTP version");
+                    throw new HttpRequestException("could not read response HTTP version");
                 }
 
                 // Don't think this is correct, here and below
@@ -694,7 +694,7 @@ namespace System.Net.Http
                     !char.IsDigit((char)status2) ||
                     !char.IsDigit((char)status3))
                 {
-                    throw new Exception("could not read response status code");
+                    throw new HttpRequestException("could not read response status code");
                 }
 
                 int status = 100 * (status1 - (byte)'0') + 10 * (status2 - (byte)'0') + (status3 - (byte)'0');
@@ -712,12 +712,12 @@ namespace System.Net.Http
                 }
                 else if (b != (byte)'\r')
                 {
-                    throw new Exception("Could not parse status code");
+                    throw new HttpRequestException("Could not parse status code");
                 }
 
                 b = await ReadByteAsync();
                 if (b != (byte)'\n')
-                    throw new Exception("Saw CR without LF while parsing response line");
+                    throw new HttpRequestException("Saw CR without LF while parsing response line");
 
                 var responseContent = new NoWriteNoSeekStreamContent(CancellationToken.None);
 
@@ -729,7 +729,7 @@ namespace System.Net.Http
                     if (b == (byte)'\r')
                     {
                         if (await ReadByteAsync() != (byte)'\n')
-                            throw new Exception("Saw CR without LF while parsing headers");
+                            throw new HttpRequestException("Saw CR without LF while parsing headers");
 
                         break;
                     }
@@ -759,7 +759,7 @@ namespace System.Net.Http
                     }
 
                     if (await ReadByteAsync() != (byte)'\n')
-                        throw new Exception("Saw CR without LF while parsing headers");
+                        throw new HttpRequestException("Saw CR without LF while parsing headers");
 
                     string headerValue = sb.ToString();
 
