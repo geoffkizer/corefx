@@ -1230,9 +1230,10 @@ namespace System.Net.Http
             HttpResponseMessage response = await SendAsync2(request, proxyUri, cancellationToken);
 
             // Handle proxy authentication
-            if (response.StatusCode == HttpStatusCode.ProxyAuthenticationRequired)
+            if (response.StatusCode == HttpStatusCode.ProxyAuthenticationRequired &&
+                _proxy.Credentials != null)
             {
-                Console.WriteLine($"407 received, ProxyAuthenticate: {response.Headers.ProxyAuthenticate}");
+                Trace($"407 received, ProxyAuthenticate: {response.Headers.ProxyAuthenticate}");
 
                 if (proxyUri == null)
                 {
@@ -1245,6 +1246,11 @@ namespace System.Net.Http
                     if (h.Scheme == "Basic")
                     {
                         NetworkCredential credential = _proxy.Credentials.GetCredential(proxyUri, "Basic");
+
+                        if (credential == null)
+                        {
+                            continue;
+                        }
 
                         // TODO: What about domain here?  I assume we should just add it, e.g. domain\username
 
