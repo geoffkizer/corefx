@@ -41,6 +41,8 @@ namespace System.Net.Http
         private SslProtocols _sslProtocols;         // TODO: Default?
         private IDictionary<String, object> _properties;
 
+        private bool _inUse = false;
+
         private ConcurrentDictionary<string, HttpConnection> _connectionPool = new ConcurrentDictionary<string, HttpConnection>();
 
         private static bool s_trace = false;
@@ -54,6 +56,15 @@ namespace System.Net.Http
         }
 
         #region Properties
+
+        private void CheckInUse()
+        {
+            // Can't set props once in use
+            if (_inUse)
+            {
+                throw new InvalidOperationException();
+            }
+        }
 
         public virtual bool SupportsAutomaticDecompression
         {
@@ -73,7 +84,7 @@ namespace System.Net.Http
         public bool UseCookies
         {
             get { return _useCookies; }
-            set { _useCookies = value; }
+            set { CheckInUse(); _useCookies = value; }
         }
 
         public CookieContainer CookieContainer
@@ -87,7 +98,7 @@ namespace System.Net.Http
 
                 return _cookieContainer;
             }
-            set { _cookieContainer = value; }
+            set { CheckInUse(); _cookieContainer = value; }
         }
 
         public ClientCertificateOption ClientCertificateOptions
@@ -95,6 +106,7 @@ namespace System.Net.Http
             get { return _clientCertificateOptions; }
             set
             {
+                CheckInUse();
                 if (value == ClientCertificateOption.Automatic || value == ClientCertificateOption.Manual)
                 {
                     _clientCertificateOptions = value;
@@ -108,55 +120,55 @@ namespace System.Net.Http
         public DecompressionMethods AutomaticDecompression
         {
             get { return _automaticDecompression; }
-            set { _automaticDecompression = value; }
+            set { CheckInUse(); _automaticDecompression = value; }
         }
 
         public bool UseProxy
         {
             get { return _useProxy; }
-            set { _useProxy = value; }
+            set { CheckInUse(); _useProxy = value; }
         }
 
         public IWebProxy Proxy
         {
             get { return _proxy; }
-            set { _proxy = value; }
+            set { CheckInUse(); _proxy = value; }
         }
 
         public ICredentials DefaultProxyCredentials
         {
             get { return _defaultProxyCredentials; }
-            set { _defaultProxyCredentials = value; }
+            set { CheckInUse(); _defaultProxyCredentials = value; }
         }
 
         public bool PreAuthenticate
         {
             get { return _preAuthenticate; }
-            set { _preAuthenticate = value; }
+            set { CheckInUse(); _preAuthenticate = value; }
         }
 
         public bool UseDefaultCredentials
         {
             get { return _useDefaultCredentials; }
-            set { _useDefaultCredentials = value; }
+            set { CheckInUse(); _useDefaultCredentials = value; }
         }
 
         public ICredentials Credentials
         {
             get { return _credentials; }
-            set { _credentials = value; }
+            set { CheckInUse(); _credentials = value; }
         }
 
         public bool AllowAutoRedirect
         {
             get { return _allowAutoRedirect; }
-            set { _allowAutoRedirect = value; }
+            set { CheckInUse(); _allowAutoRedirect = value; }
         }
 
         public int MaxAutomaticRedirections
         {
             get { return _maxAutomaticRedirections; }
-            set { _maxAutomaticRedirections = value; }
+            set { CheckInUse(); _maxAutomaticRedirections = value; }
         }
 
         public int MaxConnectionsPerServer
@@ -164,6 +176,7 @@ namespace System.Net.Http
             get { return _maxConnectionsPerServer; }
             set
             {
+                CheckInUse();
                 if (value <= 0)
                 {
                     throw new ArgumentOutOfRangeException(nameof(value));
@@ -178,6 +191,7 @@ namespace System.Net.Http
             get { return _maxResponseHeadersLength; }
             set
             {
+                CheckInUse();
                 if (value <= 0)
                 {
                     throw new ArgumentOutOfRangeException(nameof(value));
@@ -203,13 +217,13 @@ namespace System.Net.Http
         public Func<HttpRequestMessage, X509Certificate2, X509Chain, SslPolicyErrors, bool> ServerCertificateCustomValidationCallback
         {
             get { return _serverCertificateCustomValidationCallback; }
-            set { _serverCertificateCustomValidationCallback = value; }
+            set { CheckInUse(); _serverCertificateCustomValidationCallback = value; }
         }
 
         public bool CheckCertificateRevocationList
         {
             get { return _checkCertificateRevocationList; }
-            set { _checkCertificateRevocationList = value; }
+            set { CheckInUse(); _checkCertificateRevocationList = value; }
         }
 
         public SslProtocols SslProtocols
@@ -217,6 +231,7 @@ namespace System.Net.Http
             get { return _sslProtocols; }
             set
             {
+                CheckInUse();
 #pragma warning disable 0618 // obsolete warning
                 if ((value & (SslProtocols.Ssl2 | SslProtocols.Ssl3)) != 0)
                 {
@@ -1385,6 +1400,8 @@ namespace System.Net.Http
         protected internal override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request,
             CancellationToken cancellationToken)
         {
+            _inUse = true;
+
             int redirectCount = 0;
             while (true)
             {
