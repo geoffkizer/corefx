@@ -280,6 +280,8 @@ namespace System.Net.Http
             private string _key;
             private TcpClient _client;
             private Stream _stream;
+            private bool _isProxy;
+
             private Encoder _encoder;
 
             private byte[] _writeBuffer;
@@ -366,7 +368,7 @@ namespace System.Net.Http
                         count = _contentBytesRemaining;
                     }
 
-                    int bytesRead = await _connection.ReadAsync(buffer, offset, count);
+                    int bytesRead = await _connection.ReadAsync(buffer, offset, count, cancellationToken);
 
                     if (bytesRead == 0)
                     {
@@ -460,7 +462,7 @@ namespace System.Net.Http
                         count = _chunkBytesRemaining;
                     }
 
-                    int bytesRead = await _connection.ReadAsync(buffer, offset, count);
+                    int bytesRead = await _connection.ReadAsync(buffer, offset, count, cancellationToken);
 
                     if (bytesRead == 0)
                     {
@@ -502,7 +504,7 @@ namespace System.Net.Http
                         return 0;
                     }
 
-                    int bytesRead = await _connection.ReadAsync(buffer, offset, count);
+                    int bytesRead = await _connection.ReadAsync(buffer, offset, count, cancellationToken);
 
                     if (bytesRead == 0)
                     {
@@ -623,12 +625,13 @@ namespace System.Net.Http
                 }
             }
 
-            public HttpConnection(ManagedHttpClientHandler handler, string key, TcpClient client, Stream stream)
+            public HttpConnection(ManagedHttpClientHandler handler, string key, TcpClient client, Stream stream, bool isProxy)
             {
                 _handler = handler;
                 _key = key;
                 _client = client;
                 _stream = stream;
+                _isProxy = isProxy;
 
                 _encoder = new UTF8Encoding(true).GetEncoder();
 
@@ -651,7 +654,7 @@ namespace System.Net.Http
                 _client.Close();
             }
 
-            private async Task<HttpResponseMessage> ParseResponse(CancellationToken cancellationToken)
+            private async Task<HttpResponseMessage> ParseResponse(HttpRequestMessage request, CancellationToken cancellationToken)
             {
                 HttpResponseMessage response = new HttpResponseMessage();
 
@@ -688,7 +691,7 @@ namespace System.Net.Http
 
                 if (await ReadByteAsync() != (byte)' ')
                 {
-                    throw new Exception("Excepted space after status code");
+                    throw new Exception("Expected space after status code");
                 }
 
                 // Eat the rest of the line to CRLF
@@ -762,11 +765,18 @@ namespace System.Net.Http
                 // Instantiate responseStream
                 Stream responseStream;
 
-                long? contentLength = responseContent.Headers.ContentLength;
-                if (contentLength != null)
+                if (request.Method == HttpMethod.Head ||
+                    status == 204 ||
+                    status == 304)
+                {
+                    // There is implicitly no response body
+                    // TODO: Should this mean there's no responseContent at all?
+                    responseStream = new ContentLengthResponseStream(this, 0);
+                }
+                else if (responseContent.Headers.ContentLength != null)
                 {
                     // TODO: deal with very long content length
-                    responseStream = new ContentLengthResponseStream(this, (int)contentLength.Value);
+                    responseStream = new ContentLengthResponseStream(this, (int)responseContent.Headers.ContentLength.Value);
                 }
                 else if (response.Headers.TransferEncodingChunked == true)
                 {
@@ -847,7 +857,16 @@ namespace System.Net.Http
                 // Write request line
                 await WriteStringAsync(request.Method.Method);
                 await WriteStringAsync(" ");
-                await WriteStringAsync(request.RequestUri.PathAndQuery);
+
+                if (_isProxy)
+                {
+                    await WriteStringAsync(request.RequestUri.AbsoluteUri);
+                }
+                else
+                {
+                    await WriteStringAsync(request.RequestUri.PathAndQuery);
+                }
+
                 await WriteStringAsync(" HTTP/1.1\r\n");
 
                 // Write headers
@@ -912,7 +931,7 @@ namespace System.Net.Http
                     }
                 }
 
-                return await ParseResponse(cancellationToken);
+                return await ParseResponse(request, cancellationToken);
             }
 
             private async Task WriteAsync(byte[] buffer, int offset, int count)
@@ -1024,7 +1043,7 @@ namespace System.Net.Http
                 return new ValueTask<byte>(DoReadAndGetByteAsync());
             }
 
-            private async Task<int> ReadAsync(byte[] buffer, int offset, int count)
+            private async Task<int> ReadAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken)
             {
                 // This is called when reading the response body
 
@@ -1032,7 +1051,7 @@ namespace System.Net.Http
                 if (remaining == 0)
                 {
                     _readOffset = 0;
-                    _readLength = await _stream.ReadAsync(_readBuffer, 0, BufferSize);
+                    _readLength = await _stream.ReadAsync(_readBuffer, 0, BufferSize, cancellationToken);
                     if (_readLength == 0)
                     {
                         // End of stream, what do we do here?
@@ -1067,6 +1086,13 @@ namespace System.Net.Http
 
         private async Task<HttpConnection> GetOrCreateConnection(Uri uri, CancellationToken cancellationToken)
         {
+            bool isProxy = false;
+            if (_useProxy && _proxy != null && !_proxy.IsBypassed(uri))
+            {
+                uri = _proxy.GetProxy(uri);
+                isProxy = true;
+            }
+
             // Very simple connection "pool"; only 1 connection ever held, and no timeout ever
 
             string key = GetConnectionKey(uri);
@@ -1110,7 +1136,7 @@ namespace System.Net.Http
                 stream = sslStream;
             }
 
-            return new HttpConnection(this, key, client, stream);
+            return new HttpConnection(this, key, client, stream, isProxy);
         }
 
         private void ReleaseConnection(HttpConnection connection)
