@@ -1223,6 +1223,29 @@ namespace System.Net.Http
             return response;
         }
 
+        private string GetBasicTokenForCredential(NetworkCredential credential)
+        {
+            if (credential.UserName.IndexOf(':') != -1)
+            {
+                // TODO: What's the right way to handle this?
+//              throw new NotImplementedException($"Proxy auth: can't handle ':' in username \"{credential.UserName}\"");
+            }
+
+            string userPass = credential.UserName + ":" + credential.Password;
+            if (!string.IsNullOrEmpty(credential.Domain))
+            {
+                if (credential.UserName.IndexOf(':') != -1)
+                {
+                    // TODO: What's the right way to handle this?
+//                  throw new NotImplementedException($"Proxy auth: can't handle ':' in domain \"{credential.Domain}\"");
+                }
+
+                userPass = credential.Domain + "\\" + userPass;
+            }
+
+            return Convert.ToBase64String(Encoding.UTF8.GetBytes(userPass));
+        }
+
         private async Task<HttpResponseMessage> HandleProxyAuthenticationAsync(
             HttpRequestMessage request, 
             HttpResponseMessage response,
@@ -1249,33 +1272,50 @@ namespace System.Net.Http
                         continue;
                     }
 
-                    // TODO: What about domain here?  I assume we should just add it, e.g. domain\username
+                    request.Headers.ProxyAuthorization = new AuthenticationHeaderValue("Basic",
+                        GetBasicTokenForCredential(credential));
 
-                    if (credential.UserName.IndexOf(':') != -1)
-                    {
-                        // TODO: What's the right way to handle this?
-                        //                            throw new NotImplementedException($"Proxy auth: can't handle ':' in username \"{credential.UserName}\"");
-                    }
-
-                    string userPass = credential.UserName + ":" + credential.Password;
-                    if (!string.IsNullOrEmpty(credential.Domain))
-                    {
-                        if (credential.UserName.IndexOf(':') != -1)
-                        {
-                            // TODO: What's the right way to handle this?
-                            //                            throw new NotImplementedException($"Proxy auth: can't handle ':' in domain \"{credential.Domain}\"");
-                        }
-
-                        userPass = credential.Domain + "\\" + userPass;
-                    }
-
-                    string encoded = Convert.ToBase64String(Encoding.UTF8.GetBytes(userPass));
-
-                    request.Headers.ProxyAuthorization = new AuthenticationHeaderValue("Basic", encoded);
-
-                    response = await SendAsync(request, cancellationToken);
+                    response = await SendAsync2(request, proxyUri, cancellationToken);
 
                     if (response.StatusCode != HttpStatusCode.ProxyAuthenticationRequired)
+                    {
+                        // Success
+                        break;
+                    }
+                }
+            }
+
+            // Return the last response we received, successful or not
+            return response;
+        }
+
+        private async Task<HttpResponseMessage> HandleAuthenticationAsync(
+            HttpRequestMessage request,
+            HttpResponseMessage response,
+            Uri proxyUri,
+            CancellationToken cancellationToken)
+        {
+            HttpHeaderValueCollection<AuthenticationHeaderValue> authenticateValues = response.Headers.WwwAuthenticate;
+            Trace($"401 received, WWW-Authenticate: {authenticateValues}");
+
+            foreach (AuthenticationHeaderValue h in authenticateValues)
+            {
+                // We only support Basic auth, ignore others
+                if (h.Scheme == "Basic")
+                {
+                    NetworkCredential credential = _credentials.GetCredential(request.RequestUri, "Basic");
+
+                    if (credential == null)
+                    {
+                        continue;
+                    }
+
+                    request.Headers.Authorization = new AuthenticationHeaderValue("Basic",
+                        GetBasicTokenForCredential(credential));
+
+                    response = await SendAsync2(request, proxyUri, cancellationToken);
+
+                    if (response.StatusCode != HttpStatusCode.Unauthorized)
                     {
                         // Success
                         break;
@@ -1357,6 +1397,13 @@ namespace System.Net.Http
                     _proxy.Credentials != null)
                 {
                     response = await HandleProxyAuthenticationAsync(request, response, proxyUri, cancellationToken);
+                }
+
+                // Handle end-to-end authentication
+                if (response.StatusCode == HttpStatusCode.Unauthorized &&
+                    _credentials != null)
+                {
+                    response = await HandleAuthenticationAsync(request, response, proxyUri, cancellationToken);
                 }
 
                 // Handle redirect
