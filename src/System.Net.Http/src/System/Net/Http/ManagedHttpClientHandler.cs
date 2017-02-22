@@ -1337,7 +1337,6 @@ namespace System.Net.Http
                 {
                     throw new Exception("redirect missing Location header");
                 }
-
                 request.RequestUri = location;
             }
             else if (response.StatusCode == HttpStatusCode.Found || 
@@ -1352,6 +1351,16 @@ namespace System.Net.Http
                 request.RequestUri = location;
                 request.Method = HttpMethod.Get;
                 request.Content = null;
+            }
+            else if (response.StatusCode == HttpStatusCode.MultipleChoices)
+            {
+                var location = response.Headers.Location;
+                if (location == null)
+                {
+                    // Location header is optional, don't redirect if not present.
+                    return false;
+                }
+                request.RequestUri = location;
             }
             else
             {
