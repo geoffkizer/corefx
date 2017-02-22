@@ -1796,7 +1796,7 @@ namespace System.Net.Http.Functional.Tests
                     // If proxy task times out, we must not have talked to the proxy
                     var proxyResult = await proxyTask.TimeoutAfter(1000);
 
-                    Assert.Equal(Encoding.ASCII.GetString(proxyResult.ResponseContent), content);
+                    Assert.Equal(content, Encoding.ASCII.GetString(proxyResult.ResponseContent));
 
                     NetworkCredential nc = creds?.GetCredential(proxyUrl, BasicAuth);
                     string expectedAuth =

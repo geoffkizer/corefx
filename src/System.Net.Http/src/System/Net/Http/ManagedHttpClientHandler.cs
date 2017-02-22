@@ -290,7 +290,7 @@ namespace System.Net.Http
             private string _key;
             private TcpClient _client;
             private Stream _stream;
-            private bool _isProxy;
+            private Uri _proxyUri;
 
             private Encoder _encoder;
 
@@ -635,13 +635,13 @@ namespace System.Net.Http
                 }
             }
 
-            public HttpConnection(ManagedHttpClientHandler handler, string key, TcpClient client, Stream stream, bool isProxy)
+            public HttpConnection(ManagedHttpClientHandler handler, string key, TcpClient client, Stream stream, Uri proxyUri)
             {
                 _handler = handler;
                 _key = key;
                 _client = client;
                 _stream = stream;
-                _isProxy = isProxy;
+                _proxyUri = proxyUri;
 
                 _encoder = new UTF8Encoding(true).GetEncoder();
 
@@ -818,7 +818,7 @@ namespace System.Net.Http
                 return response;
             }
 
-            public async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request,
+            public async Task<HttpResponseMessage> SendRequestAsync(HttpRequestMessage request,
                 CancellationToken cancellationToken)
             {
                 HttpContent requestContent = request.Content;
@@ -868,7 +868,7 @@ namespace System.Net.Http
                 await WriteStringAsync(request.Method.Method);
                 await WriteStringAsync(" ");
 
-                if (_isProxy)
+                if (_proxyUri != null)
                 {
                     await WriteStringAsync(request.RequestUri.AbsoluteUri);
                 }
@@ -942,6 +942,57 @@ namespace System.Net.Http
                 }
 
                 return await ParseResponse(request, cancellationToken);
+            }
+
+            public async Task<HttpResponseMessage> SendRequestAndProcessResponseAsync(HttpRequestMessage request,
+                CancellationToken cancellationToken)
+            {
+                HttpResponseMessage response = await SendRequestAsync(request, cancellationToken);
+
+                // Handle proxy authentication
+                if (response.StatusCode == HttpStatusCode.ProxyAuthenticationRequired)
+                {
+                    Console.WriteLine($"407 received, ProxyAuthenticate: {response.Headers.ProxyAuthenticate}");
+
+                    if (_proxyUri == null)
+                    {
+                        throw new HttpRequestException("407 received but no proxy");
+                    }
+
+                    IWebProxy proxy = _handler._proxy;
+                    foreach (AuthenticationHeaderValue h in response.Headers.ProxyAuthenticate)
+                    {
+                        // We only support Basic auth against a proxy, ignore others
+                        if (h.Scheme == "Basic")
+                        {
+                            NetworkCredential credential = proxy.Credentials.GetCredential(_proxyUri, "Basic");
+
+                            // TODO: What about domain here?  I assume we should just add it, e.g. domain\username
+
+                            if (credential.UserName.IndexOf(':') != -1)
+                            {
+                                // TODO: What's the right way to handle this?
+                                throw new NotImplementedException($"Proxy auth: can't handle ':' in username \"{credential.UserName}\"");
+                            }
+
+                            string userPass = credential.UserName + ":" + credential.Password;
+
+                            string encoded = Convert.ToBase64String(Encoding.UTF8.GetBytes(userPass));
+
+                            request.Headers.ProxyAuthorization = new AuthenticationHeaderValue("Basic", encoded);
+
+                            response = await SendRequestAsync(request, cancellationToken);
+
+                            if (response.StatusCode != HttpStatusCode.ProxyAuthenticationRequired)
+                            {
+                                // Successful proxy autorization
+                                break;
+                            }
+                        }
+                    }
+                }
+
+                return response;
             }
 
             private async Task WriteAsync(byte[] buffer, int offset, int count)
@@ -1115,12 +1166,16 @@ namespace System.Net.Http
         private async Task<HttpConnection> GetOrCreateConnection(HttpRequestMessage request, CancellationToken cancellationToken)
         {
             Uri uri = request.RequestUri;
+            Uri proxyUri = null;
 
-            bool isProxy = false;
+            // Determine if we should use a proxy
             if (_useProxy && _proxy != null && !_proxy.IsBypassed(uri))
             {
-                uri = _proxy.GetProxy(uri);
-                isProxy = true;
+                proxyUri = _proxy.GetProxy(uri);
+                if (proxyUri != null)
+                {
+                    uri = proxyUri;
+                }
             }
 
             // Very simple connection "pool"; only 1 connection ever held, and no timeout ever
@@ -1167,7 +1222,7 @@ namespace System.Net.Http
 
             if (uri.Scheme == "https")
             {
-                if (isProxy)
+                if (proxyUri != null)
                     throw new NotImplementedException("no SSL proxy support");
 
                 try
@@ -1197,7 +1252,7 @@ namespace System.Net.Http
                 }
             }
 
-            return new HttpConnection(this, key, client, stream, isProxy);
+            return new HttpConnection(this, key, client, stream, proxyUri);
         }
 
         private void ReleaseConnection(HttpConnection connection)
@@ -1219,7 +1274,7 @@ namespace System.Net.Http
 
             HttpConnection connection = await GetOrCreateConnection(request, cancellationToken);
 
-            HttpResponseMessage response = await connection.SendAsync(request, cancellationToken);
+            HttpResponseMessage response = await connection.SendRequestAndProcessResponseAsync(request, cancellationToken);
 
             return response;
         }
