@@ -1289,6 +1289,18 @@ namespace System.Net.Http
             return response;
         }
 
+        private bool TrySetBasicAuthToken(HttpRequestMessage request)
+        {
+            NetworkCredential credential = _credentials.GetCredential(request.RequestUri, "Basic");
+            if (credential == null)
+            {
+                return false;
+            }
+
+            request.Headers.Authorization = new AuthenticationHeaderValue("Basic", GetBasicTokenForCredential(credential));
+            return true;
+        }
+
         private async Task<HttpResponseMessage> HandleAuthenticationAsync(
             HttpRequestMessage request,
             HttpResponseMessage response,
@@ -1303,15 +1315,10 @@ namespace System.Net.Http
                 // We only support Basic auth, ignore others
                 if (h.Scheme == "Basic")
                 {
-                    NetworkCredential credential = _credentials.GetCredential(request.RequestUri, "Basic");
-
-                    if (credential == null)
+                    if (!TrySetBasicAuthToken(request))
                     {
                         continue;
                     }
-
-                    request.Headers.Authorization = new AuthenticationHeaderValue("Basic",
-                        GetBasicTokenForCredential(credential));
 
                     response = await SendAsync2(request, proxyUri, cancellationToken);
 
@@ -1397,6 +1404,12 @@ namespace System.Net.Http
                     // TODO: What's the right behavior here?
                 }
 
+                // Preautheticate, if requested and we have credentials
+                if (_preAuthenticate && _credentials != null)
+                {
+                    TrySetBasicAuthToken(request);
+                }
+
                 HttpResponseMessage response = await SendAsync2(request, proxyUri, cancellationToken);
 
                 // Handle proxy authentication
@@ -1406,8 +1419,9 @@ namespace System.Net.Http
                     response = await HandleProxyAuthenticationAsync(request, response, proxyUri, cancellationToken);
                 }
 
-                // Handle end-to-end authentication
+                // Handle authentication, if we didn't preauthenticate above
                 if (response.StatusCode == HttpStatusCode.Unauthorized &&
+                    !_preAuthenticate &&
                     _credentials != null)
                 {
                     response = await HandleAuthenticationAsync(request, response, proxyUri, cancellationToken);
