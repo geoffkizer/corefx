@@ -1121,24 +1121,6 @@ namespace System.Net.Http
             return uri.Scheme + ":" + uri.Host + ":" + uri.Port;
         }
 
-        // Callback used by SslStream
-        public bool OnRemoteCertificateValidation(object sender, X509Certificate certificate, X509Chain chain, SslPolicyErrors sslPolicyErrors)
-        {
-            if (_serverCertificateCustomValidationCallback != null)
-            {
-                // TODO: What HttpRequestMessage are we supposed to pass here?
-                // I suppose it's the one initiating this connection, so we have to mangle that through somehow.
-
-                // TODO: Not sure this is correct...
-                var cert2 = certificate as X509Certificate2;
-
-                // TODO: Diff b/w X509Certificate and X509Certificate2?
-                return _serverCertificateCustomValidationCallback(null, cert2, chain, sslPolicyErrors);
-            }
-
-            return true;
-        }
-
         private async Task<HttpConnection> GetOrCreateConnection(HttpRequestMessage request, Uri proxyUri, CancellationToken cancellationToken)
         {
             Uri uri = proxyUri ?? request.RequestUri;
