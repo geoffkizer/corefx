@@ -37,7 +37,7 @@ namespace System.Net.Http
         private int _maxConnectionsPerServer = int.MaxValue;
         private X509CertificateCollection _clientCertificates;
         private Func<HttpRequestMessage, X509Certificate2, X509Chain, SslPolicyErrors, bool> _serverCertificateCustomValidationCallback;
-        private bool _checkCertificateRevocationList;
+        private bool _checkCertificateRevocationList = false;
         private SslProtocols _sslProtocols;         // TODO: Default?
         private IDictionary<String, object> _properties;
 
@@ -1200,8 +1200,7 @@ namespace System.Net.Http
 
                     SslStream sslStream = new SslStream(stream, false, callback);
 
-                    // TODO: How is check for revocation controlled?
-                    await sslStream.AuthenticateAsClientAsync(uri.Host, null, _sslProtocols, true);
+                    await sslStream.AuthenticateAsClientAsync(uri.Host, null, _sslProtocols, _checkCertificateRevocationList);
 
                     stream = sslStream;
                 }
