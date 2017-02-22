@@ -1222,9 +1222,17 @@ namespace System.Net.Http
         {
             // Determine if we should use a proxy
             Uri proxyUri = null;
-            if (_useProxy && _proxy != null && !_proxy.IsBypassed(request.RequestUri))
+            try
             {
-                proxyUri = _proxy.GetProxy(request.RequestUri);
+                if (_useProxy && _proxy != null && !_proxy.IsBypassed(request.RequestUri))
+                {
+                    proxyUri = _proxy.GetProxy(request.RequestUri);
+                }
+            }
+            catch (Exception)
+            {
+                // Tests expect exceptions from calls to _proxy to be eaten, apparently.
+                // TODO: What's the right behavior here?
             }
 
             HttpResponseMessage response = await SendAsync2(request, proxyUri, cancellationToken);
