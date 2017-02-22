@@ -699,18 +699,23 @@ namespace System.Net.Http
                 int status = 100 * (status1 - (byte)'0') + 10 * (status2 - (byte)'0') + (status3 - (byte)'0');
                 response.StatusCode = (HttpStatusCode)status;
 
-                if (await ReadByteAsync() != (byte)' ')
+                b = await ReadByteAsync();
+                if (b == (byte)' ')
                 {
-                    throw new Exception("Expected space after status code");
+                    // Eat the rest of the line to CRLF
+                    // TODO: Set reason phrase
+                    b = await ReadByteAsync();
+                    while (b != (byte)'\r')
+                        b = await ReadByteAsync();
+
+                }
+                else if (b != (byte)'\r')
+                {
+                    throw new Exception("Could not parse status code");
                 }
 
-                // Eat the rest of the line to CRLF
-                // TODO: Set reason phrase
                 b = await ReadByteAsync();
-                while (b != (byte)'\r')
-                    b = await ReadByteAsync();
-
-                if (await ReadByteAsync() != (byte)'\n')
+                if (b != (byte)'\n')
                     throw new Exception("Saw CR without LF while parsing response line");
 
                 var responseContent = new NoWriteNoSeekStreamContent(CancellationToken.None);
