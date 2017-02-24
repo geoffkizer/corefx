@@ -45,7 +45,7 @@ namespace System.Net.Http
 
         private ConcurrentDictionary<string, ConcurrentBag<HttpConnection>> _connectionPoolTable = new ConcurrentDictionary<string, ConcurrentBag<HttpConnection>>();
 
-        private static bool s_trace = true;
+        private static bool s_trace = false;
 
         private static void Trace(string msg)
         {
