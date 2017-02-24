@@ -316,6 +316,73 @@ namespace System.Net.Http
             private int _readOffset;
             private int _readLength;
 
+            // This is based off NoWriteNoSeekStreamContent
+            private sealed class ResponseContent : HttpContent
+            {
+                private readonly CancellationToken _cancellationToken;
+                private Stream _content;
+                private bool _contentConsumed;
+
+                public ResponseContent(CancellationToken cancellationToken)
+                {
+                    _cancellationToken = cancellationToken;
+                }
+
+                public void SetStream(Stream content)
+                {
+                    Debug.Assert(content != null);
+                    Debug.Assert(content.CanRead);
+                    Debug.Assert(!content.CanWrite);
+                    Debug.Assert(!content.CanSeek);
+
+                    _content = content;
+                }
+
+                protected override Task SerializeToStreamAsync(Stream stream, TransportContext context)
+                {
+                    Debug.Assert(stream != null);
+
+                    if (_contentConsumed)
+                    {
+                        throw new InvalidOperationException(SR.net_http_content_stream_already_read);
+                    }
+                    _contentConsumed = true;
+
+                    const int BufferSize = 8192;
+                    Task copyTask = _content.CopyToAsync(stream, BufferSize, _cancellationToken);
+                    if (copyTask.IsCompleted)
+                    {
+                        try { _content.Dispose(); } catch { } // same as StreamToStreamCopy behavior
+                    }
+                    else
+                    {
+                        copyTask = copyTask.ContinueWith((t, s) =>
+                        {
+                            try { ((Stream)s).Dispose(); } catch { }
+                            t.GetAwaiter().GetResult();
+                        }, _content, CancellationToken.None, TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);
+                    }
+                    return copyTask;
+                }
+
+                protected internal override bool TryComputeLength(out long length)
+                {
+                    length = 0;
+                    return false;
+                }
+
+                protected override void Dispose(bool disposing)
+                {
+                    if (disposing)
+                    {
+                        _content.Dispose();
+                    }
+                    base.Dispose(disposing);
+                }
+
+                protected override Task<Stream> CreateContentReadStreamAsync() => Task.FromResult<Stream>(_content);
+            }
+
             private abstract class ReadOnlyStream : Stream
             {
                 public override bool CanRead => true;
@@ -734,7 +801,7 @@ namespace System.Net.Http
                 if (b != (byte)'\n')
                     throw new HttpRequestException("Saw CR without LF while parsing response line");
 
-                var responseContent = new NoWriteNoSeekStreamContent(CancellationToken.None);
+                var responseContent = new ResponseContent(CancellationToken.None);
 
                 // Parse headers
                 StringBuilder sb = new StringBuilder();
@@ -866,6 +933,7 @@ namespace System.Net.Http
                     else
                     {
                         // TODO: Is this the correct behavior?
+                        // Seems better to do TryComputeLength on the content first
                         Trace($"TransferEncodingChunked = {request.Headers.TransferEncodingChunked} but no Content-Length set; setting it to true");
                         request.Headers.TransferEncodingChunked = true;
                         transferEncoding = true;
