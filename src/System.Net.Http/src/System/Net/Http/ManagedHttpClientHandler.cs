@@ -43,7 +43,7 @@ namespace System.Net.Http
 
         private bool _inUse = false;
 
-        private ConcurrentDictionary<string, HttpConnection> _connectionPool = new ConcurrentDictionary<string, HttpConnection>();
+        private ConcurrentDictionary<string, ConcurrentBag<HttpConnection>> _connectionPoolTable = new ConcurrentDictionary<string, ConcurrentBag<HttpConnection>>();
 
         private static bool s_trace = false;
 
@@ -1193,15 +1193,21 @@ namespace System.Net.Http
         {
             Uri uri = proxyUri ?? request.RequestUri;
 
-            // Very simple connection "pool"; only 1 connection ever held, and no timeout ever
+            // Simple connection pool.
+            // We never expire connections.
+            // That's unfortunate, but allows for reasonable perf testing for now.
 
             string key = GetConnectionKey(uri);
 
-            HttpConnection connection;
-            if (_connectionPool.TryRemove(key, out connection))
+            ConcurrentBag<HttpConnection> pool;
+            if (_connectionPoolTable.TryGetValue(key, out pool))
             {
-                Trace($"Reusing connection for {key}");
-                return connection;
+                HttpConnection poolConnection;
+                if (pool.TryTake(out poolConnection))
+                {
+                    Trace($"Reusing connection for {key}");
+                    return poolConnection;
+                }
             }
 
             // Connect
@@ -1271,11 +1277,13 @@ namespace System.Net.Http
 
         private void ReleaseConnection(HttpConnection connection)
         {
-            if (!_connectionPool.TryAdd(connection.Key, connection))
+            ConcurrentBag<HttpConnection> pool;
+            if (!_connectionPoolTable.TryGetValue(connection.Key, out pool))
             {
-                // Already have one in the pool, so close this one
-                connection.Close();
+                pool = _connectionPoolTable.GetOrAdd(connection.Key, new ConcurrentBag<HttpConnection>());
             }
+            
+            pool.Add(connection);
         }
 
         private async Task<HttpResponseMessage> SendAsync2(HttpRequestMessage request, Uri proxyUri,
@@ -1289,6 +1297,7 @@ namespace System.Net.Http
             HttpConnection connection = await GetOrCreateConnection(request, proxyUri, cancellationToken);
 
             // Add cookies
+            // TODO: This isn't right, we should do this in the top-level handler
             if (_cookieContainer != null)
             {
                 string cookieHeader = _cookieContainer.GetCookieHeader(request.RequestUri);
