@@ -45,7 +45,7 @@ namespace System.Net.Http
 
         private ConcurrentDictionary<string, ConcurrentBag<HttpConnection>> _connectionPoolTable = new ConcurrentDictionary<string, ConcurrentBag<HttpConnection>>();
 
-        private static bool s_trace = false;
+        private static bool s_trace = true;
 
         private static void Trace(string msg)
         {
@@ -1179,7 +1179,7 @@ namespace System.Net.Http
                 // Called by the response stream when the body has been fully read
 
                 // Put the connection back in the connection pool, for reuse
-                _handler.ReleaseConnection(this);
+                _handler.ReturnConnectionToPool(this);
             }
         }
 
@@ -1205,13 +1205,15 @@ namespace System.Net.Http
                 HttpConnection poolConnection;
                 if (pool.TryTake(out poolConnection))
                 {
-                    Trace($"Reusing connection for {key}");
+                    Trace($"Reusing pooled connection for {key}");
                     return poolConnection;
                 }
             }
 
             // Connect
             TcpClient client;
+
+            Trace($"Creating new connection for {key}");
 
             try
             {
@@ -1275,14 +1277,15 @@ namespace System.Net.Http
             return new HttpConnection(this, key, client, stream, proxyUri);
         }
 
-        private void ReleaseConnection(HttpConnection connection)
+        private void ReturnConnectionToPool(HttpConnection connection)
         {
             ConcurrentBag<HttpConnection> pool;
             if (!_connectionPoolTable.TryGetValue(connection.Key, out pool))
             {
                 pool = _connectionPoolTable.GetOrAdd(connection.Key, new ConcurrentBag<HttpConnection>());
             }
-            
+
+            Trace($"Connection returned to pool for {connection.Key}");
             pool.Add(connection);
         }
 
