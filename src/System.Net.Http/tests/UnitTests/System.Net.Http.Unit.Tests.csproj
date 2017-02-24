@@ -42,9 +42,6 @@
     <Compile Include="$(CommonPath)\System\Net\HttpVersionInternal.cs">
       <Link>ProductionCode\Common\System\Net\HttpVersionInternal.cs</Link>
     </Compile>
-    <Compile Include="$(CommonPath)\System\Net\Http\NoWriteNoSeekStreamContent.cs">
-      <Link>ProductionCode\Common\System\Net\Http\NoWriteNoSeekStreamContent.cs</Link>
-    </Compile>
     <Compile Include="$(CommonPath)\System\Net\Logging\NetEventSource.Common.cs">
       <Link>ProductionCode\Common\System\Net\Logging\NetEventSource.Common.cs</Link>
     </Compile>
