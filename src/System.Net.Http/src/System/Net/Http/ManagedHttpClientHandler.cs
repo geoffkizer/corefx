@@ -47,6 +47,9 @@ namespace System.Net.Http
 
         private static bool s_trace = false;
 
+        // Enabling this for perf testing; probably want to disable it
+        private static bool s_sendKeepAlive = true;
+
         private static void Trace(string msg)
         {
             if (s_trace)
@@ -976,6 +979,13 @@ namespace System.Net.Http
                 }
 
                 request.Headers.Host = hostString;
+
+                if (s_sendKeepAlive)
+                {
+                    // Add Connection: Keep-Alive, for perf comparison
+                    // Temporary
+                    request.Headers.Connection.Add("Keep-Alive");
+                }
 
                 // Add Accept-Encoding for compression
                 // TODO: Move elsewhere
