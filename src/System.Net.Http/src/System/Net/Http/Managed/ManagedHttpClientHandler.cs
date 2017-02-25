@@ -16,7 +16,7 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 
-namespace System.Net.Http
+namespace System.Net.Http.Managed
 {
     public class ManagedHttpClientHandler : HttpMessageHandler
     {

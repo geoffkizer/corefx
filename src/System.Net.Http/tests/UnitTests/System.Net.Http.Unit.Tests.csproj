@@ -279,7 +279,7 @@
     <Compile Include="..\..\src\System\Net\Http\Unix\CurlResponseHeaderReader.cs">
       <Link>ProductionCode\System\Net\Http\CurlResponseHeaderReader.cs</Link>
     </Compile>
-    <Compile Include="..\..\src\System\Net\Http\ManagedHttpClientHandler.cs">
+    <Compile Include="..\..\src\System\Net\Http\Managed\ManagedHttpClientHandler.cs">
       <Link>ProductionCode\System\Net\Http\ManagedHttpClientHandler.cs</Link>
     </Compile>
     <Compile Include="Fakes\HttpClientHandler.cs" />
