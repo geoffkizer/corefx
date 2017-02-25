@@ -912,6 +912,33 @@ namespace System.Net.Http
                 return response;
             }
 
+            private async Task WriteHeadersAsync(HttpHeaders headers)
+            {
+                foreach (KeyValuePair<string, IEnumerable<string>> header in headers)
+                {
+                    await WriteStringAsync(header.Key);
+                    await WriteStringAsync(": ");
+
+                    bool first = true;
+                    foreach (string headerValue in header.Value)
+                    {
+                        if (first)
+                        {
+                            first = false;
+                        }
+                        else
+                        {
+                            await WriteStringAsync(", ");
+                        }
+                        await WriteStringAsync(headerValue);
+                    }
+
+                    Debug.Assert(!first, "No values for header??");
+
+                    await WriteStringAsync("\r\n");
+                }
+            }
+
             public async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request,
                 CancellationToken cancellationToken)
             {
@@ -950,11 +977,16 @@ namespace System.Net.Http
 
                 request.Headers.Host = hostString;
 
-#if false       // Compression isn't working
                 // Add Accept-Encoding for compression
-                request.Headers.AcceptEncoding.Add(new StringWithQualityHeaderValue("gzip"));
-                request.Headers.AcceptEncoding.Add(new StringWithQualityHeaderValue("deflate"));
-#endif
+                // TODO: Move elsewhere
+                if ((_handler._automaticDecompression & DecompressionMethods.GZip) != 0)
+                {
+                    request.Headers.AcceptEncoding.Add(new StringWithQualityHeaderValue("gzip"));
+                }
+                if ((_handler._automaticDecompression & DecompressionMethods.Deflate) != 0)
+                {
+                    request.Headers.AcceptEncoding.Add(new StringWithQualityHeaderValue("deflate"));
+                }
 
                 // Start sending the request
                 // TODO: can certainly make this more efficient...
@@ -975,29 +1007,11 @@ namespace System.Net.Http
                 await WriteStringAsync(" HTTP/1.1\r\n");
 
                 // Write headers
-                foreach (KeyValuePair<string, IEnumerable<string>> header in request.Headers)
-                {
-                    foreach (string headerValue in header.Value)
-                    {
-                        await WriteStringAsync(header.Key);
-                        await WriteStringAsync(": ");
-                        await WriteStringAsync(headerValue);
-                        await WriteStringAsync("\r\n");
-                    }
-                }
+                await WriteHeadersAsync(request.Headers);
 
                 if (requestContent != null)
                 {
-                    foreach (KeyValuePair<string, IEnumerable<string>> header in requestContent.Headers)
-                    {
-                        foreach (string headerValue in header.Value)
-                        {
-                            await WriteStringAsync(header.Key);
-                            await WriteStringAsync(": ");
-                            await WriteStringAsync(headerValue);
-                            await WriteStringAsync("\r\n");
-                        }
-                    }
+                    await WriteHeadersAsync(requestContent.Headers);
                 }
 
                 // Also write out a Content-Length: 0 header if no request body, and this is a method that can have one.
