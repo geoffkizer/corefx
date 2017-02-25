@@ -5,6 +5,7 @@
 using System.Collections.Generic;
 using System.Globalization;
 using System.Net.Http.Headers;
+using System.Net.Http.Managed;
 using System.Net.Security;
 using System.Security.Authentication;
 using System.Security.Cryptography.X509Certificates;
