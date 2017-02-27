@@ -43,7 +43,7 @@ namespace System.Net.Http.Managed
 
         private bool _inUse = false;
 
-        private ConcurrentDictionary<string, ConcurrentBag<HttpConnection>> _connectionPoolTable = new ConcurrentDictionary<string, ConcurrentBag<HttpConnection>>();
+        private ConcurrentDictionary<HttpConnectionKey, ConcurrentBag<HttpConnection>> _connectionPoolTable = new ConcurrentDictionary<HttpConnectionKey, ConcurrentBag<HttpConnection>>();
 
         private static StringWithQualityHeaderValue s_gzipHeaderValue = new StringWithQualityHeaderValue("gzip");
         private static StringWithQualityHeaderValue s_deflateHeaderValue = new StringWithQualityHeaderValue("deflate");
@@ -308,7 +308,7 @@ namespace System.Net.Http.Managed
             private const int BufferSize = 4096;
 
             ManagedHttpClientHandler _handler;
-            private string _key;
+            private HttpConnectionKey _key;
             private TcpClient _client;
             private Stream _stream;
             private Uri _proxyUri;
@@ -567,7 +567,7 @@ namespace System.Net.Http.Managed
                 }
             }
 
-            public HttpConnection(ManagedHttpClientHandler handler, string key, TcpClient client, Stream stream, Uri proxyUri)
+            public HttpConnection(ManagedHttpClientHandler handler, HttpConnectionKey key, TcpClient client, Stream stream, Uri proxyUri)
             {
                 _handler = handler;
                 _key = key;
@@ -586,7 +586,7 @@ namespace System.Net.Http.Managed
                 _readOffset = 0;
             }
 
-            public string Key
+            public HttpConnectionKey Key
             {
                 get { return _key; }
             }
@@ -1058,10 +1058,23 @@ namespace System.Net.Http.Managed
             }
         }
 
-        private string GetConnectionKey(Uri uri)
+        private struct HttpConnectionKey
         {
-            // Probably should revisit this
-            return uri.Scheme + ":" + uri.Host + ":" + uri.Port;
+            public readonly string Scheme;
+            public readonly string Host;
+            public readonly int Port;
+
+            public HttpConnectionKey(Uri uri)
+            {
+                Scheme = uri.Scheme;
+                Host = uri.Host;
+                Port = uri.Port;
+            }
+
+            public override int GetHashCode()
+            {
+                return Scheme.GetHashCode() ^ Host.GetHashCode() ^ Port.GetHashCode();
+            }
         }
 
         private async Task<HttpConnection> GetOrCreateConnection(HttpRequestMessage request, Uri proxyUri, CancellationToken cancellationToken)
@@ -1072,7 +1085,7 @@ namespace System.Net.Http.Managed
             // We never expire connections.
             // That's unfortunate, but allows for reasonable perf testing for now.
 
-            string key = GetConnectionKey(uri);
+            HttpConnectionKey key = new HttpConnectionKey(uri);
 
             ConcurrentBag<HttpConnection> pool;
             if (_connectionPoolTable.TryGetValue(key, out pool))
@@ -1593,9 +1606,4 @@ namespace System.Net.Http.Managed
             WriteAsync(buffer, offset, count, CancellationToken.None).Wait();
         }
     }
-
-
-
-
-
 }
