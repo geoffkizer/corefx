@@ -319,118 +319,6 @@ namespace System.Net.Http.Managed
             private int _readOffset;
             private int _readLength;
 
-            // This is based off NoWriteNoSeekStreamContent
-            private sealed class ResponseContent : HttpContent
-            {
-                private readonly CancellationToken _cancellationToken;
-                private Stream _content;
-                private bool _contentConsumed;
-
-                public ResponseContent(CancellationToken cancellationToken)
-                {
-                    _cancellationToken = cancellationToken;
-                }
-
-                public void SetStream(Stream content)
-                {
-                    Debug.Assert(content != null);
-                    Debug.Assert(content.CanRead);
-                    Debug.Assert(!content.CanWrite);
-                    Debug.Assert(!content.CanSeek);
-
-                    _content = content;
-                }
-
-                protected override Task SerializeToStreamAsync(Stream stream, TransportContext context)
-                {
-                    Debug.Assert(stream != null);
-
-                    if (_contentConsumed)
-                    {
-                        throw new InvalidOperationException(SR.net_http_content_stream_already_read);
-                    }
-                    _contentConsumed = true;
-
-                    const int BufferSize = 8192;
-                    Task copyTask = _content.CopyToAsync(stream, BufferSize, _cancellationToken);
-                    if (copyTask.IsCompleted)
-                    {
-                        try { _content.Dispose(); } catch { } // same as StreamToStreamCopy behavior
-                    }
-                    else
-                    {
-                        copyTask = copyTask.ContinueWith((t, s) =>
-                        {
-                            try { ((Stream)s).Dispose(); } catch { }
-                            t.GetAwaiter().GetResult();
-                        }, _content, CancellationToken.None, TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);
-                    }
-                    return copyTask;
-                }
-
-                protected internal override bool TryComputeLength(out long length)
-                {
-                    length = 0;
-                    return false;
-                }
-
-                protected override void Dispose(bool disposing)
-                {
-                    if (disposing)
-                    {
-                        _content.Dispose();
-                    }
-                    base.Dispose(disposing);
-                }
-
-                protected override Task<Stream> CreateContentReadStreamAsync() => Task.FromResult<Stream>(_content);
-            }
-
-            private abstract class ReadOnlyStream : Stream
-            {
-                public override bool CanRead => true;
-
-                public override bool CanSeek => false;
-
-                public override bool CanWrite => false;
-
-                public override long Length
-                {
-                    get { throw new NotSupportedException(); }
-                }
-
-                public override long Position
-                {
-                    get { throw new NotSupportedException(); }
-                    set { throw new NotSupportedException(); }
-                }
-
-                public override void Flush()
-                {
-                    throw new NotSupportedException();
-                }
-
-                public override long Seek(long offset, SeekOrigin origin)
-                {
-                    throw new NotSupportedException();
-                }
-
-                public override void SetLength(long value)
-                {
-                    throw new NotSupportedException();
-                }
-
-                public override void Write(byte[] buffer, int offset, int count)
-                {
-                    throw new NotSupportedException();
-                }
-
-                public override int Read(byte[] buffer, int offset, int count)
-                {
-                    return ReadAsync(buffer, offset, count, CancellationToken.None).Result;
-                }
-            }
-
             private sealed class ContentLengthResponseStream : ReadOnlyStream
             {
                 private HttpConnection _connection;
@@ -613,51 +501,6 @@ namespace System.Net.Http.Managed
                 }
             }
 
-            private abstract class WriteOnlyStream : Stream
-            {
-                public override bool CanRead => false;
-
-                public override bool CanSeek => false;
-
-                public override bool CanWrite => true;
-
-                public override long Length
-                {
-                    get { throw new NotSupportedException(); }
-                }
-
-                public override long Position
-                {
-                    get { throw new NotSupportedException(); }
-                    set { throw new NotSupportedException(); }
-                }
-
-                public override void Flush()
-                {
-                    throw new NotSupportedException();
-                }
-
-                public override long Seek(long offset, SeekOrigin origin)
-                {
-                    throw new NotSupportedException();
-                }
-
-                public override void SetLength(long value)
-                {
-                    throw new NotSupportedException();
-                }
-
-                public override int Read(byte[] buffer, int offset, int count)
-                {
-                    throw new NotSupportedException();
-                }
-
-                public override void Write(byte[] buffer, int offset, int count)
-                {
-                    WriteAsync(buffer, offset, count, CancellationToken.None).Wait();
-                }
-            }
-
             private sealed class ChunkedEncodingRequestStream : WriteOnlyStream
             {
                 private HttpConnection _connection;
@@ -804,7 +647,7 @@ namespace System.Net.Http.Managed
                 if (b != (byte)'\n')
                     throw new HttpRequestException("Saw CR without LF while parsing response line");
 
-                var responseContent = new ResponseContent(CancellationToken.None);
+                var responseContent = new NetworkContent(CancellationToken.None);
 
                 // Parse headers
                 StringBuilder sb = new StringBuilder();
@@ -1581,4 +1424,170 @@ namespace System.Net.Http.Managed
 #endregion Private
 
     }
+
+
+    // Stuff below here is stuff that I think will be shared.
+    // It should end up in another file somewhere.
+
+    // This is based off NoWriteNoSeekStreamContent
+    internal sealed class NetworkContent : HttpContent
+    {
+        private readonly CancellationToken _cancellationToken;
+        private Stream _content;
+        private bool _contentConsumed;
+
+        public NetworkContent(CancellationToken cancellationToken)
+        {
+            _cancellationToken = cancellationToken;
+        }
+
+        public void SetStream(Stream content)
+        {
+            Debug.Assert(content != null);
+            Debug.Assert(content.CanRead);
+            Debug.Assert(!content.CanWrite);
+            Debug.Assert(!content.CanSeek);
+
+            _content = content;
+        }
+
+        protected override Task SerializeToStreamAsync(Stream stream, TransportContext context)
+        {
+            Debug.Assert(stream != null);
+
+            if (_contentConsumed)
+            {
+                throw new InvalidOperationException(SR.net_http_content_stream_already_read);
+            }
+            _contentConsumed = true;
+
+            const int BufferSize = 8192;
+            Task copyTask = _content.CopyToAsync(stream, BufferSize, _cancellationToken);
+            if (copyTask.IsCompleted)
+            {
+                try { _content.Dispose(); } catch { } // same as StreamToStreamCopy behavior
+            }
+            else
+            {
+                copyTask = copyTask.ContinueWith((t, s) =>
+                {
+                    try { ((Stream)s).Dispose(); } catch { }
+                    t.GetAwaiter().GetResult();
+                }, _content, CancellationToken.None, TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);
+            }
+            return copyTask;
+        }
+
+        protected internal override bool TryComputeLength(out long length)
+        {
+            length = 0;
+            return false;
+        }
+
+        protected override void Dispose(bool disposing)
+        {
+            if (disposing)
+            {
+                _content.Dispose();
+            }
+            base.Dispose(disposing);
+        }
+
+        protected override Task<Stream> CreateContentReadStreamAsync() => Task.FromResult<Stream>(_content);
+    }
+
+    internal abstract class ReadOnlyStream : Stream
+    {
+        public override bool CanRead => true;
+
+        public override bool CanSeek => false;
+
+        public override bool CanWrite => false;
+
+        public override long Length
+        {
+            get { throw new NotSupportedException(); }
+        }
+
+        public override long Position
+        {
+            get { throw new NotSupportedException(); }
+            set { throw new NotSupportedException(); }
+        }
+
+        public override void Flush()
+        {
+            throw new NotSupportedException();
+        }
+
+        public override long Seek(long offset, SeekOrigin origin)
+        {
+            throw new NotSupportedException();
+        }
+
+        public override void SetLength(long value)
+        {
+            throw new NotSupportedException();
+        }
+
+        public override void Write(byte[] buffer, int offset, int count)
+        {
+            throw new NotSupportedException();
+        }
+
+        public override int Read(byte[] buffer, int offset, int count)
+        {
+            return ReadAsync(buffer, offset, count, CancellationToken.None).Result;
+        }
+    }
+
+    internal abstract class WriteOnlyStream : Stream
+    {
+        public override bool CanRead => false;
+
+        public override bool CanSeek => false;
+
+        public override bool CanWrite => true;
+
+        public override long Length
+        {
+            get { throw new NotSupportedException(); }
+        }
+
+        public override long Position
+        {
+            get { throw new NotSupportedException(); }
+            set { throw new NotSupportedException(); }
+        }
+
+        public override void Flush()
+        {
+            throw new NotSupportedException();
+        }
+
+        public override long Seek(long offset, SeekOrigin origin)
+        {
+            throw new NotSupportedException();
+        }
+
+        public override void SetLength(long value)
+        {
+            throw new NotSupportedException();
+        }
+
+        public override int Read(byte[] buffer, int offset, int count)
+        {
+            throw new NotSupportedException();
+        }
+
+        public override void Write(byte[] buffer, int offset, int count)
+        {
+            WriteAsync(buffer, offset, count, CancellationToken.None).Wait();
+        }
+    }
+
+
+
+
+
 }
