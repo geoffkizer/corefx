@@ -813,15 +813,18 @@ namespace System.Net.Http.Managed
                     }
                 }
 
-                // Add Host header
-                Uri uri = request.RequestUri;
-                string hostString = uri.Host;
-                if (!uri.IsDefaultPort)
+                // Add Host header, if not present
+                if (request.Headers.Host == null)
                 {
-                    hostString += ":" + uri.Port.ToString();
-                }
+                    Uri uri = request.RequestUri;
+                    string hostString = uri.Host;
+                    if (!uri.IsDefaultPort)
+                    {
+                        hostString += ":" + uri.Port.ToString();
+                    }
 
-                request.Headers.Host = hostString;
+                    request.Headers.Host = hostString;
+                }
 
                 if (s_sendKeepAlive)
                 {
