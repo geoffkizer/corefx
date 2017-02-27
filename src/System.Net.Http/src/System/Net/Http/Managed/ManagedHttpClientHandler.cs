@@ -314,6 +314,7 @@ namespace System.Net.Http.Managed
             private Uri _proxyUri;
 
             private Encoder _encoder;
+            private StringBuilder _sb;
 
             private byte[] _writeBuffer;
             private int _writeOffset;
@@ -575,6 +576,7 @@ namespace System.Net.Http.Managed
                 _proxyUri = proxyUri;
 
                 _encoder = new UTF8Encoding(true).GetEncoder();
+                _sb = new StringBuilder();
 
                 _writeBuffer = new byte[BufferSize];
                 _writeOffset = 0;
@@ -653,7 +655,7 @@ namespace System.Net.Http.Managed
                 var responseContent = new NetworkContent(CancellationToken.None);
 
                 // Parse headers
-                StringBuilder sb = new StringBuilder();
+                _sb.Clear();
                 b = await ReadByteAsync();
                 while (true)
                 {
@@ -668,13 +670,13 @@ namespace System.Net.Http.Managed
                     // Get header name
                     while (b != (byte)':')
                     {
-                        sb.Append((char)b);
+                        _sb.Append((char)b);
                         b = await ReadByteAsync();
                     }
 
-                    string headerName = sb.ToString();
+                    string headerName = _sb.ToString();
 
-                    sb.Clear();
+                    _sb.Clear();
 
                     // Get header value
                     b = await ReadByteAsync();
@@ -685,14 +687,14 @@ namespace System.Net.Http.Managed
 
                     while (b != (byte)'\r')
                     {
-                        sb.Append((char)b);
+                        _sb.Append((char)b);
                         b = await ReadByteAsync();
                     }
 
                     if (await ReadByteAsync() != (byte)'\n')
                         throw new HttpRequestException("Saw CR without LF while parsing headers");
 
-                    string headerValue = sb.ToString();
+                    string headerValue = _sb.ToString();
 
                     // TryAddWithoutValidation will fail if the header name has trailing whitespace.
                     // So, trim it here.
@@ -710,7 +712,7 @@ namespace System.Net.Http.Managed
                         }
                     }
 
-                    sb.Clear();
+                    _sb.Clear();
 
                     b = await ReadByteAsync();
                 }
