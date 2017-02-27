@@ -45,6 +45,9 @@ namespace System.Net.Http.Managed
 
         private ConcurrentDictionary<string, ConcurrentBag<HttpConnection>> _connectionPoolTable = new ConcurrentDictionary<string, ConcurrentBag<HttpConnection>>();
 
+        private static StringWithQualityHeaderValue s_gzipHeaderValue = new StringWithQualityHeaderValue("gzip");
+        private static StringWithQualityHeaderValue s_deflateHeaderValue = new StringWithQualityHeaderValue("deflate");
+
         private static bool s_trace = false;
 
         // Enabling this for perf testing; probably want to disable it
@@ -837,11 +840,11 @@ namespace System.Net.Http.Managed
                 // TODO: Move elsewhere
                 if ((_handler._automaticDecompression & DecompressionMethods.GZip) != 0)
                 {
-                    request.Headers.AcceptEncoding.Add(new StringWithQualityHeaderValue("gzip"));
+                    request.Headers.AcceptEncoding.Add(s_gzipHeaderValue);
                 }
                 if ((_handler._automaticDecompression & DecompressionMethods.Deflate) != 0)
                 {
-                    request.Headers.AcceptEncoding.Add(new StringWithQualityHeaderValue("deflate"));
+                    request.Headers.AcceptEncoding.Add(s_deflateHeaderValue);
                 }
 
                 // Start sending the request
