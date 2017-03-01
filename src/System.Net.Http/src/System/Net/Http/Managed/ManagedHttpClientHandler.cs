@@ -313,7 +313,6 @@ namespace System.Net.Http.Managed
             private Stream _stream;
             private Uri _proxyUri;
 
-            private Encoder _encoder;
             private StringBuilder _sb;
 
             private byte[] _writeBuffer;
@@ -575,7 +574,6 @@ namespace System.Net.Http.Managed
                 _stream = stream;
                 _proxyUri = proxyUri;
 
-                _encoder = new UTF8Encoding(true).GetEncoder();
                 _sb = new StringBuilder();
 
                 _writeBuffer = new byte[BufferSize];
@@ -950,40 +948,44 @@ namespace System.Net.Http.Managed
                 }
             }
 
-            // Not sure this is the most efficient way, consider...
-            // Given that it's UTF8, maybe we should implement this ourselves.
-            private unsafe bool EncodeString(string s, ref int charOffset)
+            private ValueTask<bool> WriteCharAsync(char c)
             {
-                int charsUsed;
-                int bytesUsed;
-                bool done;
-
-                fixed (char * c = s)
-                fixed (byte * b = &_writeBuffer[_writeOffset])
+                if ((c & 0xFF80) != 0)
                 {
-                    _encoder.Convert(c + charOffset, s.Length - charOffset, b, BufferSize - _writeOffset, true, out charsUsed, out bytesUsed, out done);
+                    throw new HttpRequestException("Non-ASCII characters found");
                 }
 
-                charOffset += charsUsed;
-                _writeOffset += bytesUsed;
+                return WriteByteAsync((byte)c);
+            }
 
-                return done;
+            private ValueTask<bool> WriteByteAsync(byte b)
+            {
+                if (_writeOffset < BufferSize)
+                {
+                    _writeBuffer[_writeOffset++] = b;
+                    return new ValueTask<bool>(true);
+                }
+
+                return new ValueTask<bool>(WriteByteSlowAsync(b));
+            }
+
+            private async Task<bool> WriteByteSlowAsync(byte b)
+            {
+                await _stream.WriteAsync(_writeBuffer, 0, BufferSize);
+
+                _writeBuffer[0] = b;
+                _writeOffset = 1;
+
+                return true;
             }
 
             // TODO: Avoid this if/when we can, since UTF8 encoding sucks
             // TODO: Consider using ValueTask here
             private async Task WriteStringAsync(string s)
             {
-                int charOffset = 0;
-                while (true)
+                for (int i = 0; i < s.Length; i++)
                 {
-                    if (EncodeString(s, ref charOffset))
-                    {
-                        return;
-                    }
-
-                    // TODO: Flow cancellation
-                    await FlushAsync(CancellationToken.None);
+                    await WriteCharAsync(s[i]);
                 }
             }
 
@@ -999,7 +1001,7 @@ namespace System.Net.Http.Managed
                 _writeOffset = 0;
             }
 
-            private async Task<byte> DoReadAndGetByteAsync()
+            private async Task<byte> ReadByteSlowAsync()
             {
                 _readLength = await _stream.ReadAsync(_readBuffer, 0, BufferSize);
                 if (_readLength == 0)
@@ -1020,7 +1022,7 @@ namespace System.Net.Http.Managed
                     return new ValueTask<byte>(_readBuffer[_readOffset++]);
                 }
 
-                return new ValueTask<byte>(DoReadAndGetByteAsync());
+                return new ValueTask<byte>(ReadByteSlowAsync());
             }
 
             private async Task<int> ReadAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken)
