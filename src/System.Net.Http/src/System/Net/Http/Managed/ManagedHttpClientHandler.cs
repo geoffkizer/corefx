@@ -773,7 +773,8 @@ namespace System.Net.Http.Managed
                 foreach (KeyValuePair<string, IEnumerable<string>> header in headers)
                 {
                     await WriteStringAsync(header.Key);
-                    await WriteStringAsync(": ");
+                    await WriteCharAsync(':');
+                    await WriteCharAsync(' ');
 
                     bool first = true;
                     foreach (string headerValue in header.Value)
@@ -784,14 +785,16 @@ namespace System.Net.Http.Managed
                         }
                         else
                         {
-                            await WriteStringAsync(", ");
+                            await WriteCharAsync(',');
+                            await WriteCharAsync(' ');
                         }
                         await WriteStringAsync(headerValue);
                     }
 
                     Debug.Assert(!first, "No values for header??");
 
-                    await WriteStringAsync("\r\n");
+                    await WriteCharAsync('\r');
+                    await WriteCharAsync('\n');
                 }
             }
 
@@ -859,7 +862,7 @@ namespace System.Net.Http.Managed
 
                 // Write request line
                 await WriteStringAsync(request.Method.Method);
-                await WriteStringAsync(" ");
+                await WriteCharAsync(' ');
 
                 if (_proxyUri != null)
                 {
@@ -870,7 +873,17 @@ namespace System.Net.Http.Managed
                     await WriteStringAsync(request.RequestUri.PathAndQuery);
                 }
 
-                await WriteStringAsync(" HTTP/1.1\r\n");
+                await WriteCharAsync(' ');
+                await WriteCharAsync('H');
+                await WriteCharAsync('T');
+                await WriteCharAsync('T');
+                await WriteCharAsync('P');
+                await WriteCharAsync('/');
+                await WriteCharAsync('1');
+                await WriteCharAsync('.');
+                await WriteCharAsync('1');
+                await WriteCharAsync('\r');
+                await WriteCharAsync('\n');
 
                 // Write headers
                 await WriteHeadersAsync(request.Headers);
@@ -881,6 +894,8 @@ namespace System.Net.Http.Managed
                 }
 
                 // Also write out a Content-Length: 0 header if no request body, and this is a method that can have one.
+                // TODO: revisit this; should set this as a header and write out as always
+                // Actually, under what circumstances can requestContent be null?  Consider...
                 if (requestContent == null)
                 {
                     if (request.Method != HttpMethod.Get &&
@@ -891,7 +906,8 @@ namespace System.Net.Http.Managed
                 }
 
                 // CRLF for end of headers.
-                await WriteStringAsync("\r\n");
+                await WriteCharAsync('\r');
+                await WriteCharAsync('\n');
 
                 // Flush headers.  We need to do this if we have no body anyway.
                 // TODO: Don't think we should always do this, consider...
