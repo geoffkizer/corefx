@@ -43,6 +43,7 @@
     <Compile Include="System\Net\NetworkInformation\NetEventSource.NetworkInformation.cs" />
     <Compile Include="System\Net\NetworkInformation\NetworkAvailabilityEventArgs.cs" />
     <Compile Include="System\Net\NetworkInformation\NetworkChangeDelegates.cs" />
+    <Compile Include="System\Net\NetworkInformation\NetworkInformationException.cs" />
     <Compile Include="System\Net\NetworkInformation\NetworkInterface.cs" />
     <Compile Include="System\Net\NetworkInformation\NetworkInterfaceComponent.cs" />
     <Compile Include="System\Net\NetworkInformation\NetworkInterfaceType.cs" />
@@ -50,6 +51,7 @@
     <Compile Include="System\Net\NetworkInformation\PhysicalAddress.cs" />
     <Compile Include="System\Net\NetworkInformation\PrefixOrigin.cs" />
     <Compile Include="System\Net\NetworkInformation\ScopeLevel.cs" />
+    <Compile Include="System\Net\NetworkInformation\StartIPOptions.cs" />
     <Compile Include="System\Net\NetworkInformation\SuffixOrigin.cs" />
     <Compile Include="System\Net\NetworkInformation\TcpConnection.cs" />
     <Compile Include="System\Net\NetworkInformation\TcpState.cs" />
@@ -61,18 +63,9 @@
     <Compile Include="$(CommonPath)\System\NotImplemented.cs">
       <Link>Common\System\NotImplemented.cs</Link>
     </Compile>
-    <Compile Include="$(CommonPath)\System\Net\NetworkInformation\HostInformation.cs">
-      <Link>Common\System\Net\NetworkInformation\HostInformation.cs</Link>
-    </Compile>
-    <Compile Include="$(CommonPath)\System\Net\NetworkInformation\NetworkInformationException.cs">
-      <Link>Common\System\Net\NetworkInformation\NetworkInformationException.cs</Link>
-    </Compile>
   </ItemGroup>
   <ItemGroup Condition="'$(TargetsWindows)' == 'true'">
     <!-- Logging -->
-    <Compile Include="$(CommonPath)\System\Net\Shims\TraceSource.cs">
-      <Link>Common\System\Net\Shims\TraceSource.cs</Link>
-    </Compile>
     <Compile Include="$(CommonPath)\System\Net\Logging\DebugThreadTracking.cs">
       <Link>Common\System\Net\Logging\DebugThreadTracking.cs</Link>
     </Compile>
@@ -124,9 +117,6 @@
       <Link>Common\System\Net\DebugSafeHandleMinusOneIsInvalid.cs</Link>
     </Compile>
     <!-- System.Net.Internals common -->
-    <Compile Include="$(CommonPath)\System\Net\Sockets\SocketType.cs">
-      <Link>Common\System\Net\Sockets\SocketType.cs</Link>
-    </Compile>
     <!-- System.Net common -->
     <Compile Include="$(CommonPath)\System\Net\ContextAwareResult.cs">
       <Link>Common\System\Net\ContextAwareResult.cs</Link>
@@ -163,9 +153,6 @@
     </Compile>
     <Compile Include="$(CommonPath)\System\Net\SocketAddressPal.Windows.cs">
       <Link>Common\System\Net\SocketAddressPal.Windows.cs</Link>
-    </Compile>
-    <Compile Include="$(CommonPath)\System\Net\NetworkInformation\StartIPOptions.cs">
-      <Link>Common\System\Net\NetworkInformation\StartIPOptions.cs</Link>
     </Compile>
     <Compile Include="$(CommonPath)\System\Net\NetworkInformation\HostInformationPal.Windows.cs">
       <Link>Common\System\Net\NetworkInformation\HostInformationPal.Windows.cs</Link>
@@ -403,6 +390,9 @@
   </ItemGroup>
   <ItemGroup Condition="'$(TargetsLinux)' == 'true'">
     <Reference Include="System.Threading.Timer" />
+  </ItemGroup>
+  <ItemGroup>
+    <Folder Include="Common\System\Net\Sockets\" />
   </ItemGroup>
   <Import Project="$([MSBuild]::GetDirectoryNameOfFileAbove($(MSBuildThisFileDirectory), dir.targets))\dir.targets" />
 </Project>

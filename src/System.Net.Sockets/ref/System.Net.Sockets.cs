@@ -5,6 +5,10 @@
 // Changes to this file must follow the http://aka.ms/api-review process.
 // ------------------------------------------------------------------------------
 
+// Type forwards
+[assembly: System.Runtime.CompilerServices.TypeForwardedTo(typeof(System.Net.Sockets.SocketType))]
+[assembly: System.Runtime.CompilerServices.TypeForwardedTo(typeof(System.Net.Sockets.ProtocolType))]
+[assembly: System.Runtime.CompilerServices.TypeForwardedTo(typeof(System.Net.Sockets.ProtocolFamily))]
 
 namespace System.Net.Sockets
 {
@@ -117,68 +121,6 @@ namespace System.Net.Sockets
         public override void SetLength(long value) { }
         public override void Write(byte[] buffer, int offset, int size) { }
         public override System.Threading.Tasks.Task WriteAsync(byte[] buffer, int offset, int size, System.Threading.CancellationToken cancellationToken) { throw null; }
-    }
-    public enum ProtocolFamily
-    {
-        AppleTalk = 16,
-        Atm = 22,
-        Banyan = 21,
-        Ccitt = 10,
-        Chaos = 5,
-        Cluster = 24,
-        DataKit = 9,
-        DataLink = 13,
-        DecNet = 12,
-        Ecma = 8,
-        FireFox = 19,
-        HyperChannel = 15,
-        Ieee12844 = 25,
-        ImpLink = 3,
-        InterNetwork = 2,
-        InterNetworkV6 = 23,
-        Ipx = 6,
-        Irda = 26,
-        Iso = 7,
-        Lat = 14,
-        Max = 29,
-        NetBios = 17,
-        NetworkDesigners = 28,
-        NS = 6,
-        Osi = 7,
-        Pup = 4,
-        Sna = 11,
-        Unix = 1,
-        Unknown = -1,
-        Unspecified = 0,
-        VoiceView = 18,
-    }
-    public enum ProtocolType
-    {
-        Ggp = 3,
-        Icmp = 1,
-        IcmpV6 = 58,
-        Idp = 22,
-        Igmp = 2,
-        IP = 0,
-        IPSecAuthenticationHeader = 51,
-        IPSecEncapsulatingSecurityPayload = 50,
-        IPv4 = 4,
-        IPv6 = 41,
-        IPv6DestinationOptions = 60,
-        IPv6FragmentHeader = 44,
-        IPv6HopByHopOptions = 0,
-        IPv6NoNextHeader = 59,
-        IPv6RoutingHeader = 43,
-        Ipx = 1000,
-        ND = 77,
-        Pup = 12,
-        Raw = 255,
-        Spx = 1256,
-        SpxII = 1257,
-        Tcp = 6,
-        Udp = 17,
-        Unknown = -1,
-        Unspecified = 0,
     }
     public enum SelectMode
     {
@@ -514,15 +456,6 @@ namespace System.Net.Sockets
         public static System.Threading.Tasks.Task<int> SendAsync(this System.Net.Sockets.Socket socket, System.ArraySegment<byte> buffer, System.Net.Sockets.SocketFlags socketFlags) { throw null; }
         public static System.Threading.Tasks.Task<int> SendAsync(this System.Net.Sockets.Socket socket, System.Collections.Generic.IList<System.ArraySegment<byte>> buffers, System.Net.Sockets.SocketFlags socketFlags) { throw null; }
         public static System.Threading.Tasks.Task<int> SendToAsync(this System.Net.Sockets.Socket socket, System.ArraySegment<byte> buffer, System.Net.Sockets.SocketFlags socketFlags, System.Net.EndPoint remoteEP) { throw null; }
-    }
-    public enum SocketType
-    {
-        Dgram = 2,
-        Raw = 3,
-        Rdm = 4,
-        Seqpacket = 5,
-        Stream = 1,
-        Unknown = -1,
     }
     public partial class TcpClient : System.IDisposable
     {

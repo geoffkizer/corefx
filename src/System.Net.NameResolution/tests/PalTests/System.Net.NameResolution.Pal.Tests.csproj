@@ -23,7 +23,6 @@
     <Compile Include="..\..\src\System\Net\IPHostEntry.cs">
       <Link>ProductionCode\System\Net\IPHostEntry.cs</Link>
     </Compile>
-
   </ItemGroup>
   <ItemGroup>
     <Compile Include="NameResolutionPalTests.cs" />
@@ -33,12 +32,6 @@
     </Compile>
     <Compile Include="..\..\src\System\Net\NameResolutionUtilities.cs">
       <Link>ProductionCode\System\Net\NameResolutionUtilities.cs</Link>
-    </Compile>
-    <Compile Include="$(CommonPath)\System\Net\Sockets\ProtocolType.cs" Condition="'$(OSGroup)' == 'Windows_NT'">
-      <Link>Common\System\Net\Sockets\ProtocolType.cs</Link>
-    </Compile>
-    <Compile Include="$(CommonPath)\System\Net\Sockets\SocketType.cs" Condition="'$(OSGroup)' == 'Windows_NT'">
-      <Link>Common\System\Net\Sockets\SocketType.cs</Link>
     </Compile>
     <Compile Include="$(CommonPath)\System\Net\IPEndPointStatics.cs">
       <Link>Common\System\Net\IPEndPointStatics.cs</Link>
@@ -115,9 +108,6 @@
     <Compile Include="$(CommonPath)\Interop\Windows\Winsock\Interop.WSASocketW.cs">
       <Link>Interop\Windows\Winsock\Interop.WSASocketW.cs</Link>
     </Compile>
-    <Compile Include="$(CommonPath)\System\Net\Sockets\ProtocolFamily.cs">
-      <Link>Common\System\Net\Sockets\ProtocolFamily.cs</Link>
-    </Compile>
     <Compile Include="$(CommonPath)\Interop\Windows\Winsock\SafeFreeAddrInfo.cs">
       <Link>Interop\Windows\Winsock\SafeFreeAddrInfo.cs</Link>
     </Compile>
@@ -174,6 +164,9 @@
     <Compile Include="$(CommonPath)\Interop\Unix\System.Native\Interop.SocketAddress.cs">
       <Link>Interop\Unix\System.Native\Interop.SocketAddress.cs</Link>
     </Compile>
+  </ItemGroup>
+  <ItemGroup>
+    <Folder Include="Common\System\Net\Sockets\" />
   </ItemGroup>
   <Import Project="$([MSBuild]::GetDirectoryNameOfFileAbove($(MSBuildThisFileDirectory), dir.targets))\dir.targets" />
 </Project>

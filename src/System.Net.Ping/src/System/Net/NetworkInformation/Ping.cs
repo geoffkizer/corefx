@@ -367,11 +367,11 @@ namespace System.Net.NetworkInformation
         {
             InitializeSockets();
 
-            if (ip.AddressFamily == AddressFamily.InterNetwork && !SocketProtocolSupportPal.OSSupportsIPv4)
+            if (ip.AddressFamily == AddressFamily.InterNetwork && !Socket.OSSupportsIPv4)
             {
                 throw new NotSupportedException(SR.net_ipv4_not_installed);
             }
-            else if ((ip.AddressFamily == AddressFamily.InterNetworkV6 && !SocketProtocolSupportPal.OSSupportsIPv6))
+            else if ((ip.AddressFamily == AddressFamily.InterNetworkV6 && !Socket.OSSupportsIPv6))
             {
                 throw new NotSupportedException(SR.net_ipv6_not_installed);
             }

@@ -51,6 +51,7 @@
     <Compile Include="System\Net\Sockets\TCPClient.cs" />
     <Compile Include="System\Net\Sockets\TCPListener.cs" />
     <Compile Include="System\Net\Sockets\TransportType.cs" />
+    <Compile Include="System\Net\Sockets\TypeForwards.cs" />
     <Compile Include="System\Net\Sockets\UDPClient.cs" />
     <Compile Include="System\Net\Sockets\UDPClient.netstandard.cs" />
     <Compile Include="System\Net\Sockets\UdpReceiveResult.cs" />
@@ -112,9 +113,6 @@
     <Compile Include="$(CommonPath)\System\Net\TcpValidationHelpers.cs">
       <Link>Common\System\Net\TcpValidationHelpers.cs</Link>
     </Compile>
-    <Compile Include="$(CommonPath)\System\Net\NetworkInformation\StartIPOptions.cs">
-      <Link>Common\System\Net\NetworkInformation\StartIPOptions.cs</Link>
-    </Compile>
     <!-- System.Net.Internals -->
     <Compile Include="$(CommonPath)\System\Net\Internals\IPEndPointExtensions.cs">
       <Link>Common\System\Net\Internals\IPEndPointExtensions.cs</Link>
@@ -124,15 +122,6 @@
     </Compile>
     <Compile Include="$(CommonPath)\System\Net\Internals\SocketExceptionFactory.cs">
       <Link>Common\System\Net\Internals\SocketExceptionFactory.cs</Link>
-    </Compile>
-    <Compile Include="$(CommonPath)\System\Net\Sockets\ProtocolFamily.cs">
-      <Link>Common\System\Net\Sockets\ProtocolFamily.cs</Link>
-    </Compile>
-    <Compile Include="$(CommonPath)\System\Net\Sockets\ProtocolType.cs">
-      <Link>Common\System\Net\Sockets\ProtocolType.cs</Link>
-    </Compile>
-    <Compile Include="$(CommonPath)\System\Net\Sockets\SocketType.cs">
-      <Link>Common\System\Net\Sockets\SocketType.cs</Link>
     </Compile>
     <!-- Common -->
     <Compile Include="$(CommonPath)\System\Threading\Tasks\TaskToApm.cs">

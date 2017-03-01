@@ -40,9 +40,6 @@
   </ItemGroup>
   <!-- Logging -->
   <ItemGroup>
-    <Compile Include="$(CommonPath)\System\Net\Shims\TraceSource.cs">
-      <Link>Common\System\Net\Shims\TraceSource.cs</Link>
-    </Compile>
     <Compile Include="$(CommonPath)\System\Net\Logging\NetEventSource.Common.cs">
       <Link>Common\System\Net\Logging\NetEventSource.Common.cs</Link>
     </Compile>
@@ -70,9 +67,6 @@
     <Compile Include="$(CommonPath)\System\Net\SocketAddressPal.Unix.cs">
       <Link>Common\System\Net\SocketAddressPal.Unix.cs</Link>
     </Compile>
-    <Compile Include="$(CommonPath)\System\Net\SocketProtocolSupportPal.Unix.cs">
-      <Link>Common\System\Net\SocketProtocolSupportPal.Unix.cs</Link>
-    </Compile>
     <Compile Include="$(CommonPath)\System\Net\NetworkInformation\UnixCommandLinePing.cs">
       <Link>Common\System\Net\NetworkInformation\UnixCommandLinePing.cs</Link>
     </Compile>
@@ -99,9 +93,6 @@
     <Compile Include="$(CommonPath)\System\Net\SocketAddressPal.Windows.cs">
       <Link>Common\System\Net\SocketAddressPal.Windows.cs</Link>
     </Compile>
-    <Compile Include="$(CommonPath)\System\Net\SocketProtocolSupportPal.Windows.cs">
-      <Link>Common\System\Net\SocketProtocolSupportPal.Windows.cs</Link>
-    </Compile>
     <Compile Include="$(CommonPath)\Microsoft\Win32\SafeHandles\SafeLocalAllocHandle.cs">
       <Link>Common\Microsoft\Win32\SafeHandles\SafeLocalAllocHandle.cs</Link>
     </Compile>
@@ -123,16 +114,6 @@
     </Compile>
     <Compile Include="$(CommonPath)\Interop\Windows\kernel32\Interop.LocalFree.cs">
       <Link>Common\Interop\Windows\kernel32\Interop.LocalFree.cs</Link>
-    </Compile>
-    <Compile Include="$(CommonPath)\Interop\Windows\Winsock\Interop.closesocket.cs">
-      <Link>Common\Interop\Windows\Winsock\Interop.closesocket.cs</Link>
-    </Compile>
-    <Compile Include="$(CommonPath)\Interop\Windows\Winsock\Interop.WSASocketW.cs">
-      <Link>Common\Interop\Windows\Winsock\Interop.WSASocketW.cs</Link>
-    </Compile>
-    <!-- System.Net.Internals -->
-    <Compile Include="$(CommonPath)\System\Net\Sockets\SocketType.cs">
-      <Link>Common\System\Net\Sockets\SocketType.cs</Link>
     </Compile>
   </ItemGroup>
   <ItemGroup>

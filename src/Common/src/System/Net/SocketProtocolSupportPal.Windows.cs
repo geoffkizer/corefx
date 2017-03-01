@@ -6,9 +6,6 @@ using System.Diagnostics;
 using System.Net.Sockets;
 using System.Runtime.InteropServices;
 using System.Threading;
-#if !SYSTEM_NET_SOCKETS_DLL
-using SocketType = System.Net.Internals.SocketType;
-#endif
 
 namespace System.Net
 {

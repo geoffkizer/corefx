@@ -45,6 +45,9 @@
     <Compile Include="System\Net\IWebProxy.cs" />
     <Compile Include="System\Net\NetEventSource.Primitives.cs" />
     <Compile Include="System\Net\NetworkCredential.cs" />
+    <Compile Include="System\Net\Sockets\ProtocolFamily.cs" />
+    <Compile Include="System\Net\Sockets\ProtocolType.cs" />
+    <Compile Include="System\Net\Sockets\SocketType.cs" />
     <Compile Include="System\Net\TransportContext.cs" />
     <Compile Include="System\Net\SocketException.cs" />
     <Compile Include="System\Net\SocketException.netstandard.cs" />
@@ -53,6 +56,7 @@
     <Compile Include="System\Net\Security\SslPolicyErrors.cs" />
     <Compile Include="System\Net\Sockets\AddressFamily.cs" />
     <Compile Include="System\Net\Sockets\SocketError.cs" />
+    <Compile Include="System\Net\NetworkInformation\HostInformation.cs" />
     <Compile Include="System\Net\NetworkInformation\IPAddressCollection.cs" />
     <Compile Include="System\Net\Cache\RequestCacheLevel.cs" />
     <Compile Include="System\Net\Cache\RequestCachePolicy.cs" />
@@ -79,16 +83,10 @@
     <Compile Include="$(CommonPath)\System\Net\SocketAddress.cs">
       <Link>Common\System\Net\SocketAddress.cs</Link>
     </Compile>
-    <Compile Include="$(CommonPath)\System\Net\NetworkInformation\HostInformation.cs">
-      <Link>Common\System\Net\NetworkInformation\HostInformation.cs</Link>
-    </Compile>
     <Compile Include="$(CommonPath)\System\IO\StringBuilderCache.cs">
       <Link>Common\System\IO\StringBuilderCache.cs</Link>
     </Compile>
     <!-- Logging -->
-    <Compile Include="$(CommonPath)\System\Net\Shims\TraceSource.cs">
-      <Link>Common\System\Net\Shims\TraceSource.cs</Link>
-    </Compile>
     <Compile Include="$(CommonPath)\System\Net\Logging\NetEventSource.Common.cs">
       <Link>Common\System\Net\Logging\NetEventSource.Common.cs</Link>
     </Compile>

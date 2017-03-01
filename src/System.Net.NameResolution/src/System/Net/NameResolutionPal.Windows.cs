@@ -7,7 +7,6 @@ using System.Net.Sockets;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading;
-using ProtocolFamily = System.Net.Internals.ProtocolFamily;
 
 namespace System.Net
 {

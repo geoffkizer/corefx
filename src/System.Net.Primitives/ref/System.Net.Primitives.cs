@@ -371,6 +371,68 @@ namespace System.Net.Sockets
         Unspecified = 0,
         VoiceView = 18,
     }
+    public enum ProtocolFamily
+    {
+        AppleTalk = 16,
+        Atm = 22,
+        Banyan = 21,
+        Ccitt = 10,
+        Chaos = 5,
+        Cluster = 24,
+        DataKit = 9,
+        DataLink = 13,
+        DecNet = 12,
+        Ecma = 8,
+        FireFox = 19,
+        HyperChannel = 15,
+        Ieee12844 = 25,
+        ImpLink = 3,
+        InterNetwork = 2,
+        InterNetworkV6 = 23,
+        Ipx = 6,
+        Irda = 26,
+        Iso = 7,
+        Lat = 14,
+        Max = 29,
+        NetBios = 17,
+        NetworkDesigners = 28,
+        NS = 6,
+        Osi = 7,
+        Pup = 4,
+        Sna = 11,
+        Unix = 1,
+        Unknown = -1,
+        Unspecified = 0,
+        VoiceView = 18,
+    }
+    public enum ProtocolType
+    {
+        Ggp = 3,
+        Icmp = 1,
+        IcmpV6 = 58,
+        Idp = 22,
+        Igmp = 2,
+        IP = 0,
+        IPSecAuthenticationHeader = 51,
+        IPSecEncapsulatingSecurityPayload = 50,
+        IPv4 = 4,
+        IPv6 = 41,
+        IPv6DestinationOptions = 60,
+        IPv6FragmentHeader = 44,
+        IPv6HopByHopOptions = 0,
+        IPv6NoNextHeader = 59,
+        IPv6RoutingHeader = 43,
+        Ipx = 1000,
+        ND = 77,
+        Pup = 12,
+        Raw = 255,
+        Spx = 1256,
+        SpxII = 1257,
+        Tcp = 6,
+        Udp = 17,
+        Unknown = -1,
+        Unspecified = 0,
+    }
     public enum SocketError
     {
         AccessDenied = 10013,
@@ -429,6 +491,15 @@ namespace System.Net.Sockets
         public override int ErrorCode { get { throw null; } }
         public override string Message { get { throw null; } }
         public System.Net.Sockets.SocketError SocketErrorCode { get { throw null; } }
+    }
+    public enum SocketType
+    {
+        Dgram = 2,
+        Raw = 3,
+        Rdm = 4,
+        Seqpacket = 5,
+        Stream = 1,
+        Unknown = -1,
     }
 }
 namespace System.Security.Authentication

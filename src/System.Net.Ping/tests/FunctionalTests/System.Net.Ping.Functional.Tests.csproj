@@ -17,12 +17,10 @@
     <Compile Include="PingOptionsTest.cs" />
     <Compile Include="TestSettings.cs" />
     <Compile Include="UnixPingUtilityTests.cs" />
+    <Compile Include="..\..\src\System\Net\NetworkInformation\UnixCommandLinePing.cs" />
     <!-- System.Net Common -->
     <Compile Include="$(CommonPath)\System\Net\RawSocketPermissions.cs">
       <Link>Common\System\Net\RawSocketPermissions.cs</Link>
-    </Compile>
-    <Compile Include="$(CommonPath)\System\Net\NetworkInformation\UnixCommandLinePing.cs">
-      <Link>Common\System\Net\NetworkInformation\UnixCommandLinePing.cs</Link>
     </Compile>
     <Compile Include="$(CommonTestPath)\System\Net\Capability.RawSocketPermissions.cs">
       <Link>Common\System\Net\Capability.RawSocketPermissions.cs</Link>
