@@ -612,12 +612,13 @@ namespace System.Net.Http.Managed
                     throw new HttpRequestException("could not read response HTTP version");
                 }
 
-                // Don't think this is correct, here and below
                 byte b = await ReadByteAsync();
-                while (b == (byte)' ')
-                    b = await ReadByteAsync();
+                if (b != (byte)' ')
+                {
+                    throw new HttpRequestException("Invalid characters in response");
+                }
 
-                byte status1 = b;
+                byte status1 = await ReadByteAsync();
                 byte status2 = await ReadByteAsync();
                 byte status3 = await ReadByteAsync();
 
@@ -632,23 +633,29 @@ namespace System.Net.Http.Managed
                 response.StatusCode = (HttpStatusCode)status;
 
                 b = await ReadByteAsync();
-                if (b == (byte)' ')
+                if (b != (byte)' ')
                 {
-                    // Eat the rest of the line to CRLF
-                    // TODO: Set reason phrase
-                    b = await ReadByteAsync();
-                    while (b != (byte)'\r')
-                        b = await ReadByteAsync();
-
+                    throw new HttpRequestException("Invalid characters in response line");
                 }
-                else if (b != (byte)'\r')
+
+                _sb.Clear();
+
+                // Eat the rest of the line to CRLF
+                // TODO: Set reason phrase
+                b = await ReadByteAsync();
+                while (b != (byte)'\r')
                 {
-                    throw new HttpRequestException("Could not parse status code");
+                    _sb.Append((char)b);
+                    b = await ReadByteAsync();
                 }
 
                 b = await ReadByteAsync();
                 if (b != (byte)'\n')
+                {
                     throw new HttpRequestException("Saw CR without LF while parsing response line");
+                }
+
+                response.ReasonPhrase = _sb.ToString();
 
                 var responseContent = new NetworkContent(CancellationToken.None);
 
