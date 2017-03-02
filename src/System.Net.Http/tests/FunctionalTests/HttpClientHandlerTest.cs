@@ -1646,6 +1646,7 @@ namespace System.Net.Http.Functional.Tests
         }
 #endif
 
+#if false
         [OuterLoop] // TODO: Issue #11345
         [Theory]
         [MemberData(nameof(Http2Servers))]
@@ -1716,6 +1717,7 @@ namespace System.Net.Http.Functional.Tests
                 }
             }
         }
+#endif
 
         private async Task<Version> SendRequestAndGetRequestVersionAsync(Version requestVersion)
         {
