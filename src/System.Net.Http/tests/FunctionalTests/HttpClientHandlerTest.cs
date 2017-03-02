@@ -1003,7 +1003,7 @@ namespace System.Net.Http.Functional.Tests
                 {
                     Task<HttpResponseMessage> getResponse = client.GetAsync(url);
                     await LoopbackServer.ReadRequestAndSendResponseAsync(server,
-                            $"HTTP/1.1 {statusCode}\r\n" +
+                            $"HTTP/1.1 {statusCode} \r\n" +
                             $"Date: {DateTimeOffset.UtcNow:R}\r\n" +
                             "\r\n");
                     using (HttpResponseMessage response = await getResponse)
