@@ -187,7 +187,7 @@ namespace System.Net.Http.Functional.Tests
                 {
                     Assert.Equal(HttpStatusCode.OK, response.StatusCode);
                     string responseContent = await response.Content.ReadAsStringAsync();
-                    _output.WriteLine(responseContent);
+//                    _output.WriteLine(responseContent);
 
                     if (!useContentLengthUpload && !useChunkedEncodingUpload)
                     {
@@ -233,7 +233,7 @@ namespace System.Net.Http.Functional.Tests
                 {
                     Assert.Equal(HttpStatusCode.OK, response.StatusCode);
                     string responseContent = await response.Content.ReadAsStringAsync();
-                    _output.WriteLine(responseContent);
+//                    _output.WriteLine(responseContent);
 
                     TestHelper.VerifyResponseBody(
                         responseContent,
