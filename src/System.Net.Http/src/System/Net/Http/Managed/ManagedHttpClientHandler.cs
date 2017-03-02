@@ -1061,18 +1061,35 @@ namespace System.Net.Http.Managed
                 // This is called when reading the response body
 
                 int remaining = _readLength - _readOffset;
-                if (remaining == 0)
+                if (remaining > 0)
                 {
-                    await FillAsync();
+                    // We have data in the read buffer.  Return it to the caller.
+                    count = Math.Min(count, remaining);
+                    Buffer.BlockCopy(_readBuffer, _readOffset, buffer, offset, count);
 
-                    remaining = _readLength;
+                    _readOffset += count;
+                    Debug.Assert(_readOffset <= _readLength);
+                    return count;
                 }
 
-                count = count > remaining ? remaining : count;
-                Buffer.BlockCopy(_readBuffer, _readOffset, buffer, offset, count);
+                // No data in read buffer. 
+                if (count < BufferSize / 2)
+                {
+                    // Caller requested a small read size (less than half the read buffer size).
+                    // Read into the buffer, so that we read as much as possible, hopefully.
+                    await FillAsync();
 
-                _readOffset += count;
-                Debug.Assert(_readOffset <= _readLength);
+                    count = Math.Min(count, _readLength);
+                    Buffer.BlockCopy(_readBuffer, _readOffset, buffer, offset, count);
+
+                    _readOffset += count;
+                    Debug.Assert(_readOffset <= _readLength);
+                    return count;
+                }
+
+                // Large read size, and no buffered data.
+                // Do an unbuffered read directly against the underlying stream.
+                count = await _stream.ReadAsync(buffer, offset, count, cancellationToken);
                 return count;
             }
 
