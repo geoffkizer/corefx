@@ -311,6 +311,7 @@ namespace System.Net.Http.Managed
             private HttpConnectionKey _key;
             private TcpClient _client;
             private Stream _stream;
+            private TransportContext _transportContext;
             private Uri _proxyUri;
 
             private StringBuilder _sb;
@@ -566,12 +567,13 @@ namespace System.Net.Http.Managed
                 }
             }
 
-            public HttpConnection(ManagedHttpClientHandler handler, HttpConnectionKey key, TcpClient client, Stream stream, Uri proxyUri)
+            public HttpConnection(ManagedHttpClientHandler handler, HttpConnectionKey key, TcpClient client, Stream stream, TransportContext transportContext, Uri proxyUri)
             {
                 _handler = handler;
                 _key = key;
                 _client = client;
                 _stream = stream;
+                _transportContext = transportContext;
                 _proxyUri = proxyUri;
 
                 _sb = new StringBuilder();
@@ -921,14 +923,14 @@ namespace System.Net.Http.Managed
                     if (transferEncoding)
                     {
                         var stream = new ChunkedEncodingRequestStream(this);
-                        await request.Content.CopyToAsync(stream);
+                        await request.Content.CopyToAsync(stream, _transportContext);
                         await stream.CompleteAsync();
                     }
                     else
                     {
                         // TODO: Is it fine to just pass the underlying stream?
                         // For small content, seems like this should go through buffering
-                        await request.Content.CopyToAsync(_stream);
+                        await request.Content.CopyToAsync(_stream, _transportContext);
                     }
                 }
 
@@ -1199,6 +1201,7 @@ namespace System.Net.Http.Managed
             client.NoDelay = true;
 
             Stream stream = client.GetStream();
+            TransportContext transportContext = null;
 
             if (uri.Scheme == "https")
             {
@@ -1224,6 +1227,7 @@ namespace System.Net.Http.Managed
                     await sslStream.AuthenticateAsClientAsync(uri.Host, null, _sslProtocols, _checkCertificateRevocationList);
 
                     stream = sslStream;
+                    transportContext = sslStream.TransportContext;
                 }
                 catch (AuthenticationException ae)
                 {
@@ -1235,7 +1239,7 @@ namespace System.Net.Http.Managed
                 }
             }
 
-            return new HttpConnection(this, key, client, stream, proxyUri);
+            return new HttpConnection(this, key, client, stream, transportContext, proxyUri);
         }
 
         private void ReturnConnectionToPool(HttpConnection connection)
