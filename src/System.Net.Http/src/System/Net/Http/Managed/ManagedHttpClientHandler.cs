@@ -1229,6 +1229,10 @@ namespace System.Net.Http.Managed
                 {
                     throw new HttpRequestException("could not establish SSL connection", ae);
                 }
+                catch (IOException ie)
+                {
+                    throw new HttpRequestException("could not establish SSL connection", ie);
+                }
             }
 
             return new HttpConnection(this, key, client, stream, proxyUri);
