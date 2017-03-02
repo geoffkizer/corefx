@@ -14,6 +14,9 @@ using System.Threading;
 using System.Threading.Tasks;
 using Xunit;
 
+// Disable these tests for now; ManagedHttpClient does not support these diagnostics.
+#if false
+
 namespace System.Net.Http.Functional.Tests
 {
     using Configuration = System.Net.Test.Common.Configuration;
@@ -299,3 +302,4 @@ namespace System.Net.Http.Functional.Tests
         }
     }
 }
+#endif
