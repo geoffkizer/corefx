@@ -1024,17 +1024,25 @@ namespace System.Net.Http.Managed
                 _writeOffset = 0;
             }
 
+            private async Task FillAsync()
+            {
+                Debug.Assert(_readOffset == _readLength);
+
+                _readOffset = 0;
+                _readLength = await _stream.ReadAsync(_readBuffer, 0, BufferSize);
+            }
+
             private async Task<byte> ReadByteSlowAsync()
             {
-                _readLength = await _stream.ReadAsync(_readBuffer, 0, BufferSize);
+                await FillAsync();
+
                 if (_readLength == 0)
                 {
                     // End of stream
                     throw new IOException("unexpected end of stream");
                 }
 
-                _readOffset = 1;
-                return _readBuffer[0];
+                return _readBuffer[_readOffset++];
             }
 
             // This is probably terribly inefficient
@@ -1055,13 +1063,7 @@ namespace System.Net.Http.Managed
                 int remaining = _readLength - _readOffset;
                 if (remaining == 0)
                 {
-                    _readOffset = 0;
-                    _readLength = await _stream.ReadAsync(_readBuffer, 0, BufferSize, cancellationToken);
-                    if (_readLength == 0)
-                    {
-                        // End of stream, what do we do here?
-                        return 0;
-                    }
+                    await FillAsync();
 
                     remaining = _readLength;
                 }
