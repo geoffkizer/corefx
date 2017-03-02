@@ -1428,6 +1428,13 @@ namespace System.Net.Http.Managed
                 location = new Uri(request.RequestUri, location);
             }
 
+            // Disallow automatic redirection from https to http
+            if (request.RequestUri.Scheme == "https" && location.Scheme == "http")
+            {
+                return false;
+            }
+
+            // Set up for the automatic redirect
             request.RequestUri = location;
 
             redirectCount++;
