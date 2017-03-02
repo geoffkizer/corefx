@@ -1615,9 +1615,10 @@ namespace System.Net.Http.Functional.Tests
                 }
             }
         }
-#endregion
+        #endregion
 
 #region Version tests
+#if false
         [OuterLoop] // TODO: Issue #11345
         [Fact]
         public async Task SendAsync_RequestVersion10_ServerReceivesVersion10Request()
@@ -1625,6 +1626,7 @@ namespace System.Net.Http.Functional.Tests
             Version receivedRequestVersion = await SendRequestAndGetRequestVersionAsync(new Version(1, 0));
             Assert.Equal(new Version(1, 0), receivedRequestVersion);
         }
+#endif
 
         [OuterLoop] // TODO: Issue #11345
         [Fact]
