@@ -820,7 +820,7 @@ namespace System.Net.Http.Managed
                     {
                         // TODO: Is this the correct behavior?
                         // Seems better to do TryComputeLength on the content first
-                        Trace($"TransferEncodingChunked = {request.Headers.TransferEncodingChunked} but no Content-Length set; setting it to true");
+                        if (s_trace) Trace($"TransferEncodingChunked = {request.Headers.TransferEncodingChunked} but no Content-Length set; setting it to true");
                         request.Headers.TransferEncodingChunked = true;
                         transferEncoding = true;
                     }
@@ -1017,7 +1017,7 @@ namespace System.Net.Http.Managed
                 if (s_trace)
                 {
                     var s = new UTF8Encoding(false).GetString(_writeBuffer, 0, _writeOffset);
-                    Trace("Sending:\n" + s);
+                    if (s_trace) Trace("Sending:\n" + s);
                 }
 
                 await _stream.WriteAsync(_writeBuffer, 0, _writeOffset, cancellationToken);
@@ -1143,7 +1143,7 @@ namespace System.Net.Http.Managed
                 HttpConnection poolConnection;
                 if (pool.TryTake(out poolConnection))
                 {
-                    Trace($"Reusing pooled connection for {key}");
+                    if (s_trace) Trace($"Reusing pooled connection for {key}");
                     return poolConnection;
                 }
             }
@@ -1151,7 +1151,7 @@ namespace System.Net.Http.Managed
             // Connect
             TcpClient client;
 
-            Trace($"Creating new connection for {key}");
+            if (s_trace) Trace($"Creating new connection for {key}");
 
             try
             {
@@ -1223,7 +1223,7 @@ namespace System.Net.Http.Managed
                 pool = _connectionPoolTable.GetOrAdd(connection.Key, new ConcurrentBag<HttpConnection>());
             }
 
-            Trace($"Connection returned to pool for {connection.Key}");
+            if (s_trace) Trace($"Connection returned to pool for {connection.Key}");
             pool.Add(connection);
         }
 
@@ -1283,7 +1283,7 @@ namespace System.Net.Http.Managed
             CancellationToken cancellationToken)
         {
             HttpHeaderValueCollection<AuthenticationHeaderValue> proxyAuthenticateValues = response.Headers.ProxyAuthenticate;
-            Trace($"407 received, ProxyAuthenticate: {proxyAuthenticateValues}");
+            if (s_trace) Trace($"407 received, ProxyAuthenticate: {proxyAuthenticateValues}");
 
             if (proxyUri == null)
             {
@@ -1338,7 +1338,7 @@ namespace System.Net.Http.Managed
             CancellationToken cancellationToken)
         {
             HttpHeaderValueCollection<AuthenticationHeaderValue> authenticateValues = response.Headers.WwwAuthenticate;
-            Trace($"401 received, WWW-Authenticate: {authenticateValues}");
+            if (s_trace) Trace($"401 received, WWW-Authenticate: {authenticateValues}");
 
             foreach (AuthenticationHeaderValue h in authenticateValues)
             {
@@ -1476,7 +1476,7 @@ namespace System.Net.Http.Managed
             {
                 foreach (string setCookie in setCookies)
                 {
-                    Trace($"Set-Cookie: {setCookie}");
+                    if (s_trace) Trace($"Set-Cookie: {setCookie}");
 
                     CookieContainer.SetCookies(request.RequestUri, setCookie);
                 }
