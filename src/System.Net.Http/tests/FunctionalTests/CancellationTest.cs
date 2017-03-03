@@ -77,6 +77,7 @@ namespace System.Net.Http.Functional.Tests
             }
         }
 
+        [ActiveIssue("ManagedHttpClientHandler: NetworkStream.ReadAsync does not support cancellation after initiation")]
         [ActiveIssue(9075, TestPlatforms.AnyUnix)] // recombine this test into the subsequent one when issue is fixed
         [OuterLoop] // includes seconds of delay
         [Fact]
@@ -85,6 +86,7 @@ namespace System.Net.Http.Functional.Tests
             return ReadAsStreamAsync_ReadAsync_Cancel_TaskCanceledQuickly(false);
         }
 
+        [ActiveIssue("ManagedHttpClientHandler: NetworkStream.ReadAsync does not support cancellation after initiation")]
         [OuterLoop] // includes seconds of delay
         [Theory]
         [InlineData(true)]

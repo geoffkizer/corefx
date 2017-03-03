@@ -14,6 +14,7 @@ namespace System.Net.Http.Functional.Tests
 {
     using Configuration = System.Net.Test.Common.Configuration;
 
+    // TODO: Not sure why this is RemoteExecutorTestBase??
     public class HttpClientHandler_MaxResponseHeadersLength_Test : RemoteExecutorTestBase
     {
         [Fact]
@@ -61,6 +62,7 @@ namespace System.Net.Http.Functional.Tests
             }
         }
 
+        [ActiveIssue("ManagedHttpClientHandler: MaxResponseHeadersLength not implemented")]
         [OuterLoop] // TODO: Issue #11345
         [Theory]
         [InlineData("HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n", 37, false)]
