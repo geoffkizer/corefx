@@ -6,7 +6,6 @@ using System.Collections.Generic;
 using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.IO;
-using System.IO.Compression;
 using System.Net.Http.Headers;
 using System.Net.Sockets;
 using System.Net.Security;
@@ -41,7 +40,7 @@ namespace System.Net.Http.Managed
         private SslProtocols _sslProtocols;         // TODO: Default?
         private IDictionary<String, object> _properties;
 
-        private bool _inUse = false;
+        private HttpMessageHandler _handler;
 
         private ConcurrentDictionary<HttpConnectionKey, ConcurrentBag<HttpConnection>> _connectionPoolTable = new ConcurrentDictionary<HttpConnectionKey, ConcurrentBag<HttpConnection>>();
 
@@ -66,7 +65,7 @@ namespace System.Net.Http.Managed
         private void CheckInUse()
         {
             // Can't set props once in use
-            if (_inUse)
+            if (_handler != null)
             {
                 throw new InvalidOperationException();
             }
@@ -749,22 +748,6 @@ namespace System.Net.Http.Managed
                     responseStream = new ConnectionCloseResponseStream(this);
                 }
 
-                foreach (var s in responseContent.Headers.ContentEncoding)
-                {
-                    if (s == "gzip")
-                    {
-                        responseStream = new GZipStream(responseStream, CompressionMode.Decompress);
-                    }
-                    else if (s == "deflate")
-                    {
-                        responseStream = new DeflateStream(responseStream, CompressionMode.Decompress);
-                    }
-                    else
-                    {
-                        throw new IOException($"Unexpected Content-Encoding: {s}");
-                    }
-                }
-
                 responseContent.SetStream(responseStream);
                 response.Content = responseContent;
                 return response;
@@ -846,17 +829,6 @@ namespace System.Net.Http.Managed
                     // Add Connection: Keep-Alive, for perf comparison
                     // Temporary
                     request.Headers.Connection.Add("Keep-Alive");
-                }
-
-                // Add Accept-Encoding for compression
-                // TODO: Move elsewhere
-                if ((_handler._automaticDecompression & DecompressionMethods.GZip) != 0)
-                {
-                    request.Headers.AcceptEncoding.Add(s_gzipHeaderValue);
-                }
-                if ((_handler._automaticDecompression & DecompressionMethods.Deflate) != 0)
-                {
-                    request.Headers.AcceptEncoding.Add(s_deflateHeaderValue);
                 }
 
                 // Start sending the request
@@ -1448,11 +1420,51 @@ namespace System.Net.Http.Managed
             return true;
         }
 
-        protected internal override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request,
+        private void SetupHandlerChain()
+        {
+            Debug.Assert(_handler == null);
+
+            HttpMessageHandler handler = new InternalHandler(this);
+
+            if (_automaticDecompression != DecompressionMethods.None)
+            {
+                handler = new DecompressionHandler(_automaticDecompression, handler);
+            }
+
+            _handler = handler;
+        }
+
+        protected internal override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request,
             CancellationToken cancellationToken)
         {
-            _inUse = true;
+            if (_handler == null)
+            {
+                SetupHandlerChain();
+            }
 
+            return _handler.SendAsync(request, cancellationToken);
+        }
+
+        // TODO: Refactor
+
+        private sealed class InternalHandler : HttpMessageHandler
+        {
+            ManagedHttpClientHandler _clientHandler;
+
+            public InternalHandler(ManagedHttpClientHandler clientHandler)
+            {
+                _clientHandler = clientHandler;
+            }
+
+            protected internal override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+            {
+                return _clientHandler.SendAsyncInternal(request, cancellationToken);
+            }
+        }
+
+        private async Task<HttpResponseMessage> SendAsyncInternal(HttpRequestMessage request,
+            CancellationToken cancellationToken)
+        {
             int redirectCount = 0;
             HttpResponseMessage response;
             while (true)
