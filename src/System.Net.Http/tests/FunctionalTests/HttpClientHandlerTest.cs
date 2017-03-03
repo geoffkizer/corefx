@@ -262,7 +262,7 @@ namespace System.Net.Http.Functional.Tests
 
         [OuterLoop] // TODO: Issue #11345
         [Fact]
-        [ActiveIssue("Managed HttpClientHandler fails this -- appears to be a bug in HttpMessageHandler.SendAync")]
+        [ActiveIssue("ManagedHttpClientHandler: fails due to a bug in MessageProcessingHandler.SendAync")]
         public async Task SendAsync_Cancel_CancellationTokenPropagates()
         {
             var cts = new CancellationTokenSource();
