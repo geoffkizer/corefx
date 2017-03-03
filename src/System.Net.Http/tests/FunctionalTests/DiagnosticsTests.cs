@@ -14,15 +14,13 @@ using System.Threading;
 using System.Threading.Tasks;
 using Xunit;
 
-// Disable these tests for now; ManagedHttpClient does not support these diagnostics.
-#if false
-
 namespace System.Net.Http.Functional.Tests
 {
     using Configuration = System.Net.Test.Common.Configuration;
 
     public class DiagnosticsTest : RemoteExecutorTestBase
     {
+        [ActiveIssue("ManagedHttpClientHandler: Diagnostics not supported")]
         [Fact]
         public static void EventSource_ExistsWithCorrectId()
         {
@@ -44,6 +42,7 @@ namespace System.Net.Http.Functional.Tests
         /// This test must be in the same test collection as any others testing HttpClient/WinHttpHandler
         /// DiagnosticSources, since the global logging mechanism makes them conflict inherently.
         /// </remarks>
+        [ActiveIssue("ManagedHttpClientHandler: Diagnostics not supported")]
         [OuterLoop] // TODO: Issue #11345
         [Fact]
         public void SendAsync_ExpectedDiagnosticSourceLogging()
@@ -106,6 +105,7 @@ namespace System.Net.Http.Functional.Tests
         /// This test must be in the same test collection as any others testing HttpClient/WinHttpHandler
         /// DiagnosticSources, since the global logging mechanism makes them conflict inherently.
         /// </remarks>
+        [ActiveIssue("ManagedHttpClientHandler: Diagnostics not supported")]
         [OuterLoop] // TODO: Issue #11345
         [Fact]
         public void SendAsync_ExpectedDiagnosticSourceNoLogging()
@@ -141,6 +141,7 @@ namespace System.Net.Http.Functional.Tests
             }).Dispose();
         }
 
+        [ActiveIssue("ManagedHttpClientHandler: Diagnostics not supported")]
         [OuterLoop] // TODO: Issue #11345
         [Fact]
         public void SendAsync_HttpTracingEnabled_Succeeds()
@@ -185,6 +186,7 @@ namespace System.Net.Http.Functional.Tests
             }).Dispose();
         }
 
+        [ActiveIssue("ManagedHttpClientHandler: Diagnostics not supported")]
         [OuterLoop] // TODO: Issue #11345
         [Fact]
         public void SendAsync_ExpectedDiagnosticExceptionLogging()
@@ -230,6 +232,7 @@ namespace System.Net.Http.Functional.Tests
             }).Dispose();
         }
 
+        [ActiveIssue("ManagedHttpClientHandler: Diagnostics not supported")]
         [OuterLoop] // TODO: Issue #11345
         [Fact]
         public void SendAsync_ExpectedDiagnosticCancelledLogging()
@@ -302,4 +305,3 @@ namespace System.Net.Http.Functional.Tests
         }
     }
 }
-#endif
