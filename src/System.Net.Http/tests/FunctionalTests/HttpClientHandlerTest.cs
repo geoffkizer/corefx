@@ -588,8 +588,6 @@ namespace System.Net.Http.Functional.Tests
             }
         }
 
-#if false   // Too lazy to figure this one out
-
         [OuterLoop] // TODO: Issue #11345
         [ConditionalTheory(nameof(IsNotWindows7))] // TODO: Issue #16133
         [InlineData("#origFragment", "", "#origFragment", false)]
@@ -634,7 +632,6 @@ namespace System.Net.Http.Functional.Tests
                 });
             }
         }
-#endif
 
         // TODO: I've disabled this because I don't understand the test.
         // The next test below (GetAsync_CredentialIsCredentialCacheUriRedirect_StatusCodeOK)
@@ -1626,7 +1623,7 @@ namespace System.Net.Http.Functional.Tests
         #endregion
 
 #region Version tests
-#if false
+        [ActiveIssue("ManagedHttpClientHandler: Support 1.0 reponses")]
         [OuterLoop] // TODO: Issue #11345
         [Fact]
         public async Task SendAsync_RequestVersion10_ServerReceivesVersion10Request()
@@ -1634,7 +1631,6 @@ namespace System.Net.Http.Functional.Tests
             Version receivedRequestVersion = await SendRequestAndGetRequestVersionAsync(new Version(1, 0));
             Assert.Equal(new Version(1, 0), receivedRequestVersion);
         }
-#endif
 
         [OuterLoop] // TODO: Issue #11345
         [Fact]
@@ -1644,7 +1640,8 @@ namespace System.Net.Http.Functional.Tests
             Assert.Equal(new Version(1, 1), receivedRequestVersion);
         }
 
-#if false   // This seems like a dumb test.  Why is it ok to pass (0, 0)?
+        // This seems like a broken test.  Why is it ok to pass (0, 0)?
+        [ActiveIssue("ManagedHttpClientHandler")]
         [OuterLoop] // TODO: Issue #11345
         [Fact]
         public async Task SendAsync_RequestVersionNotSpecified_ServerReceivesVersion11Request()
@@ -1654,9 +1651,8 @@ namespace System.Net.Http.Functional.Tests
             Version receivedRequestVersion = await SendRequestAndGetRequestVersionAsync(new Version(0, 0));
             Assert.Equal(new Version(1, 1), receivedRequestVersion);
         }
-#endif
 
-#if false
+        [ActiveIssue("ManagedHttpClientHandler: Support HTTP2")]
         [OuterLoop] // TODO: Issue #11345
         [Theory]
         [MemberData(nameof(Http2Servers))]
@@ -1709,6 +1705,7 @@ namespace System.Net.Http.Functional.Tests
             }
         }
 
+        [ActiveIssue("ManagedHttpClientHandler: Support HTTP2")]
         [OuterLoop] // TODO: Issue #11345
         [ConditionalTheory(nameof(IsWindows10Version1607OrGreater)), MemberData(nameof(Http2NoPushServers))]
         public async Task SendAsync_RequestVersion20_ResponseVersion20(Uri server)
@@ -1727,7 +1724,6 @@ namespace System.Net.Http.Functional.Tests
                 }
             }
         }
-#endif
 
         private async Task<Version> SendRequestAndGetRequestVersionAsync(Version requestVersion)
         {
