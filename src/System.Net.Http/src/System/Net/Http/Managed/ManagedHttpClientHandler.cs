@@ -42,7 +42,7 @@ namespace System.Net.Http.Managed
 
         private HttpMessageHandler _handler;
 
-        private ConcurrentDictionary<HttpConnectionKey, ConcurrentBag<HttpConnection>> _connectionPoolTable = new ConcurrentDictionary<HttpConnectionKey, ConcurrentBag<HttpConnection>>();
+        private ConcurrentDictionary<HttpConnectionKey, HttpConnectionPool> _connectionPoolTable = new ConcurrentDictionary<HttpConnectionKey, HttpConnectionPool>();
 
         private static StringWithQualityHeaderValue s_gzipHeaderValue = new StringWithQualityHeaderValue("gzip");
         private static StringWithQualityHeaderValue s_deflateHeaderValue = new StringWithQualityHeaderValue("deflate");
@@ -267,23 +267,6 @@ namespace System.Net.Http.Managed
 
         public ManagedHttpClientHandler()
         {
-#if false
-            // Adjust defaults to match current .NET Desktop HttpClientHandler (based on HWR stack).
-            AllowAutoRedirect = true;
-            UseProxy = true;
-            UseCookies = true;
-            CookieContainer = new CookieContainer();
-            _winHttpHandler.DefaultProxyCredentials = null;
-            _winHttpHandler.ServerCredentials = null;
-#endif
-
-#if false
-            // The existing .NET Desktop HttpClientHandler based on the HWR stack uses only WinINet registry
-            // settings for the proxy.  This also includes supporting the "Automatic Detect a proxy" using
-            // WPAD protocol and PAC file. So, for app-compat, we will do the same for the default proxy setting.
-            _winHttpHandler.WindowsProxyUsePolicy = WindowsProxyUsePolicy.UseWinInetProxy;
-            _winHttpHandler.Proxy = null;
-#endif
         }
 
         protected override void Dispose(bool disposing)
@@ -291,6 +274,14 @@ namespace System.Net.Http.Managed
             if (disposing && !_disposed)
             {
                 _disposed = true;
+
+                // Close all open connections
+                // TODO: There's a timing issue here
+                // Revisit when we improve the connection pooling implementation
+                foreach (HttpConnectionPool connectionPool in _connectionPoolTable.Values)
+                {
+                    connectionPool.Dispose();
+                }
             }
 
             base.Dispose(disposing);
@@ -302,7 +293,73 @@ namespace System.Net.Http.Managed
 
         #region Request Execution
 
-        private sealed class HttpConnection
+        private sealed class HttpConnectionPool : IDisposable
+        {
+            ConcurrentDictionary<HttpConnection, HttpConnection> _activeConnections;
+            ConcurrentBag<HttpConnection> _idleConnections;
+            bool _disposed;
+
+            public HttpConnectionPool()
+            {
+                _activeConnections = new ConcurrentDictionary<HttpConnection, HttpConnection>();
+                _idleConnections = new ConcurrentBag<HttpConnection>();
+            }
+
+            public HttpConnection GetConnection()
+            {
+                HttpConnection connection;
+                if (_idleConnections.TryTake(out connection))
+                {
+                    if (!_activeConnections.TryAdd(connection, connection))
+                    {
+                        throw new InvalidOperationException();
+                    }
+
+                    return connection;
+                }
+
+                return null;
+            }
+
+            public void AddConnection(HttpConnection connection)
+            {
+                if (!_activeConnections.TryAdd(connection, connection))
+                {
+                    throw new InvalidOperationException();
+                }
+            }
+
+            public void PutConnection(HttpConnection connection)
+            {
+                HttpConnection unused;
+                if (!_activeConnections.TryRemove(connection, out unused))
+                {
+                    throw new InvalidOperationException();
+                }
+
+                _idleConnections.Add(connection);
+            }
+
+            public void Dispose()
+            {
+                if (!_disposed)
+                {
+                    _disposed = true;
+
+                    foreach (HttpConnection connection in _activeConnections.Keys)
+                    {
+                        connection.Dispose();
+                    }
+
+                    foreach (HttpConnection connection in _idleConnections)
+                    {
+                        connection.Dispose();
+                    }
+                }
+            }
+        }
+
+        private sealed class HttpConnection : IDisposable
         {
             private const int BufferSize = 4096;
 
@@ -321,6 +378,8 @@ namespace System.Net.Http.Managed
             private byte[] _readBuffer;
             private int _readOffset;
             private int _readLength;
+
+            private bool _disposed;
 
             private sealed class ContentLengthResponseStream : ReadOnlyStream
             {
@@ -495,7 +554,7 @@ namespace System.Net.Http.Managed
                     if (bytesRead == 0)
                     {
                         // We cannot reuse this connection, so close it.
-                        _connection.Close();
+                        _connection.Dispose();
                         _connection = null;
                         return 0;
                     }
@@ -590,10 +649,15 @@ namespace System.Net.Http.Managed
                 get { return _key; }
             }
 
-            public void Close()
+            public void Dispose()
             {
-                _stream.Close();
-                _client.Close();
+                if (!_disposed)
+                {
+                    _disposed = true;
+
+                    _stream.Dispose();
+                    _client.Dispose();
+                }
             }
 
             private async Task<HttpResponseMessage> ParseResponse(HttpRequestMessage request, CancellationToken cancellationToken)
@@ -1132,13 +1196,12 @@ namespace System.Net.Http.Managed
 
             HttpConnectionKey key = new HttpConnectionKey(uri);
 
-            ConcurrentBag<HttpConnection> pool;
+            HttpConnectionPool pool;
             if (_connectionPoolTable.TryGetValue(key, out pool))
             {
-                HttpConnection poolConnection;
-                if (pool.TryTake(out poolConnection))
+                HttpConnection poolConnection = pool.GetConnection();
+                if (poolConnection != null)
                 {
-                    if (s_trace) Trace($"Reusing pooled connection for {key}");
                     return poolConnection;
                 }
             }
@@ -1213,19 +1276,30 @@ namespace System.Net.Http.Managed
                 }
             }
 
-            return new HttpConnection(this, key, client, stream, transportContext, proxyUri);
+            var connection = new HttpConnection(this, key, client, stream, transportContext, proxyUri);
+
+            // Add to list of active connections in pool
+            if (pool == null)
+            {
+                pool = _connectionPoolTable.GetOrAdd(key, new HttpConnectionPool());
+            }
+
+            pool.AddConnection(connection);
+
+            return connection;
         }
 
         private void ReturnConnectionToPool(HttpConnection connection)
         {
-            ConcurrentBag<HttpConnection> pool;
+            HttpConnectionPool pool;
             if (!_connectionPoolTable.TryGetValue(connection.Key, out pool))
             {
-                pool = _connectionPoolTable.GetOrAdd(connection.Key, new ConcurrentBag<HttpConnection>());
+                throw new InvalidOperationException();
             }
 
+            pool.PutConnection(connection);
+
             if (s_trace) Trace($"Connection returned to pool for {connection.Key}");
-            pool.Add(connection);
         }
 
         private async Task<HttpResponseMessage> SendAsyncInternal(HttpRequestMessage request,
@@ -1286,6 +1360,11 @@ namespace System.Net.Http.Managed
         protected internal override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request,
             CancellationToken cancellationToken)
         {
+            if (_disposed)
+            {
+                throw new ObjectDisposedException(nameof(ManagedHttpClientHandler));
+            }
+
             if (_handler == null)
             {
                 SetupHandlerChain();

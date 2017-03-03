@@ -175,6 +175,7 @@ namespace System.Net.Http
             if (disposing && !_disposed)
             {
                 _disposed = true;
+                _managedHttpHandler.Dispose();
             }
 
             base.Dispose(disposing);
