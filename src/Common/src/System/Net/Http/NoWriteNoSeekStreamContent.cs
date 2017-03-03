@@ -13,8 +13,7 @@ namespace System.Net.Http
     /// <remarks>Same as StreamContent, but specialized for no-write, no-seek, and without being constrained by its public API.</remarks>
     internal sealed class NoWriteNoSeekStreamContent : HttpContent
     {
-//        private readonly Stream _content;
-        private Stream _content;
+        private readonly Stream _content;
         private readonly CancellationToken _cancellationToken;
         private bool _contentConsumed;
 
@@ -27,23 +26,6 @@ namespace System.Net.Http
 
             _content = content;
             _cancellationToken = cancellationToken;
-        }
-
-        // Temp hack
-        // This allows me to set the stream later
-        internal NoWriteNoSeekStreamContent(CancellationToken cancellationToken)
-        {
-            _cancellationToken = cancellationToken;
-        }
-
-        internal void SetStream(Stream content)
-        {
-            Debug.Assert(content != null);
-            Debug.Assert(content.CanRead);
-            Debug.Assert(!content.CanWrite);
-            Debug.Assert(!content.CanSeek);
-
-            _content = content;
         }
 
         protected override Task SerializeToStreamAsync(Stream stream, TransportContext context)
