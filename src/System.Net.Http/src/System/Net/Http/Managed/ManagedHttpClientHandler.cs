@@ -1261,7 +1261,15 @@ namespace System.Net.Http.Managed
 
                     SslStream sslStream = new SslStream(stream, false, callback);
 
-                    await sslStream.AuthenticateAsClientAsync(uri.Host, null, _sslProtocols, _checkCertificateRevocationList);
+                    try
+                    {
+                        await sslStream.AuthenticateAsClientAsync(uri.Host, null, _sslProtocols, _checkCertificateRevocationList);
+                    }
+                    catch (Exception)
+                    {
+                        sslStream.Dispose();
+                        throw;
+                    }
 
                     stream = sslStream;
                     transportContext = sslStream.TransportContext;

@@ -180,12 +180,11 @@ namespace System.Net.Http.Functional.Tests
             }
         }
 
-#if false   // Test suddenly started hanging and I don't know why.  Figure out later.
         [OuterLoop] // TODO: Issue #11345
         [ConditionalTheory(nameof(BackendSupportsSslConfiguration))]
         [InlineData(SslProtocols.Tls11, SslProtocols.Tls, typeof(IOException))]
-//        [InlineData(SslProtocols.Tls12, SslProtocols.Tls11, typeof(IOException))]
-//        [InlineData(SslProtocols.Tls, SslProtocols.Tls12, typeof(AuthenticationException))]
+        [InlineData(SslProtocols.Tls12, SslProtocols.Tls11, typeof(IOException))]
+        [InlineData(SslProtocols.Tls, SslProtocols.Tls12, typeof(AuthenticationException))]
         public async Task GetAsync_AllowedSSLVersionDiffersFromServer_ThrowsException(
             SslProtocols allowedProtocol, SslProtocols acceptedProtocol, Type exceptedServerException)
         {
@@ -201,7 +200,6 @@ namespace System.Net.Http.Functional.Tests
                 }, options);
             }
         }
-#endif
 
         [OuterLoop] // TODO: Issue #11345
         [ActiveIssue(8538, TestPlatforms.Windows)]
