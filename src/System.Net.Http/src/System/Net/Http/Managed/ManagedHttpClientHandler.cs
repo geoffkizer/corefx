@@ -1243,122 +1243,21 @@ namespace System.Net.Http.Managed
             return response;
         }
 
-        private string GetBasicTokenForCredential(NetworkCredential credential)
-        {
-            if (credential.UserName.IndexOf(':') != -1)
-            {
-                // TODO: What's the right way to handle this?
-//              throw new NotImplementedException($"Proxy auth: can't handle ':' in username \"{credential.UserName}\"");
-            }
-
-            string userPass = credential.UserName + ":" + credential.Password;
-            if (!string.IsNullOrEmpty(credential.Domain))
-            {
-                if (credential.UserName.IndexOf(':') != -1)
-                {
-                    // TODO: What's the right way to handle this?
-//                  throw new NotImplementedException($"Proxy auth: can't handle ':' in domain \"{credential.Domain}\"");
-                }
-
-                userPass = credential.Domain + "\\" + userPass;
-            }
-
-            return Convert.ToBase64String(Encoding.UTF8.GetBytes(userPass));
-        }
-
-        private async Task<HttpResponseMessage> HandleProxyAuthenticationAsync(
-            HttpRequestMessage request, 
-            HttpResponseMessage response,
-            Uri proxyUri,
-            CancellationToken cancellationToken)
-        {
-            HttpHeaderValueCollection<AuthenticationHeaderValue> proxyAuthenticateValues = response.Headers.ProxyAuthenticate;
-            if (s_trace) Trace($"407 received, ProxyAuthenticate: {proxyAuthenticateValues}");
-
-            if (proxyUri == null)
-            {
-                throw new HttpRequestException("407 received but no proxy");
-            }
-
-            foreach (AuthenticationHeaderValue h in proxyAuthenticateValues)
-            {
-                // We only support Basic auth against a proxy, ignore others
-                if (h.Scheme == "Basic")
-                {
-                    NetworkCredential credential = _proxy.Credentials.GetCredential(proxyUri, "Basic");
-
-                    if (credential == null)
-                    {
-                        continue;
-                    }
-
-                    request.Headers.ProxyAuthorization = new AuthenticationHeaderValue("Basic",
-                        GetBasicTokenForCredential(credential));
-
-                    response = await SendAsync2(request, proxyUri, cancellationToken);
-
-                    if (response.StatusCode != HttpStatusCode.ProxyAuthenticationRequired)
-                    {
-                        // Success
-                        break;
-                    }
-                }
-            }
-
-            // Return the last response we received, successful or not
-            return response;
-        }
-
-        private bool TrySetBasicAuthToken(HttpRequestMessage request)
-        {
-            NetworkCredential credential = _credentials.GetCredential(request.RequestUri, "Basic");
-            if (credential == null)
-            {
-                return false;
-            }
-
-            request.Headers.Authorization = new AuthenticationHeaderValue("Basic", GetBasicTokenForCredential(credential));
-            return true;
-        }
-
-        private async Task<HttpResponseMessage> HandleAuthenticationAsync(
-            HttpRequestMessage request,
-            HttpResponseMessage response,
-            Uri proxyUri,
-            CancellationToken cancellationToken)
-        {
-            HttpHeaderValueCollection<AuthenticationHeaderValue> authenticateValues = response.Headers.WwwAuthenticate;
-            if (s_trace) Trace($"401 received, WWW-Authenticate: {authenticateValues}");
-
-            foreach (AuthenticationHeaderValue h in authenticateValues)
-            {
-                // We only support Basic auth, ignore others
-                if (h.Scheme == "Basic")
-                {
-                    if (!TrySetBasicAuthToken(request))
-                    {
-                        continue;
-                    }
-
-                    response = await SendAsync2(request, proxyUri, cancellationToken);
-
-                    if (response.StatusCode != HttpStatusCode.Unauthorized)
-                    {
-                        // Success
-                        break;
-                    }
-                }
-            }
-
-            // Return the last response we received, successful or not
-            return response;
-        }
-
         private void SetupHandlerChain()
         {
             Debug.Assert(_handler == null);
 
             HttpMessageHandler handler = new InternalHandler(this);
+
+            if (_useProxy && _proxy != null && _proxy.Credentials != null)
+            {
+                handler = new ProxyAuthenticationHandler(_proxy, handler);
+            }
+
+            if (_credentials != null)
+            {
+                handler = new AuthenticationHandler(_preAuthenticate, _credentials, handler);
+            }
 
             if (_useCookies)
             {
@@ -1406,6 +1305,28 @@ namespace System.Net.Http.Managed
             }
         }
 
+        // TODO: Use this appropriately
+        internal static Uri GetProxyUri(IWebProxy proxy, Uri requestUri)
+        {
+            Debug.Assert(proxy != null);
+            Debug.Assert(requestUri != null);
+            Debug.Assert(requestUri.IsAbsoluteUri);
+
+            try
+            {
+                if (!proxy.IsBypassed(requestUri))
+                {
+                    return proxy.GetProxy(requestUri);
+                }
+            }
+            catch (Exception)
+            {
+                // Eat any exception from the IWebProxy and just treat it as no proxy.
+            }
+
+            return null;
+        }
+
         private async Task<HttpResponseMessage> SendAsyncInternal(HttpRequestMessage request,
             CancellationToken cancellationToken)
         {
@@ -1425,28 +1346,7 @@ namespace System.Net.Http.Managed
                 // TODO: What's the right behavior here?
             }
 
-            // Preautheticate, if requested and we have credentials
-            if (_preAuthenticate && _credentials != null)
-            {
-                TrySetBasicAuthToken(request);
-            }
-
             HttpResponseMessage response = await SendAsync2(request, proxyUri, cancellationToken);
-
-            // Handle proxy authentication
-            if (response.StatusCode == HttpStatusCode.ProxyAuthenticationRequired &&
-                _proxy.Credentials != null)
-            {
-                response = await HandleProxyAuthenticationAsync(request, response, proxyUri, cancellationToken);
-            }
-
-            // Handle authentication, if we didn't preauthenticate above
-            if (response.StatusCode == HttpStatusCode.Unauthorized &&
-                !_preAuthenticate &&
-                _credentials != null)
-            {
-                response = await HandleAuthenticationAsync(request, response, proxyUri, cancellationToken);
-            }
 
             return response;
         }

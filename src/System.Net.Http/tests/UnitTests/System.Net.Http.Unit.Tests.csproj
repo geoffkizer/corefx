@@ -279,8 +279,14 @@
     <Compile Include="..\..\src\System\Net\Http\Unix\CurlResponseHeaderReader.cs">
       <Link>ProductionCode\System\Net\Http\CurlResponseHeaderReader.cs</Link>
     </Compile>
+    <Compile Include="..\..\src\System\Net\Http\Managed\AuthenticationHandler.cs">
+      <Link>ProductionCode\System\Net\Http\Managed\AuthenticationHandler.cs</Link>
+    </Compile>
     <Compile Include="..\..\src\System\Net\Http\Managed\AutoRedirectHandler.cs">
       <Link>ProductionCode\System\Net\Http\Managed\AutoRedirectHandler.cs</Link>
+    </Compile>
+    <Compile Include="..\..\src\System\Net\Http\Managed\BasicAuthenticationHelper.cs">
+      <Link>ProductionCode\System\Net\Http\Managed\BasicAuthenticationHelper.cs</Link>
     </Compile>
     <Compile Include="..\..\src\System\Net\Http\Managed\CookieHandler.cs">
       <Link>ProductionCode\System\Net\Http\Managed\CookieHandler.cs</Link>
@@ -290,6 +296,9 @@
     </Compile>
     <Compile Include="..\..\src\System\Net\Http\Managed\ManagedHttpClientHandler.cs">
       <Link>ProductionCode\System\Net\Http\Managed\ManagedHttpClientHandler.cs</Link>
+    </Compile>
+    <Compile Include="..\..\src\System\Net\Http\Managed\ProxyAuthenticationHandler.cs">
+      <Link>ProductionCode\System\Net\Http\Managed\ProxyAuthenticationHandler.cs</Link>
     </Compile>
     <Compile Include="Fakes\HttpClientHandler.cs" />
     <Compile Include="Headers\AuthenticationHeaderValueTest.cs" />
