@@ -1228,12 +1228,18 @@ namespace System.Net.Http.Managed
             pool.Add(connection);
         }
 
-        private async Task<HttpResponseMessage> SendAsync2(HttpRequestMessage request, Uri proxyUri,
+        private async Task<HttpResponseMessage> SendAsyncInternal(HttpRequestMessage request,
             CancellationToken cancellationToken)
         {
             if (request.Version.Major != 1 || request.Version.Minor != 1)
             {
                 throw new PlatformNotSupportedException($"Only HTTP 1.1 supported -- request.Version was {request.Version}");
+            }
+
+            Uri proxyUri = null;
+            if (_useProxy && _proxy != null)
+            {
+                proxyUri = GetProxyUri(_proxy, request.RequestUri);
             }
 
             HttpConnection connection = await GetOrCreateConnection(request, proxyUri, cancellationToken);
@@ -1305,7 +1311,6 @@ namespace System.Net.Http.Managed
             }
         }
 
-        // TODO: Use this appropriately
         internal static Uri GetProxyUri(IWebProxy proxy, Uri requestUri)
         {
             Debug.Assert(proxy != null);
@@ -1325,30 +1330,6 @@ namespace System.Net.Http.Managed
             }
 
             return null;
-        }
-
-        private async Task<HttpResponseMessage> SendAsyncInternal(HttpRequestMessage request,
-            CancellationToken cancellationToken)
-        {
-            // Determine if we should use a proxy
-            // CONSIDER: Factor into separate function
-            Uri proxyUri = null;
-            try
-            {
-                if (_useProxy && _proxy != null && !_proxy.IsBypassed(request.RequestUri))
-                {
-                    proxyUri = _proxy.GetProxy(request.RequestUri);
-                }
-            }
-            catch (Exception)
-            {
-                // Tests expect exceptions from calls to _proxy to be eaten, apparently.
-                // TODO: What's the right behavior here?
-            }
-
-            HttpResponseMessage response = await SendAsync2(request, proxyUri, cancellationToken);
-
-            return response;
         }
 
 #endregion Request Execution
