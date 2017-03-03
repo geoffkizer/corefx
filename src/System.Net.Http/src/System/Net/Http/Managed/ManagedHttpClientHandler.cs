@@ -1354,61 +1354,6 @@ namespace System.Net.Http.Managed
             return response;
         }
 
-        private bool CheckForRedirect(HttpRequestMessage request, HttpResponseMessage response, ref int redirectCount)
-        {
-            switch (response.StatusCode)
-            {
-                case HttpStatusCode.Moved:
-                case HttpStatusCode.TemporaryRedirect:
-                    break;
-
-                case HttpStatusCode.Found:
-                case HttpStatusCode.SeeOther:
-                    request.Method = HttpMethod.Get;
-                    request.Content = null;
-                    break;
-
-                case HttpStatusCode.MultipleChoices:
-                    if (response.Headers.Location == null)
-                    {
-                        // Don't redirect if no Location specified
-                        return false;
-                    }
-                    break;
-
-                default:
-                    return false;
-            }
-
-            Uri location = response.Headers.Location;
-            if (location == null)
-            {
-                throw new HttpRequestException("no Location header for redirect");
-            }
-
-            if (!location.IsAbsoluteUri)
-            {
-                location = new Uri(request.RequestUri, location);
-            }
-
-            // Disallow automatic redirection from https to http
-            if (request.RequestUri.Scheme == "https" && location.Scheme == "http")
-            {
-                return false;
-            }
-
-            // Set up for the automatic redirect
-            request.RequestUri = location;
-
-            redirectCount++;
-            if (redirectCount > _maxAutomaticRedirections)
-            {
-                throw new Exception("max redirects exceeded");
-            }
-
-            return true;
-        }
-
         private void SetupHandlerChain()
         {
             Debug.Assert(_handler == null);
@@ -1418,6 +1363,11 @@ namespace System.Net.Http.Managed
             if (_useCookies)
             {
                 handler = new CookieHandler(CookieContainer, handler);
+            }
+
+            if (_allowAutoRedirect)
+            {
+                handler = new AutoRedirectHandler(_maxAutomaticRedirections, handler);
             }
 
             if (_automaticDecompression != DecompressionMethods.None)
@@ -1459,56 +1409,43 @@ namespace System.Net.Http.Managed
         private async Task<HttpResponseMessage> SendAsyncInternal(HttpRequestMessage request,
             CancellationToken cancellationToken)
         {
-            int redirectCount = 0;
-            HttpResponseMessage response;
-            while (true)
+            // Determine if we should use a proxy
+            // CONSIDER: Factor into separate function
+            Uri proxyUri = null;
+            try
             {
-                // Determine if we should use a proxy
-                // CONSIDER: Factor into separate function
-                Uri proxyUri = null;
-                try
+                if (_useProxy && _proxy != null && !_proxy.IsBypassed(request.RequestUri))
                 {
-                    if (_useProxy && _proxy != null && !_proxy.IsBypassed(request.RequestUri))
-                    {
-                        proxyUri = _proxy.GetProxy(request.RequestUri);
-                    }
+                    proxyUri = _proxy.GetProxy(request.RequestUri);
                 }
-                catch (Exception)
-                {
-                    // Tests expect exceptions from calls to _proxy to be eaten, apparently.
-                    // TODO: What's the right behavior here?
-                }
+            }
+            catch (Exception)
+            {
+                // Tests expect exceptions from calls to _proxy to be eaten, apparently.
+                // TODO: What's the right behavior here?
+            }
 
-                // Preautheticate, if requested and we have credentials
-                if (_preAuthenticate && _credentials != null)
-                {
-                    TrySetBasicAuthToken(request);
-                }
+            // Preautheticate, if requested and we have credentials
+            if (_preAuthenticate && _credentials != null)
+            {
+                TrySetBasicAuthToken(request);
+            }
 
-                response = await SendAsync2(request, proxyUri, cancellationToken);
+            HttpResponseMessage response = await SendAsync2(request, proxyUri, cancellationToken);
 
-                // Handle proxy authentication
-                if (response.StatusCode == HttpStatusCode.ProxyAuthenticationRequired &&
-                    _proxy.Credentials != null)
-                {
-                    response = await HandleProxyAuthenticationAsync(request, response, proxyUri, cancellationToken);
-                }
+            // Handle proxy authentication
+            if (response.StatusCode == HttpStatusCode.ProxyAuthenticationRequired &&
+                _proxy.Credentials != null)
+            {
+                response = await HandleProxyAuthenticationAsync(request, response, proxyUri, cancellationToken);
+            }
 
-                // Handle authentication, if we didn't preauthenticate above
-                if (response.StatusCode == HttpStatusCode.Unauthorized &&
-                    !_preAuthenticate &&
-                    _credentials != null)
-                {
-                    response = await HandleAuthenticationAsync(request, response, proxyUri, cancellationToken);
-                }
-
-                // Handle redirect
-                if (!_allowAutoRedirect ||
-                    !CheckForRedirect(request, response, ref redirectCount))
-                {
-                    // No redirect
-                    break;
-                }
+            // Handle authentication, if we didn't preauthenticate above
+            if (response.StatusCode == HttpStatusCode.Unauthorized &&
+                !_preAuthenticate &&
+                _credentials != null)
+            {
+                response = await HandleAuthenticationAsync(request, response, proxyUri, cancellationToken);
             }
 
             return response;

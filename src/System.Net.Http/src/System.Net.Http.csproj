@@ -51,6 +51,7 @@
     <Compile Include="System\Net\Http\HttpResponseMessage.cs" />
     <Compile Include="System\Net\Http\HttpRuleParser.cs" />
     <Compile Include="System\Net\Http\HttpUtilities.cs" />
+    <Compile Include="System\Net\Http\Managed\AutoRedirectHandler.cs" />
     <Compile Include="System\Net\Http\Managed\CookieHandler.cs" />
     <Compile Include="System\Net\Http\Managed\DecompressionHandler.cs" />
     <Compile Include="System\Net\Http\MessageProcessingHandler.cs" />
