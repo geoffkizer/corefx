@@ -279,6 +279,9 @@
     <Compile Include="..\..\src\System\Net\Http\Unix\CurlResponseHeaderReader.cs">
       <Link>ProductionCode\System\Net\Http\CurlResponseHeaderReader.cs</Link>
     </Compile>
+    <Compile Include="..\..\src\System\Net\Http\Managed\CookieHandler.cs">
+      <Link>ProductionCode\System\Net\Http\Managed\CookieHandler.cs</Link>
+    </Compile>
     <Compile Include="..\..\src\System\Net\Http\Managed\DecompressionHandler.cs">
       <Link>ProductionCode\System\Net\Http\Managed\DecompressionHandler.cs</Link>
     </Compile>

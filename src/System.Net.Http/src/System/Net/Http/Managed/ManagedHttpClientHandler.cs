@@ -1238,17 +1238,6 @@ namespace System.Net.Http.Managed
 
             HttpConnection connection = await GetOrCreateConnection(request, proxyUri, cancellationToken);
 
-            // Add cookies
-            // TODO: This isn't right, we should do this in the top-level handler
-            if (_cookieContainer != null)
-            {
-                string cookieHeader = _cookieContainer.GetCookieHeader(request.RequestUri);
-                if (cookieHeader != null)
-                {
-                    request.Headers.Add("Cookie", cookieHeader);
-                }
-            }
-
             HttpResponseMessage response = await connection.SendAsync(request, cancellationToken);
 
             return response;
@@ -1426,6 +1415,11 @@ namespace System.Net.Http.Managed
 
             HttpMessageHandler handler = new InternalHandler(this);
 
+            if (_useCookies)
+            {
+                handler = new CookieHandler(CookieContainer, handler);
+            }
+
             if (_automaticDecompression != DecompressionMethods.None)
             {
                 handler = new DecompressionHandler(_automaticDecompression, handler);
@@ -1514,19 +1508,6 @@ namespace System.Net.Http.Managed
                 {
                     // No redirect
                     break;
-                }
-            }
-
-            // Handle Set-Cookie
-            // No typed property for this, apparently?
-            IEnumerable<string> setCookies;
-            if (response.Headers.TryGetValues("Set-Cookie", out setCookies))
-            {
-                foreach (string setCookie in setCookies)
-                {
-                    if (s_trace) Trace($"Set-Cookie: {setCookie}");
-
-                    CookieContainer.SetCookies(request.RequestUri, setCookie);
                 }
             }
 
