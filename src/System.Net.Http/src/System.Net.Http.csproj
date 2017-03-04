@@ -51,12 +51,17 @@
     <Compile Include="System\Net\Http\HttpResponseMessage.cs" />
     <Compile Include="System\Net\Http\HttpRuleParser.cs" />
     <Compile Include="System\Net\Http\HttpUtilities.cs" />
+    <Compile Include="System\Net\Http\Managed\HttpConnection.cs" />
+    <Compile Include="System\Net\Http\Managed\HttpConnectionKey.cs" />
+    <Compile Include="System\Net\Http\Managed\HttpConnectionPool.cs" />
     <Compile Include="System\Net\Http\Managed\ProxyAuthenticationHandler.cs" />
     <Compile Include="System\Net\Http\Managed\AuthenticationHandler.cs" />
     <Compile Include="System\Net\Http\Managed\AutoRedirectHandler.cs" />
     <Compile Include="System\Net\Http\Managed\BasicAuthenticationHelper.cs" />
     <Compile Include="System\Net\Http\Managed\CookieHandler.cs" />
     <Compile Include="System\Net\Http\Managed\DecompressionHandler.cs" />
+    <Compile Include="System\Net\Http\Managed\WriteOnlyStream.cs" />
+    <Compile Include="System\Net\Http\Managed\ReadOnlyStream.cs" />
     <Compile Include="System\Net\Http\MessageProcessingHandler.cs" />
     <Compile Include="System\Net\Http\MultipartContent.cs" />
     <Compile Include="System\Net\Http\MultipartFormDataContent.cs" />
