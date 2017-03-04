@@ -6,7 +6,6 @@ using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
-using System.Net.Http.Headers;
 using System.Net.Security;
 using System.Net.Sockets;
 using System.Security.Authentication;
@@ -36,7 +35,7 @@ namespace System.Net.Http.Managed
         private X509CertificateCollection _clientCertificates;
         private Func<HttpRequestMessage, X509Certificate2, X509Chain, SslPolicyErrors, bool> _serverCertificateCustomValidationCallback;
         private bool _checkCertificateRevocationList = false;
-        private SslProtocols _sslProtocols;         // TODO: Default?
+        private SslProtocols _sslProtocols = SslProtocols.None;
         private IDictionary<String, object> _properties;
 
         private HttpMessageHandler _handler;
@@ -458,7 +457,14 @@ namespace System.Net.Http.Managed
 
             client.NoDelay = true;
 
-            Stream stream = client.GetStream();
+            NetworkStream networkStream = client.GetStream();
+
+            // Set default read/write timeouts of 5 seconds.
+            // TODO: Make these configurable?
+            networkStream.ReadTimeout = 5000;
+            networkStream.WriteTimeout = 5000;
+
+            Stream stream = networkStream;
             TransportContext transportContext = null;
 
             if (connectUri.Scheme == "https")
