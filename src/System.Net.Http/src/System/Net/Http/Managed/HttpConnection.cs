@@ -3,14 +3,10 @@
 // See the LICENSE file in the project root for more information.
 
 using System.Collections.Generic;
-using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.IO;
 using System.Net.Http.Headers;
 using System.Net.Sockets;
-using System.Net.Security;
-using System.Security.Authentication;
-using System.Security.Cryptography.X509Certificates;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
@@ -108,9 +104,9 @@ namespace System.Net.Http.Managed
         private sealed class ContentLengthResponseStream : ReadOnlyStream
         {
             private HttpConnection _connection;
-            private int _contentBytesRemaining;
+            private long _contentBytesRemaining;
 
-            public ContentLengthResponseStream(HttpConnection connection, int contentLength)
+            public ContentLengthResponseStream(HttpConnection connection, long contentLength)
             {
                 _connection = connection;
                 _contentBytesRemaining = contentLength;
@@ -132,10 +128,7 @@ namespace System.Net.Http.Managed
                     return 0;
                 }
 
-                if (count > _contentBytesRemaining)
-                {
-                    count = _contentBytesRemaining;
-                }
+                count = (int)Math.Min(count, _contentBytesRemaining);
 
                 int bytesRead = await _connection.ReadAsync(buffer, offset, count, cancellationToken);
 
@@ -435,8 +428,7 @@ namespace System.Net.Http.Managed
 
             _sb.Clear();
 
-            // Eat the rest of the line to CRLF
-            // TODO: Set reason phrase
+            // Parse reason phrase
             b = await ReadByteAsync(cancellationToken);
             while (b != (byte)'\r')
             {
@@ -530,8 +522,7 @@ namespace System.Net.Http.Managed
             }
             else if (responseContent.Headers.ContentLength != null)
             {
-                // TODO: deal with very long content length
-                responseStream = new ContentLengthResponseStream(this, (int)responseContent.Headers.ContentLength.Value);
+                responseStream = new ContentLengthResponseStream(this, responseContent.Headers.ContentLength.Value);
             }
             else if (response.Headers.TransferEncodingChunked == true)
             {
@@ -712,7 +703,6 @@ namespace System.Net.Http.Managed
             // Fit what we can in the current write buffer and flush it.
             Buffer.BlockCopy(buffer, offset, _writeBuffer, _writeOffset, remaining);
 
-            // TODO: Flow cancellation
             await FlushAsync(cancellationToken);
 
             // Update offset and count to reflect the write we just did.
@@ -764,7 +754,6 @@ namespace System.Net.Http.Managed
             return true;
         }
 
-        // TODO: Avoid this if/when we can, since UTF8 encoding sucks
         // TODO: Consider using ValueTask here
         private async Task WriteStringAsync(string s, CancellationToken cancellationToken)
         {

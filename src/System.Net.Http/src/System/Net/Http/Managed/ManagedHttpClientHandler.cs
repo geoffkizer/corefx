@@ -349,10 +349,9 @@ namespace System.Net.Http.Managed
         }
     }
 
-    // TODO: Refactor
-    // Move basically everything re connections here
-    // Remove ref to _clientHandler
-    // Consider refactoring proxy handling
+    // TODO: Move
+    // TODO: Refactor proxy handling into HttpProxyConnectionHandler
+    // TODO: Move proxy auth to HttpProxyConnectionHandler
 
     internal sealed class HttpConnectionHandler : HttpMessageHandler
     {
