@@ -42,11 +42,6 @@ namespace System.Net.Http.Managed
         private HttpMessageHandler _handler;
         private volatile bool _disposed;
 
-        private ConcurrentDictionary<HttpConnectionKey, HttpConnectionPool> _connectionPoolTable = new ConcurrentDictionary<HttpConnectionKey, HttpConnectionPool>();
-
-        private static StringWithQualityHeaderValue s_gzipHeaderValue = new StringWithQualityHeaderValue("gzip");
-        private static StringWithQualityHeaderValue s_deflateHeaderValue = new StringWithQualityHeaderValue("deflate");
-
         private static bool s_trace = false;
 
         private static void Trace(string msg)
@@ -262,20 +257,148 @@ namespace System.Net.Http.Managed
 
         protected override void Dispose(bool disposing)
         {
+
             if (disposing && !_disposed)
             {
                 _disposed = true;
 
-                // Close all open connections
-                // TODO: There's a timing issue here
-                // Revisit when we improve the connection pooling implementation
-                foreach (HttpConnectionPool connectionPool in _connectionPoolTable.Values)
-                {
-                    connectionPool.Dispose();
-                }
+                _handler?.Dispose();
             }
 
             base.Dispose(disposing);
+        }
+
+        private void SetupHandlerChain()
+        {
+            Debug.Assert(_handler == null);
+
+            HttpMessageHandler handler = new HttpConnectionHandler(
+                _clientCertificates,
+                _serverCertificateCustomValidationCallback,
+                _checkCertificateRevocationList,
+                _sslProtocols,
+                _useProxy ? _proxy : null);
+
+            if (_useProxy && _proxy != null && _proxy.Credentials != null)
+            {
+                handler = new ProxyAuthenticationHandler(_proxy, handler);
+            }
+
+            if (_credentials != null)
+            {
+                handler = new AuthenticationHandler(_preAuthenticate, _credentials, handler);
+            }
+
+            if (_useCookies)
+            {
+                handler = new CookieHandler(CookieContainer, handler);
+            }
+
+            if (_allowAutoRedirect)
+            {
+                handler = new AutoRedirectHandler(_maxAutomaticRedirections, handler);
+            }
+
+            if (_automaticDecompression != DecompressionMethods.None)
+            {
+                handler = new DecompressionHandler(_automaticDecompression, handler);
+            }
+
+            _handler = handler;
+        }
+
+        protected internal override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request,
+            CancellationToken cancellationToken)
+        {
+            if (_disposed)
+            {
+                throw new ObjectDisposedException(nameof(ManagedHttpClientHandler));
+            }
+
+            if (_handler == null)
+            {
+                SetupHandlerChain();
+            }
+
+            return _handler.SendAsync(request, cancellationToken);
+        }
+
+        // Static utility routine; move somewhere else?
+        // TODO: Move this
+
+        internal static Uri GetProxyUri(IWebProxy proxy, Uri requestUri)
+        {
+            Debug.Assert(proxy != null);
+            Debug.Assert(requestUri != null);
+            Debug.Assert(requestUri.IsAbsoluteUri);
+
+            try
+            {
+                if (!proxy.IsBypassed(requestUri))
+                {
+                    return proxy.GetProxy(requestUri);
+                }
+            }
+            catch (Exception)
+            {
+                // Eat any exception from the IWebProxy and just treat it as no proxy.
+                // TODO: This seems a bit questionable, but it's what the tests expect
+            }
+
+            return null;
+        }
+    }
+
+    // TODO: Refactor
+    // Move basically everything re connections here
+    // Remove ref to _clientHandler
+    // Consider refactoring proxy handling
+
+    internal sealed class HttpConnectionHandler : HttpMessageHandler
+    {
+        private readonly IWebProxy _proxy;
+        private readonly X509CertificateCollection _clientCertificates;
+        private readonly Func<HttpRequestMessage, X509Certificate2, X509Chain, SslPolicyErrors, bool> _serverCertificateCustomValidationCallback;
+        private readonly bool _checkCertificateRevocationList;
+        private readonly SslProtocols _sslProtocols;
+
+        private readonly ConcurrentDictionary<HttpConnectionKey, HttpConnectionPool> _connectionPoolTable;
+        private bool _disposed;
+
+        public HttpConnectionHandler(
+            X509CertificateCollection clientCertificates,
+            Func<HttpRequestMessage, X509Certificate2, X509Chain, SslPolicyErrors, bool> serverCertificateCustomValidationCallback,
+            bool checkCertificateRevocationList,
+            SslProtocols sslProtocols,
+            IWebProxy proxy)
+        {
+            _proxy = proxy;
+            _clientCertificates = clientCertificates;
+            _serverCertificateCustomValidationCallback = serverCertificateCustomValidationCallback;
+            _checkCertificateRevocationList = checkCertificateRevocationList;
+            _sslProtocols = sslProtocols;
+
+            _connectionPoolTable = new ConcurrentDictionary<HttpConnectionKey, HttpConnectionPool>();
+        }
+
+        protected internal override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            if (request.Version.Major != 1 || request.Version.Minor != 1)
+            {
+                throw new PlatformNotSupportedException($"Only HTTP 1.1 supported -- request.Version was {request.Version}");
+            }
+
+            Uri proxyUri = null;
+            if (_proxy != null)
+            {
+                proxyUri = ManagedHttpClientHandler.GetProxyUri(_proxy, request.RequestUri);
+            }
+
+            HttpConnection connection = await GetOrCreateConnection(request, proxyUri, cancellationToken);
+
+            HttpResponseMessage response = await connection.SendAsync(request, cancellationToken);
+
+            return response;
         }
 
         private async Task<HttpConnection> GetOrCreateConnection(HttpRequestMessage request, Uri proxyUri, CancellationToken cancellationToken)
@@ -309,8 +432,6 @@ namespace System.Net.Http.Managed
 
             // Connect
             TcpClient client;
-
-            if (s_trace) Trace($"Creating new connection for {key}");
 
             try
             {
@@ -406,117 +527,24 @@ namespace System.Net.Http.Managed
             }
 
             pool.PutConnection(connection);
-
-            if (s_trace) Trace($"Connection returned to pool for {connection.Key}");
         }
 
-        private async Task<HttpResponseMessage> SendAsyncInternal(HttpRequestMessage request,
-            CancellationToken cancellationToken)
+        protected override void Dispose(bool disposing)
         {
-            if (request.Version.Major != 1 || request.Version.Minor != 1)
+            if (disposing && !!_disposed)
             {
-                throw new PlatformNotSupportedException($"Only HTTP 1.1 supported -- request.Version was {request.Version}");
-            }
+                _disposed = true;
 
-            Uri proxyUri = null;
-            if (_useProxy && _proxy != null)
-            {
-                proxyUri = GetProxyUri(_proxy, request.RequestUri);
-            }
-
-            HttpConnection connection = await GetOrCreateConnection(request, proxyUri, cancellationToken);
-
-            HttpResponseMessage response = await connection.SendAsync(request, cancellationToken);
-
-            return response;
-        }
-
-        private void SetupHandlerChain()
-        {
-            Debug.Assert(_handler == null);
-
-            HttpMessageHandler handler = new InternalHandler(this);
-
-            if (_useProxy && _proxy != null && _proxy.Credentials != null)
-            {
-                handler = new ProxyAuthenticationHandler(_proxy, handler);
-            }
-
-            if (_credentials != null)
-            {
-                handler = new AuthenticationHandler(_preAuthenticate, _credentials, handler);
-            }
-
-            if (_useCookies)
-            {
-                handler = new CookieHandler(CookieContainer, handler);
-            }
-
-            if (_allowAutoRedirect)
-            {
-                handler = new AutoRedirectHandler(_maxAutomaticRedirections, handler);
-            }
-
-            if (_automaticDecompression != DecompressionMethods.None)
-            {
-                handler = new DecompressionHandler(_automaticDecompression, handler);
-            }
-
-            _handler = handler;
-        }
-
-        protected internal override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request,
-            CancellationToken cancellationToken)
-        {
-            if (_disposed)
-            {
-                throw new ObjectDisposedException(nameof(ManagedHttpClientHandler));
-            }
-
-            if (_handler == null)
-            {
-                SetupHandlerChain();
-            }
-
-            return _handler.SendAsync(request, cancellationToken);
-        }
-
-        // TODO: Refactor
-
-        private sealed class InternalHandler : HttpMessageHandler
-        {
-            ManagedHttpClientHandler _clientHandler;
-
-            public InternalHandler(ManagedHttpClientHandler clientHandler)
-            {
-                _clientHandler = clientHandler;
-            }
-
-            protected internal override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
-            {
-                return _clientHandler.SendAsyncInternal(request, cancellationToken);
-            }
-        }
-
-        internal static Uri GetProxyUri(IWebProxy proxy, Uri requestUri)
-        {
-            Debug.Assert(proxy != null);
-            Debug.Assert(requestUri != null);
-            Debug.Assert(requestUri.IsAbsoluteUri);
-
-            try
-            {
-                if (!proxy.IsBypassed(requestUri))
+                // Close all open connections
+                // TODO: There's a timing issue here
+                // Revisit when we improve the connection pooling implementation
+                foreach (HttpConnectionPool connectionPool in _connectionPoolTable.Values)
                 {
-                    return proxy.GetProxy(requestUri);
+                    connectionPool.Dispose();
                 }
             }
-            catch (Exception)
-            {
-                // Eat any exception from the IWebProxy and just treat it as no proxy.
-            }
 
-            return null;
+            base.Dispose(disposing);
         }
     }
 }

@@ -21,7 +21,7 @@ namespace System.Net.Http.Managed
     {
         private const int BufferSize = 4096;
 
-        ManagedHttpClientHandler _handler;
+        HttpConnectionHandler _handler;
         private HttpConnectionKey _key;
         private TcpClient _client;
         private Stream _stream;
@@ -349,7 +349,7 @@ namespace System.Net.Http.Managed
             }
         }
 
-        public HttpConnection(ManagedHttpClientHandler handler, HttpConnectionKey key, TcpClient client, Stream stream, TransportContext transportContext, Uri proxyUri)
+        public HttpConnection(HttpConnectionHandler handler, HttpConnectionKey key, TcpClient client, Stream stream, TransportContext transportContext, Uri proxyUri)
         {
             _handler = handler;
             _key = key;
