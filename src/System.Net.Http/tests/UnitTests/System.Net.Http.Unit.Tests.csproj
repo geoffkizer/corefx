@@ -300,6 +300,21 @@
     <Compile Include="..\..\src\System\Net\Http\Managed\ProxyAuthenticationHandler.cs">
       <Link>ProductionCode\System\Net\Http\Managed\ProxyAuthenticationHandler.cs</Link>
     </Compile>
+    <Compile Include="..\..\src\System\Net\Http\Managed\HttpConnection.cs">
+      <Link>ProductionCode\System\Net\Http\Managed\HttpConnection.cs</Link>
+    </Compile>
+    <Compile Include="..\..\src\System\Net\Http\Managed\HttpConnectionKey.cs">
+      <Link>ProductionCode\System\Net\Http\Managed\HttpConnectionKey.cs</Link>
+    </Compile>
+    <Compile Include="..\..\src\System\Net\Http\Managed\HttpConnectionPool.cs">
+      <Link>ProductionCode\System\Net\Http\Managed\HttpConnectionPool.cs</Link>
+    </Compile>
+    <Compile Include="..\..\src\System\Net\Http\Managed\ReadOnlyStream.cs">
+      <Link>ProductionCode\System\Net\Http\Managed\ReadOnlyStream.cs</Link>
+    </Compile>
+    <Compile Include="..\..\src\System\Net\Http\Managed\WriteOnlyStream.cs">
+      <Link>ProductionCode\System\Net\Http\Managed\WriteOnlyStream.cs</Link>
+    </Compile>
     <Compile Include="Fakes\HttpClientHandler.cs" />
     <Compile Include="Headers\AuthenticationHeaderValueTest.cs" />
     <Compile Include="Headers\ByteArrayHeaderParserTest.cs" />
