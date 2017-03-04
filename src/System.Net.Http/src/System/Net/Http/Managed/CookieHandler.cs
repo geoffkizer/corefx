@@ -4,37 +4,42 @@
 
 using System.Collections.Generic;
 using System.Threading;
+using System.Threading.Tasks;
 
 namespace System.Net.Http.Managed
 {
-    internal class CookieHandler : MessageProcessingHandler
+    internal class CookieHandler : HttpMessageHandler
     {
-        private CookieContainer _cookieContainer;
+        private readonly HttpMessageHandler _innerHandler;
+        private readonly CookieContainer _cookieContainer;
 
         public CookieHandler(CookieContainer cookieContainer, HttpMessageHandler innerHandler)
-            : base(innerHandler)
         {
+            if (innerHandler == null)
+            {
+                throw new ArgumentNullException(nameof(innerHandler));
+            }
+
             if (cookieContainer == null)
             {
                 throw new ArgumentNullException(nameof(cookieContainer));
             }
 
+            _innerHandler = innerHandler;
             _cookieContainer = cookieContainer;
         }
 
-        protected override HttpRequestMessage ProcessRequest(HttpRequestMessage request, CancellationToken cancellationToken)
+        protected internal override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
+            // Add cookies to request, if any
             string cookieHeader = _cookieContainer.GetCookieHeader(request.RequestUri);
             if (!string.IsNullOrEmpty(cookieHeader))
             {
                 request.Headers.Add("Cookie", cookieHeader);
             }
 
-            return request;
-        }
+            HttpResponseMessage response = await _innerHandler.SendAsync(request, cancellationToken);
 
-        protected override HttpResponseMessage ProcessResponse(HttpResponseMessage response, CancellationToken cancellationToken)
-        {
             // Handle Set-Cookie
             IEnumerable<string> setCookies;
             if (response.Headers.TryGetValues("Set-Cookie", out setCookies))
@@ -46,6 +51,16 @@ namespace System.Net.Http.Managed
             }
 
             return response;
+        }
+
+        protected override void Dispose(bool disposing)
+        {
+            if (disposing)
+            {
+                _innerHandler.Dispose();
+            }
+
+            base.Dispose(disposing);
         }
     }
 }

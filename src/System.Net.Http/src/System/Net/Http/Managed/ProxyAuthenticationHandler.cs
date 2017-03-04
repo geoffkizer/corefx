@@ -10,8 +10,8 @@ namespace System.Net.Http.Managed
 {
     internal sealed class ProxyAuthenticationHandler : HttpMessageHandler
     {
-        HttpMessageHandler _innerHandler;
-        IWebProxy _proxy;
+        private readonly HttpMessageHandler _innerHandler;
+        private readonly IWebProxy _proxy;
 
         public ProxyAuthenticationHandler(IWebProxy proxy, HttpMessageHandler innerHandler)
         {

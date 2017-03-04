@@ -9,8 +9,8 @@ namespace System.Net.Http.Managed
 {
     internal sealed class AutoRedirectHandler : HttpMessageHandler
     {
-        HttpMessageHandler _innerHandler;
-        int _maxAutomaticRedirections;
+        private readonly HttpMessageHandler _innerHandler;
+        private readonly int _maxAutomaticRedirections;
 
         public AutoRedirectHandler(int maxAutomaticRedirections, HttpMessageHandler innerHandler)
         {

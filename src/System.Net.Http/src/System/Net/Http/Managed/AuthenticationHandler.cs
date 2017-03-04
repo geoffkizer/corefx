@@ -10,9 +10,9 @@ namespace System.Net.Http.Managed
 {
     internal sealed class AuthenticationHandler : HttpMessageHandler
     {
-        HttpMessageHandler _innerHandler;
-        bool _preAuthenticate;
-        ICredentials _credentials;
+        private readonly HttpMessageHandler _innerHandler;
+        private readonly bool _preAuthenticate;
+        private readonly ICredentials _credentials;
 
         public AuthenticationHandler(bool preAuthenticate, ICredentials credentials, HttpMessageHandler innerHandler)
         {
