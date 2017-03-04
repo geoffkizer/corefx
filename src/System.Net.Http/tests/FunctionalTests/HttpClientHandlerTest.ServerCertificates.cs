@@ -36,7 +36,11 @@ namespace System.Net.Http.Functional.Tests
                 Assert.Throws<InvalidOperationException>(() => handler.CheckCertificateRevocationList = false);
             }
         }
-
+        
+        // We don't currently handle SSL tunneling through proxies.
+        // Note, however, that this test isn't testing actual tunneling; 
+        // it's just testing proxy authetication as part of tunneling setup.
+        [ActiveIssue("ManagedHttpClientHandler: SSL through proxy support")]
         [OuterLoop] // TODO: Issue #11345
         [ConditionalFact(nameof(BackendSupportsCustomCertificateHandling))]
         public void UseCallback_HaveNoCredsAndUseAuthenticatedCustomProxyAndPostToSecureServer_ProxyAuthenticationRequiredStatusCode()
@@ -56,7 +60,9 @@ namespace System.Net.Http.Functional.Tests
                 Task<HttpResponseMessage> responseTask = client.PostAsync(
                     Configuration.Http.SecureRemoteEchoServer,
                     new StringContent("This is a test"));
-                Task.WaitAll(proxyTask, responseTask);
+
+                TestHelper.WhenAllCompletedOrAnyFailed(proxyTask, responseTask).Wait();
+
                 using (responseTask.Result)
                 {
                     Assert.Equal(HttpStatusCode.ProxyAuthenticationRequired, responseTask.Result.StatusCode);

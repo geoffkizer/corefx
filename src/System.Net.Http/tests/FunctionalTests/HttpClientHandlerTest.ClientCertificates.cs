@@ -71,7 +71,6 @@ namespace System.Net.Http.Functional.Tests
         }
 
         [OuterLoop] // TODO: Issue #11345
-        [ActiveIssue(9543)] // fails sporadically with 'WinHttpException : The server returned an invalid or unrecognized response' or 'TaskCanceledException : A task was canceled'
         [ConditionalTheory(nameof(BackendSupportsCustomCertificateHandling))]
         [InlineData(6, false)]
         [InlineData(3, true)]
@@ -109,13 +108,28 @@ namespace System.Net.Http.Functional.Tests
                     {
                         using (HttpClient client = createClient(cert))
                         {
+                            Task serverTask = LoopbackServer.AcceptSocketAsync(server, async (socket, stream, reader, writer) =>
+                            {
+                                SslStream sslStream = Assert.IsType<SslStream>(stream);
+                                Assert.Equal(cert, sslStream.RemoteCertificate);
+
+                                for (int i = 0; i < numberOfRequests; i++)
+                                {
+                                    await LoopbackServer.ReadWriteAcceptedAsync(socket, reader, writer, shutdown: false);
+                                }
+
+                                return null;
+                            }, options);
+
                             for (int i = 0; i < numberOfRequests; i++)
                             {
-                                await makeAndValidateRequest(client, server, url, cert);
+                                await client.GetStringAsync(url);
 
                                 GC.Collect();
                                 GC.WaitForPendingFinalizers();
                             }
+
+                            serverTask.Wait();
                         }
                     }
                 }
@@ -127,7 +141,15 @@ namespace System.Net.Http.Functional.Tests
                         {
                             using (HttpClient client = createClient(cert))
                             {
-                                await makeAndValidateRequest(client, server, url, cert);
+                                await TestHelper.WhenAllCompletedOrAnyFailed(
+                                    client.GetStringAsync(url),
+                                    LoopbackServer.AcceptSocketAsync(server, async (socket, stream, reader, writer) =>
+                                    {
+                                        SslStream sslStream = Assert.IsType<SslStream>(stream);
+                                        Assert.Equal(cert, sslStream.RemoteCertificate);
+                                        await LoopbackServer.ReadWriteAcceptedAsync(socket, reader, writer);
+                                        return null;
+                                    }, options));
                             }
                         }
 

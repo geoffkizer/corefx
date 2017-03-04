@@ -1188,13 +1188,22 @@ namespace System.Net.Http.Managed
 
         private async Task<HttpConnection> GetOrCreateConnection(HttpRequestMessage request, Uri proxyUri, CancellationToken cancellationToken)
         {
-            Uri uri = proxyUri ?? request.RequestUri;
+            Uri connectUri = request.RequestUri;
+            if (proxyUri != null)
+            {
+                if (connectUri.Scheme == "https")
+                {
+                    throw new NotImplementedException("no SSL proxy support");
+                }
+
+                connectUri = proxyUri;
+            }
 
             // Simple connection pool.
             // We never expire connections.
             // That's unfortunate, but allows for reasonable perf testing for now.
 
-            HttpConnectionKey key = new HttpConnectionKey(uri);
+            HttpConnectionKey key = new HttpConnectionKey(connectUri);
 
             HttpConnectionPool pool;
             if (_connectionPoolTable.TryGetValue(key, out pool))
@@ -1218,15 +1227,15 @@ namespace System.Net.Http.Managed
                 // I need to explicitly invoke the constructor with AddressFamily = IPv6.
                 // Probably worth further investigation....
                 IPAddress ipAddress;
-                if (IPAddress.TryParse(uri.Host, out ipAddress))
+                if (IPAddress.TryParse(connectUri.Host, out ipAddress))
                 {
                     client = new TcpClient(ipAddress.AddressFamily);
-                    await client.ConnectAsync(ipAddress, uri.Port);
+                    await client.ConnectAsync(ipAddress, connectUri.Port);
                 }
                 else
                 {
                     client = new TcpClient();
-                    await client.ConnectAsync(uri.Host, uri.Port);
+                    await client.ConnectAsync(connectUri.Host, connectUri.Port);
                 }
 
             }
@@ -1240,48 +1249,48 @@ namespace System.Net.Http.Managed
             Stream stream = client.GetStream();
             TransportContext transportContext = null;
 
-            if (uri.Scheme == "https")
+            if (connectUri.Scheme == "https")
             {
-                if (proxyUri != null)
-                    throw new NotImplementedException("no SSL proxy support");
+                RemoteCertificateValidationCallback callback = null;
+                if (_serverCertificateCustomValidationCallback != null)
+                {
+                    callback = (object sender, X509Certificate certificate, X509Chain chain, SslPolicyErrors sslPolicyErrors) =>
+                    {
+                        // TODO: Not sure this is correct...
+                        var cert2 = certificate as X509Certificate2;
+
+                        return _serverCertificateCustomValidationCallback(request, cert2, chain, sslPolicyErrors);
+                    };
+                }
+
+                // Note, the sslStream owns the underlying network stream.
+                SslStream sslStream = new SslStream(stream, false, callback);
 
                 try
                 {
-                    RemoteCertificateValidationCallback callback = null;
-                    if (_serverCertificateCustomValidationCallback != null)
-                    {
-                        callback = (object sender, X509Certificate certificate, X509Chain chain, SslPolicyErrors sslPolicyErrors) =>
-                        {
-                            // TODO: Not sure this is correct...
-                            var cert2 = certificate as X509Certificate2;
-
-                            return _serverCertificateCustomValidationCallback(request, cert2, chain, sslPolicyErrors);
-                        };
-                    }
-
-                    SslStream sslStream = new SslStream(stream, false, callback);
-
-                    try
-                    {
-                        await sslStream.AuthenticateAsClientAsync(uri.Host, null, _sslProtocols, _checkCertificateRevocationList);
-                    }
-                    catch (Exception)
-                    {
-                        sslStream.Dispose();
-                        throw;
-                    }
-
-                    stream = sslStream;
-                    transportContext = sslStream.TransportContext;
+                    await sslStream.AuthenticateAsClientAsync(connectUri.Host, _clientCertificates, _sslProtocols, _checkCertificateRevocationList);
+                    await sslStream.AuthenticateAsClientAsync(connectUri.Host, null, _sslProtocols, _checkCertificateRevocationList);
                 }
                 catch (AuthenticationException ae)
                 {
+                    // TODO: Tests expect HttpRequestException here.  Is that correct behavior?
+                    sslStream.Dispose();
                     throw new HttpRequestException("could not establish SSL connection", ae);
                 }
                 catch (IOException ie)
                 {
+                    // TODO: Tests expect HttpRequestException here.  Is that correct behavior?
+                    sslStream.Dispose();
                     throw new HttpRequestException("could not establish SSL connection", ie);
                 }
+                catch (Exception)
+                {
+                    sslStream.Dispose();
+                    throw;
+                }
+
+                stream = sslStream;
+                transportContext = sslStream.TransportContext;
             }
 
             var connection = new HttpConnection(this, key, client, stream, transportContext, proxyUri);
