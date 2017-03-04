@@ -505,7 +505,7 @@ namespace System.Net.Http.Managed
                 transportContext = sslStream.TransportContext;
             }
 
-            var connection = new HttpConnection(this, key, client, stream, transportContext, proxyUri);
+            var connection = new HttpConnection(this, key, client, stream, transportContext, (proxyUri != null));
 
             // Add to list of active connections in pool
             if (pool == null)

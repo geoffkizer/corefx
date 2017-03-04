@@ -26,7 +26,7 @@ namespace System.Net.Http.Managed
         private TcpClient _client;
         private Stream _stream;
         private TransportContext _transportContext;
-        private Uri _proxyUri;
+        private bool _usingProxy;
 
         private StringBuilder _sb;
 
@@ -349,14 +349,20 @@ namespace System.Net.Http.Managed
             }
         }
 
-        public HttpConnection(HttpConnectionHandler handler, HttpConnectionKey key, TcpClient client, Stream stream, TransportContext transportContext, Uri proxyUri)
+        public HttpConnection(
+            HttpConnectionHandler handler, 
+            HttpConnectionKey key, 
+            TcpClient client, 
+            Stream stream, 
+            TransportContext transportContext, 
+            bool usingProxy)
         {
             _handler = handler;
             _key = key;
             _client = client;
             _stream = stream;
             _transportContext = transportContext;
-            _proxyUri = proxyUri;
+            _usingProxy = usingProxy;
 
             _sb = new StringBuilder();
 
@@ -618,7 +624,7 @@ namespace System.Net.Http.Managed
             await WriteStringAsync(request.Method.Method, cancellationToken);
             await WriteCharAsync(' ', cancellationToken);
 
-            if (_proxyUri != null)
+            if (_usingProxy)
             {
                 await WriteStringAsync(request.RequestUri.AbsoluteUri, cancellationToken);
             }
