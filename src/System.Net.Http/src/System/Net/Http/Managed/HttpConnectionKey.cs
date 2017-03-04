@@ -6,20 +6,32 @@ namespace System.Net.Http.Managed
 {
     internal struct HttpConnectionKey : IEquatable<HttpConnectionKey>
     {
-        public readonly string Scheme;
+        public readonly bool UsingSSL;
         public readonly string Host;
         public readonly int Port;
 
         public HttpConnectionKey(Uri uri)
         {
-            Scheme = uri.Scheme;
+            if (uri.Scheme == "http")
+            {
+                UsingSSL = false;
+            }
+            else if (uri.Scheme == "https")
+            {
+                UsingSSL = true;
+            }
+            else
+            {
+                throw new ArgumentException("Invalid Uri scheme", nameof(uri));
+            }
+
             Host = uri.Host;
             Port = uri.Port;
         }
 
         public override int GetHashCode()
         {
-            return Scheme.GetHashCode() ^ Host.GetHashCode() ^ Port.GetHashCode();
+            return UsingSSL.GetHashCode() ^ Host.GetHashCode() ^ Port.GetHashCode();
         }
 
         public override bool Equals(object obj)
@@ -34,7 +46,7 @@ namespace System.Net.Http.Managed
 
         public bool Equals(HttpConnectionKey other)
         {
-            return (Scheme == other.Scheme && Host == other.Host && Port == other.Port);
+            return (UsingSSL == other.UsingSSL && Host == other.Host && Port == other.Port);
         }
 
         public static bool operator ==(HttpConnectionKey key1, HttpConnectionKey key2)
@@ -47,5 +59,4 @@ namespace System.Net.Http.Managed
             return !key1.Equals(key2);
         }
     }
-
 }
