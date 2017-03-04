@@ -1269,7 +1269,6 @@ namespace System.Net.Http.Managed
                 try
                 {
                     await sslStream.AuthenticateAsClientAsync(connectUri.Host, _clientCertificates, _sslProtocols, _checkCertificateRevocationList);
-                    await sslStream.AuthenticateAsClientAsync(connectUri.Host, null, _sslProtocols, _checkCertificateRevocationList);
                 }
                 catch (AuthenticationException ae)
                 {
