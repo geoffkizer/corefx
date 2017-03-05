@@ -985,6 +985,9 @@ namespace System.Net.Http.Managed
 
         private void PutConnectionInPool()
         {
+            // Make sure there's nothing in the write buffer that should have been flushed
+            Debug.Assert(_writeOffset == 0);
+
             _pool.PutConnection(this);
         }
     }
