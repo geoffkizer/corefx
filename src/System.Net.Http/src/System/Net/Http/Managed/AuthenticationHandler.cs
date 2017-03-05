@@ -66,6 +66,7 @@ namespace System.Net.Http.Managed
                             break;
                         }
 
+                        response.Dispose();
                         response = await _innerHandler.SendAsync(request, cancellationToken);
                         break;
                     }

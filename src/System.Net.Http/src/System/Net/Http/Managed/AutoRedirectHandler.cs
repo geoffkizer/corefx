@@ -97,6 +97,7 @@ namespace System.Net.Http.Managed
                 }
 
                 // Do the redirect.
+                response.Dispose();
                 response = await _innerHandler.SendAsync(request, cancellationToken);
             }
 
