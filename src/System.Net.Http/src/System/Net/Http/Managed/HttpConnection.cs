@@ -102,13 +102,21 @@ namespace System.Net.Http.Managed
 
         private sealed class ContentLengthReadStream : HttpContentReadStream
         {
-            private HttpConnection _connection;
             private long _contentBytesRemaining;
 
             public ContentLengthReadStream(HttpConnection connection, long contentLength)
+                : base(connection)
             {
-                _connection = connection;
-                _contentBytesRemaining = contentLength;
+                if (contentLength == 0)
+                {
+                    _connection = null;
+                    _contentBytesRemaining = 0;
+                    connection.PutConnectionInPool();
+                }
+                else
+                {
+                    _contentBytesRemaining = contentLength;
+                }
             }
 
             public override async Task<int> ReadAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken)
@@ -134,13 +142,7 @@ namespace System.Net.Http.Managed
                     return 0;
                 }
 
-                if (_contentBytesRemaining == 0)
-                {
-                    // End of response body
-                    _connection.PutConnectionInPool();
-                    _connection = null;
-                    return 0;
-                }
+                Debug.Assert(_contentBytesRemaining > 0);
 
                 count = (int)Math.Min(count, _contentBytesRemaining);
 
@@ -155,18 +157,24 @@ namespace System.Net.Http.Managed
                 Debug.Assert(bytesRead <= _contentBytesRemaining);
                 _contentBytesRemaining -= bytesRead;
 
+                if (_contentBytesRemaining == 0)
+                {
+                    // End of response body
+                    _connection.PutConnectionInPool();
+                    _connection = null;
+                }
+
                 return bytesRead;
             }
         }
 
         private sealed class ChunkedEncodingReadStream : HttpContentReadStream
         {
-            private HttpConnection _connection;
             private int _chunkBytesRemaining;
 
             public ChunkedEncodingReadStream(HttpConnection connection)
+                : base(connection)
             {
-                _connection = connection;
                 _chunkBytesRemaining = 0;
             }
 
@@ -280,11 +288,9 @@ namespace System.Net.Http.Managed
 
         private sealed class ConnectionCloseReadStream : HttpContentReadStream
         {
-            private HttpConnection _connection;
-
             public ConnectionCloseReadStream(HttpConnection connection)
+                : base(connection)
             {
-                _connection = connection;
             }
 
             public override async Task<int> ReadAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken)

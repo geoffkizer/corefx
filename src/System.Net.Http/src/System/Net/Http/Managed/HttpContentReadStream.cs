@@ -10,6 +10,13 @@ namespace System.Net.Http.Managed
 {
     internal abstract class HttpContentReadStream : Stream
     {
+        protected HttpConnection _connection;
+
+        public HttpContentReadStream(HttpConnection connection)
+        {
+            _connection = connection;
+        }
+
         public override bool CanRead => true;
 
         public override bool CanSeek => false;
@@ -53,5 +60,17 @@ namespace System.Net.Http.Managed
         }
 
         public abstract override Task<int> ReadAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken);
+
+        protected override void Dispose(bool disposing)
+        {
+            if (_connection != null)
+            {
+                // We haven't finished reading the body, so close the connection.
+                _connection.Dispose();
+                _connection = null;
+            }
+
+            base.Dispose(disposing);
+        }
     }
 }
