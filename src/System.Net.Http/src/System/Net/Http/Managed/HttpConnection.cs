@@ -17,19 +17,19 @@ namespace System.Net.Http.Managed
     {
         private const int BufferSize = 4096;
 
-        HttpConnectionHandler _handler;
-        private HttpConnectionKey _key;
-        private TcpClient _client;
-        private Stream _stream;
-        private TransportContext _transportContext;
-        private bool _usingProxy;
+        private readonly HttpConnectionHandler _handler;
+        private readonly HttpConnectionKey _key;
+        private readonly TcpClient _client;
+        private readonly Stream _stream;
+        private readonly TransportContext _transportContext;
+        private readonly bool _usingProxy;
 
-        private StringBuilder _sb;
+        private readonly StringBuilder _sb;
 
-        private byte[] _writeBuffer;
+        private readonly byte[] _writeBuffer;
         private int _writeOffset;
 
-        private byte[] _readBuffer;
+        private readonly byte[] _readBuffer;
         private int _readOffset;
         private int _readLength;
 
