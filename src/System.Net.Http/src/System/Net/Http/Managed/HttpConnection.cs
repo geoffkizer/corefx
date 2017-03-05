@@ -37,49 +37,42 @@ namespace System.Net.Http.Managed
         private sealed class HttpConnectionContent : HttpContent
         {
             private readonly CancellationToken _cancellationToken;
-            private Stream _content;
-            private bool _contentConsumed;
+            private HttpContentReadStream _stream;
 
             public HttpConnectionContent(CancellationToken cancellationToken)
             {
                 _cancellationToken = cancellationToken;
             }
 
-            public void SetStream(Stream content)
+            public void SetStream(HttpContentReadStream stream)
             {
-                Debug.Assert(content != null);
-                Debug.Assert(content.CanRead);
-                Debug.Assert(!content.CanWrite);
-                Debug.Assert(!content.CanSeek);
+                Debug.Assert(stream != null);
+                Debug.Assert(stream.CanRead);
 
-                _content = content;
+                _stream = stream;
             }
 
-            protected override Task SerializeToStreamAsync(Stream stream, TransportContext context)
+            private HttpContentReadStream ConsumeStream()
+            {
+                if (_stream == null)
+                {
+                    throw new InvalidOperationException("content already consumed");
+                }
+
+                HttpContentReadStream stream = _stream;
+                _stream = null;
+                return stream;
+            }
+
+            protected override async Task SerializeToStreamAsync(Stream stream, TransportContext context)
             {
                 Debug.Assert(stream != null);
 
-                if (_contentConsumed)
-                {
-                    throw new InvalidOperationException(SR.net_http_content_stream_already_read);
-                }
-                _contentConsumed = true;
+                HttpContentReadStream contentStream = ConsumeStream();
 
                 const int BufferSize = 8192;
-                Task copyTask = _content.CopyToAsync(stream, BufferSize, _cancellationToken);
-                if (copyTask.IsCompleted)
-                {
-                    try { _content.Dispose(); } catch { } // same as StreamToStreamCopy behavior
-                }
-                else
-                {
-                    copyTask = copyTask.ContinueWith((t, s) =>
-                    {
-                        try { ((Stream)s).Dispose(); } catch { }
-                        t.GetAwaiter().GetResult();
-                    }, _content, CancellationToken.None, TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);
-                }
-                return copyTask;
+                await contentStream.CopyToAsync(stream, BufferSize, _cancellationToken);
+                contentStream.Dispose();
             }
 
             protected internal override bool TryComputeLength(out long length)
@@ -88,16 +81,24 @@ namespace System.Net.Http.Managed
                 return false;
             }
 
+            protected override Task<Stream> CreateContentReadStreamAsync()
+            {
+                return Task.FromResult<Stream>(ConsumeStream());
+            }
+
             protected override void Dispose(bool disposing)
             {
                 if (disposing)
                 {
-                    _content.Dispose();
+                    if (_stream != null)
+                    {
+                        _stream.Dispose();
+                        _stream = null;
+                    }
                 }
+
                 base.Dispose(disposing);
             }
-
-            protected override Task<Stream> CreateContentReadStreamAsync() => Task.FromResult<Stream>(_content);
         }
 
         private sealed class ContentLengthReadStream : HttpContentReadStream
@@ -612,7 +613,7 @@ namespace System.Net.Http.Managed
             }
 
             // Instantiate responseStream
-            Stream responseStream;
+            HttpContentReadStream responseStream;
 
             if (request.Method == HttpMethod.Head ||
                 status == 204 ||
