@@ -6,6 +6,7 @@ using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
+using System.Net.Http.Headers;
 using System.Net.Security;
 using System.Net.Sockets;
 using System.Security.Authentication;
@@ -282,12 +283,6 @@ namespace System.Net.Http.Managed
                 handler = new HttpProxyConnectionHandler(_proxy, handler);
             }
 
-            // TODO: Combine with above
-            if (_useProxy && _proxy != null && _proxy.Credentials != null)
-            {
-                handler = new ProxyAuthenticationHandler(_proxy, handler);
-            }
-
             if (_credentials != null)
             {
                 handler = new AuthenticationHandler(_preAuthenticate, _credentials, handler);
@@ -378,13 +373,8 @@ namespace System.Net.Http.Managed
 
         protected internal override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
-            Uri connectUri = request.RequestUri;
-
             HttpConnection connection = await GetOrCreateConnection(request);
-
-            HttpResponseMessage response = await connection.SendAsync(request, cancellationToken);
-
-            return response;
+            return await connection.SendAsync(request, cancellationToken);
         }
 
         // TODO: Move
@@ -579,6 +569,32 @@ namespace System.Net.Http.Managed
             HttpConnection connection = await GetOrCreateConnection(request, proxyUri);
 
             HttpResponseMessage response = await connection.SendAsync(request, cancellationToken);
+
+            // Handle proxy authentication
+            if (response.StatusCode == HttpStatusCode.ProxyAuthenticationRequired &&
+                _proxy.Credentials != null)
+            {
+                foreach (AuthenticationHeaderValue h in response.Headers.ProxyAuthenticate)
+                {
+                    // We only support Basic auth, ignore others
+                    if (h.Scheme == "Basic")
+                    {
+                        NetworkCredential credential = _proxy.Credentials.GetCredential(proxyUri, "Basic");
+                        if (credential != null)
+                        {
+                            response.Dispose();
+
+                            request.Headers.ProxyAuthorization = new AuthenticationHeaderValue("Basic",
+                                BasicAuthenticationHelper.GetBasicTokenForCredential(credential));
+
+                            connection = await GetOrCreateConnection(request, proxyUri);
+                            response = await connection.SendAsync(request, cancellationToken);
+                        }
+
+                        break;
+                    }
+                }
+            }
 
             return response;
         }
