@@ -283,18 +283,11 @@ namespace System.Net.Http.Managed
         private sealed class ChunkedEncodingWriteStream : WriteOnlyStream
         {
             private HttpConnection _connection;
-            private byte[] _chunkLengthBuffer;
-
-            static readonly byte[] _CRLF = new byte[] { (byte)'\r', (byte)'\n' };
 
             public ChunkedEncodingWriteStream(HttpConnection connection)
             {
                 _connection = connection;
-
-                _chunkLengthBuffer = new byte[sizeof(int)];
             }
-
-            // TODO: Need to consider how buffering works between here and the Connection proper...
 
             public override async Task WriteAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken)
             {
@@ -305,24 +298,27 @@ namespace System.Net.Http.Managed
                     return;
                 }
 
-                // Construct chunk length
-                int digit = (sizeof(int));
-                int remaining = count;
-                while (remaining != 0)
+                // Write chunk length -- hex representation of count
+                bool digitWritten = false;
+                for (int i = 7; i >= 0; i--)
                 {
-                    digit--;
-                    int i = remaining % 16;
-                    _chunkLengthBuffer[digit] = (byte)(i < 10 ? '0' + i : 'A' + i - 10);
-                    remaining = remaining / 16;
+                    int shift = i * 4;
+                    int mask = 0xF << shift;
+                    int digit = (count & mask) >> shift;
+                    if (digitWritten || digit != 0)
+                    {
+                        await _connection.WriteCharAsync((char)(digit < 10 ? '0' + digit : 'A' + digit - 10), cancellationToken);
+                        digitWritten = true;
+                    }
                 }
 
-                // Write chunk length
-                await _connection.WriteAsync(_chunkLengthBuffer, digit, (sizeof(int)) - digit, cancellationToken);
-                await _connection.WriteAsync(_CRLF, 0, _CRLF.Length, cancellationToken);    // TODO: Just use WriteByteAsync here?
+                await _connection.WriteCharAsync('\r', cancellationToken);
+                await _connection.WriteCharAsync('\n', cancellationToken);
 
                 // Write chunk contents
                 await _connection.WriteAsync(buffer, offset, count, cancellationToken);
-                await _connection.WriteAsync(_CRLF, 0, _CRLF.Length, cancellationToken);
+                await _connection.WriteCharAsync('\r', cancellationToken);
+                await _connection.WriteCharAsync('\n', cancellationToken);
             }
 
             public override Task FlushAsync(CancellationToken cancellationToken)
@@ -333,12 +329,13 @@ namespace System.Net.Http.Managed
             public override async Task FinishAsync(CancellationToken cancellationToken)
             {
                 // Send 0 byte chunk to indicate end
-                _chunkLengthBuffer[0] = (byte)'0';
-                await _connection.WriteAsync(_chunkLengthBuffer, 0, 1, cancellationToken);
-                await _connection.WriteAsync(_CRLF, 0, _CRLF.Length, cancellationToken);
+                await _connection.WriteCharAsync('0', cancellationToken);
+                await _connection.WriteCharAsync('\r', cancellationToken);
+                await _connection.WriteCharAsync('\n', cancellationToken);
 
                 // Send final _CRLF
-                await _connection.WriteAsync(_CRLF, 0, _CRLF.Length, cancellationToken);
+                await _connection.WriteCharAsync('\r', cancellationToken);
+                await _connection.WriteCharAsync('\n', cancellationToken);
 
                 _connection = null;
             }
@@ -529,8 +526,8 @@ namespace System.Net.Http.Managed
                 {
                     if (!responseContent.Headers.TryAddWithoutValidation(headerName, headerValue))
                     {
-                        // TODO: Not sure why this would happen.  Invalid chars in header name?
-                        throw new Exception($"could not add response header, {headerName}: {headerValue}");
+                        // Header name or value validation failed.
+                        throw new HttpRequestException($"invalid response header, {headerName}: {headerValue}");
                     }
                 }
 
@@ -783,7 +780,6 @@ namespace System.Net.Http.Managed
             return true;
         }
 
-        // TODO: Consider using ValueTask here
         private async Task WriteStringAsync(string s, CancellationToken cancellationToken)
         {
             for (int i = 0; i < s.Length; i++)
