@@ -145,12 +145,12 @@ namespace System.Net.Http.Managed
             }
         }
 
-        private sealed class ChunkedEncodingResponseStream : ReadOnlyStream
+        private sealed class ChunkedEncodingReadStream : ReadOnlyStream
         {
             private HttpConnection _connection;
             private int _chunkBytesRemaining;
 
-            public ChunkedEncodingResponseStream(HttpConnection connection)
+            public ChunkedEncodingReadStream(HttpConnection connection)
             {
                 _connection = connection;
                 _chunkBytesRemaining = 0;
@@ -249,11 +249,11 @@ namespace System.Net.Http.Managed
             }
         }
 
-        private sealed class ConnectionCloseResponseStream : ReadOnlyStream
+        private sealed class ConnectionCloseReadStream : ReadOnlyStream
         {
             private HttpConnection _connection;
 
-            public ConnectionCloseResponseStream(HttpConnection connection)
+            public ConnectionCloseReadStream(HttpConnection connection)
             {
                 _connection = connection;
             }
@@ -416,40 +416,38 @@ namespace System.Net.Http.Managed
             HttpResponseMessage response = new HttpResponseMessage();
             response.RequestMessage = request;
 
-            if (await ReadByteAsync(cancellationToken) != (byte)'H' ||
-                await ReadByteAsync(cancellationToken) != (byte)'T' ||
-                await ReadByteAsync(cancellationToken) != (byte)'T' ||
-                await ReadByteAsync(cancellationToken) != (byte)'P' ||
-                await ReadByteAsync(cancellationToken) != (byte)'/' ||
-                await ReadByteAsync(cancellationToken) != (byte)'1' ||
-                await ReadByteAsync(cancellationToken) != (byte)'.' ||
-                await ReadByteAsync(cancellationToken) != (byte)'1')
+            if (await ReadCharAsync(cancellationToken) != 'H' ||
+                await ReadCharAsync(cancellationToken) != 'T' ||
+                await ReadCharAsync(cancellationToken) != 'T' ||
+                await ReadCharAsync(cancellationToken) != 'P' ||
+                await ReadCharAsync(cancellationToken) != '/' ||
+                await ReadCharAsync(cancellationToken) != '1' ||
+                await ReadCharAsync(cancellationToken) != '.' ||
+                await ReadCharAsync(cancellationToken) != '1')
             {
                 throw new HttpRequestException("could not read response HTTP version");
             }
 
-            byte b = await ReadByteAsync(cancellationToken);
-            if (b != (byte)' ')
+            if (await ReadCharAsync(cancellationToken) != ' ')
             {
                 throw new HttpRequestException("Invalid characters in response");
             }
 
-            byte status1 = await ReadByteAsync(cancellationToken);
-            byte status2 = await ReadByteAsync(cancellationToken);
-            byte status3 = await ReadByteAsync(cancellationToken);
+            char status1 = await ReadCharAsync(cancellationToken);
+            char status2 = await ReadCharAsync(cancellationToken);
+            char status3 = await ReadCharAsync(cancellationToken);
 
-            if (!char.IsDigit((char)status1) ||
-                !char.IsDigit((char)status2) ||
-                !char.IsDigit((char)status3))
+            if (!char.IsDigit(status1) ||
+                !char.IsDigit(status2) ||
+                !char.IsDigit(status3))
             {
                 throw new HttpRequestException("could not read response status code");
             }
 
-            int status = 100 * (status1 - (byte)'0') + 10 * (status2 - (byte)'0') + (status3 - (byte)'0');
+            int status = 100 * (status1 - '0') + 10 * (status2 - '0') + (status3 - '0');
             response.StatusCode = (HttpStatusCode)status;
 
-            b = await ReadByteAsync(cancellationToken);
-            if (b != (byte)' ')
+            if (await ReadCharAsync(cancellationToken) != ' ')
             {
                 throw new HttpRequestException("Invalid characters in response line");
             }
@@ -457,15 +455,14 @@ namespace System.Net.Http.Managed
             _sb.Clear();
 
             // Parse reason phrase
-            b = await ReadByteAsync(cancellationToken);
-            while (b != (byte)'\r')
+            char c = await ReadCharAsync(cancellationToken);
+            while (c != '\r')
             {
-                _sb.Append((char)b);
-                b = await ReadByteAsync(cancellationToken);
+                _sb.Append(c);
+                c = await ReadCharAsync(cancellationToken);
             }
 
-            b = await ReadByteAsync(cancellationToken);
-            if (b != (byte)'\n')
+            if (await ReadCharAsync(cancellationToken) != '\n')
             {
                 throw new HttpRequestException("Saw CR without LF while parsing response line");
             }
@@ -476,22 +473,24 @@ namespace System.Net.Http.Managed
 
             // Parse headers
             _sb.Clear();
-            b = await ReadByteAsync(cancellationToken);
+            c = await ReadCharAsync(cancellationToken);
             while (true)
             {
-                if (b == (byte)'\r')
+                if (c == '\r')
                 {
-                    if (await ReadByteAsync(cancellationToken) != (byte)'\n')
+                    if (await ReadCharAsync(cancellationToken) != '\n')
+                    {
                         throw new HttpRequestException("Saw CR without LF while parsing headers");
+                    }
 
                     break;
                 }
 
                 // Get header name
-                while (b != (byte)':')
+                while (c != ':')
                 {
-                    _sb.Append((char)b);
-                    b = await ReadByteAsync(cancellationToken);
+                    _sb.Append(c);
+                    c = await ReadCharAsync(cancellationToken);
                 }
 
                 string headerName = _sb.ToString();
@@ -499,26 +498,29 @@ namespace System.Net.Http.Managed
                 _sb.Clear();
 
                 // Get header value
-                b = await ReadByteAsync(cancellationToken);
-                while (b == (byte)' ')
+                c = await ReadCharAsync(cancellationToken);
+                while (c == ' ')
                 {
-                    b = await ReadByteAsync(cancellationToken);
+                    c = await ReadCharAsync(cancellationToken);
                 }
 
-                while (b != (byte)'\r')
+                while (c != '\r')
                 {
-                    _sb.Append((char)b);
-                    b = await ReadByteAsync(cancellationToken);
+                    _sb.Append(c);
+                    c = await ReadCharAsync(cancellationToken);
                 }
 
-                if (await ReadByteAsync(cancellationToken) != (byte)'\n')
+                if (await ReadCharAsync(cancellationToken) != '\n')
+                {
                     throw new HttpRequestException("Saw CR without LF while parsing headers");
+                }
 
                 string headerValue = _sb.ToString();
 
                 // TryAddWithoutValidation will fail if the header name has trailing whitespace.
                 // So, trim it here.
                 // TODO: Not clear to me from the RFC that this is really correct; RFC seems to indicate this should be an error.
+                // However, tests claim this is important for compat in practice.
                 headerName = headerName.TrimEnd();
 
                 // Add header to appropriate collection
@@ -534,7 +536,7 @@ namespace System.Net.Http.Managed
 
                 _sb.Clear();
 
-                b = await ReadByteAsync(cancellationToken);
+                c = await ReadCharAsync(cancellationToken);
             }
 
             // Instantiate responseStream
@@ -545,20 +547,26 @@ namespace System.Net.Http.Managed
                 status == 304)
             {
                 // There is implicitly no response body
-                // TODO: Should this mean there's no responseContent at all?
+                // TODO: I don't understand why there's any content here at all --
+                // i.e. why not just set response.Content = null?
+                // This is legal for request bodies (e.g. GET).
+                // However, setting response.Content = null causes a bunch of tests to fail.
                 responseStream = new ContentLengthReadStream(this, 0);
             }
-            else if (responseContent.Headers.ContentLength != null)
-            {
-                responseStream = new ContentLengthReadStream(this, responseContent.Headers.ContentLength.Value);
-            }
-            else if (response.Headers.TransferEncodingChunked == true)
-            {
-                responseStream = new ChunkedEncodingResponseStream(this);
-            }
             else
-            {
-                responseStream = new ConnectionCloseResponseStream(this);
+            { 
+                if (responseContent.Headers.ContentLength != null)
+                {
+                    responseStream = new ContentLengthReadStream(this, responseContent.Headers.ContentLength.Value);
+                }
+                else if (response.Headers.TransferEncodingChunked == true)
+                {
+                    responseStream = new ChunkedEncodingReadStream(this);
+                }
+                else
+                {
+                    responseStream = new ConnectionCloseReadStream(this);
+                }
             }
 
             responseContent.SetStream(responseStream);
@@ -823,6 +831,41 @@ namespace System.Net.Http.Managed
             }
 
             return new ValueTask<byte>(ReadByteSlowAsync(cancellationToken));
+        }
+
+        private async Task<char> ReadCharSlowAsync(CancellationToken cancellationToken)
+        {
+            await FillAsync(cancellationToken);
+
+            if (_readLength == 0)
+            {
+                // End of stream
+                throw new IOException("unexpected end of stream");
+            }
+
+            byte b = _readBuffer[_readOffset++];
+            if ((b & 0x80) != 0)
+            {
+                throw new HttpRequestException("Invalid character read from stream");
+            }
+
+            return (char)b;
+        }
+
+        private ValueTask<char> ReadCharAsync(CancellationToken cancellationToken)
+        {
+            if (_readOffset < _readLength)
+            {
+                byte b = _readBuffer[_readOffset++];
+                if ((b & 0x80) != 0)
+                {
+                    throw new HttpRequestException("Invalid character read from stream");
+                }
+
+                return new ValueTask<char>((char)b);
+            }
+
+            return new ValueTask<char>(ReadCharSlowAsync(cancellationToken));
         }
 
         private async Task<int> ReadAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken)

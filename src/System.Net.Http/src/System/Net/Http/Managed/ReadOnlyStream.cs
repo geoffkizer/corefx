@@ -4,6 +4,7 @@
 
 using System.IO;
 using System.Threading;
+using System.Threading.Tasks;
 
 namespace System.Net.Http.Managed
 {
@@ -50,5 +51,7 @@ namespace System.Net.Http.Managed
         {
             return ReadAsync(buffer, offset, count, CancellationToken.None).Result;
         }
+
+        public abstract override Task<int> ReadAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken);
     }
 }
