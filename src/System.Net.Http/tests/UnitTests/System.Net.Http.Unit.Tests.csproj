@@ -303,6 +303,9 @@
     <Compile Include="..\..\src\System\Net\Http\Managed\HttpConnection.cs">
       <Link>ProductionCode\System\Net\Http\Managed\HttpConnection.cs</Link>
     </Compile>
+    <Compile Include="..\..\src\System\Net\Http\Managed\HttpConnectionHandler.cs">
+      <Link>ProductionCode\System\Net\Http\Managed\HttpConnectionHandler.cs</Link>
+    </Compile>
     <Compile Include="..\..\src\System\Net\Http\Managed\HttpConnectionKey.cs">
       <Link>ProductionCode\System\Net\Http\Managed\HttpConnectionKey.cs</Link>
     </Compile>
@@ -314,6 +317,9 @@
     </Compile>
     <Compile Include="..\..\src\System\Net\Http\Managed\HttpContentWriteStream.cs">
       <Link>ProductionCode\System\Net\Http\Managed\HttpContentWriteStream.cs</Link>
+    </Compile>
+    <Compile Include="..\..\src\System\Net\Http\Managed\HttpProxyConnectionHandler.cs">
+      <Link>ProductionCode\System\Net\Http\Managed\HttpProxyConnectionHandler.cs</Link>
     </Compile>
     <Compile Include="Fakes\HttpClientHandler.cs" />
     <Compile Include="Headers\AuthenticationHeaderValueTest.cs" />
