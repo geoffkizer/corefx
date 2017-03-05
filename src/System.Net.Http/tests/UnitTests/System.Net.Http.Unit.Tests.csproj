@@ -288,6 +288,9 @@
     <Compile Include="..\..\src\System\Net\Http\Managed\BasicAuthenticationHelper.cs">
       <Link>ProductionCode\System\Net\Http\Managed\BasicAuthenticationHelper.cs</Link>
     </Compile>
+    <Compile Include="..\..\src\System\Net\Http\Managed\ConnectHelper.cs">
+      <Link>ProductionCode\System\Net\Http\Managed\ConnectHelper.cs</Link>
+    </Compile>
     <Compile Include="..\..\src\System\Net\Http\Managed\CookieHandler.cs">
       <Link>ProductionCode\System\Net\Http\Managed\CookieHandler.cs</Link>
     </Compile>
@@ -296,9 +299,6 @@
     </Compile>
     <Compile Include="..\..\src\System\Net\Http\Managed\ManagedHttpClientHandler.cs">
       <Link>ProductionCode\System\Net\Http\Managed\ManagedHttpClientHandler.cs</Link>
-    </Compile>
-    <Compile Include="..\..\src\System\Net\Http\Managed\ProxyAuthenticationHandler.cs">
-      <Link>ProductionCode\System\Net\Http\Managed\ProxyAuthenticationHandler.cs</Link>
     </Compile>
     <Compile Include="..\..\src\System\Net\Http\Managed\HttpConnection.cs">
       <Link>ProductionCode\System\Net\Http\Managed\HttpConnection.cs</Link>
@@ -309,11 +309,11 @@
     <Compile Include="..\..\src\System\Net\Http\Managed\HttpConnectionPool.cs">
       <Link>ProductionCode\System\Net\Http\Managed\HttpConnectionPool.cs</Link>
     </Compile>
-    <Compile Include="..\..\src\System\Net\Http\Managed\ReadOnlyStream.cs">
-      <Link>ProductionCode\System\Net\Http\Managed\ReadOnlyStream.cs</Link>
+    <Compile Include="..\..\src\System\Net\Http\Managed\HttpContentReadStream.cs">
+      <Link>ProductionCode\System\Net\Http\Managed\HttpContentReadStream.cs</Link>
     </Compile>
-    <Compile Include="..\..\src\System\Net\Http\Managed\WriteOnlyStream.cs">
-      <Link>ProductionCode\System\Net\Http\Managed\WriteOnlyStream.cs</Link>
+    <Compile Include="..\..\src\System\Net\Http\Managed\HttpContentWriteStream.cs">
+      <Link>ProductionCode\System\Net\Http\Managed\HttpContentWriteStream.cs</Link>
     </Compile>
     <Compile Include="Fakes\HttpClientHandler.cs" />
     <Compile Include="Headers\AuthenticationHeaderValueTest.cs" />

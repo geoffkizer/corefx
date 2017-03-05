@@ -51,6 +51,7 @@
     <Compile Include="System\Net\Http\HttpResponseMessage.cs" />
     <Compile Include="System\Net\Http\HttpRuleParser.cs" />
     <Compile Include="System\Net\Http\HttpUtilities.cs" />
+    <Compile Include="System\Net\Http\Managed\ConnectHelper.cs" />
     <Compile Include="System\Net\Http\Managed\HttpConnection.cs" />
     <Compile Include="System\Net\Http\Managed\HttpConnectionKey.cs" />
     <Compile Include="System\Net\Http\Managed\HttpConnectionPool.cs" />
