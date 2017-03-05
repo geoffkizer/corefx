@@ -17,7 +17,7 @@ namespace System.Net.Http.Managed
     {
         private const int BufferSize = 4096;
 
-        private readonly HttpConnectionHandler _handler;
+        private readonly HttpConnectionPool _pool;
         private readonly HttpConnectionKey _key;
         private readonly TcpClient _client;
         private readonly Stream _stream;
@@ -138,7 +138,7 @@ namespace System.Net.Http.Managed
                 if (_contentBytesRemaining == 0)
                 {
                     // End of response body
-                    _connection.ResponseBodyCompleted();
+                    _connection.PutConnectionInPool();
                     _connection = null;
                     return 0;
                 }
@@ -241,7 +241,7 @@ namespace System.Net.Http.Managed
                             throw new IOException("missing final CRLF for chunked encoding");
                         }
 
-                        _connection.ResponseBodyCompleted();
+                        _connection.PutConnectionInPool();
                         _connection = null;
                         return 0;
                     }
@@ -443,14 +443,14 @@ namespace System.Net.Http.Managed
         }
 
         public HttpConnection(
-            HttpConnectionHandler handler, 
+            HttpConnectionPool pool, 
             HttpConnectionKey key, 
             TcpClient client, 
             Stream stream, 
             TransportContext transportContext, 
             bool usingProxy)
         {
-            _handler = handler;
+            _pool = pool;
             _key = key;
             _client = client;
             _stream = stream;
@@ -465,6 +465,8 @@ namespace System.Net.Http.Managed
             _readBuffer = new byte[BufferSize];
             _readLength = 0;
             _readOffset = 0;
+
+            _pool.AddConnection(this);
         }
 
         public HttpConnectionKey Key
@@ -976,12 +978,9 @@ namespace System.Net.Http.Managed
             return count;
         }
 
-        private void ResponseBodyCompleted()
+        private void PutConnectionInPool()
         {
-            // Called by the response stream when the body has been fully read
-
-            // Put the connection back in the connection pool, for reuse
-            _handler.ReturnConnectionToPool(this);
+            _pool.PutConnection(this);
         }
     }
 }

@@ -512,28 +512,14 @@ namespace System.Net.Http.Managed
                 transportContext = sslStream.TransportContext;
             }
 
-            var connection = new HttpConnection(this, key, client, stream, transportContext, (proxyUri != null));
-
-            // Add to list of active connections in pool
             if (pool == null)
             {
                 pool = _connectionPoolTable.GetOrAdd(key, new HttpConnectionPool());
             }
 
-            pool.AddConnection(connection);
+            var connection = new HttpConnection(pool, key, client, stream, transportContext, (proxyUri != null));
 
             return connection;
-        }
-
-        internal void ReturnConnectionToPool(HttpConnection connection)
-        {
-            HttpConnectionPool pool;
-            if (!_connectionPoolTable.TryGetValue(connection.Key, out pool))
-            {
-                throw new InvalidOperationException();
-            }
-
-            pool.PutConnection(connection);
         }
 
         protected override void Dispose(bool disposing)
