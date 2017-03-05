@@ -60,8 +60,8 @@
     <Compile Include="System\Net\Http\Managed\BasicAuthenticationHelper.cs" />
     <Compile Include="System\Net\Http\Managed\CookieHandler.cs" />
     <Compile Include="System\Net\Http\Managed\DecompressionHandler.cs" />
-    <Compile Include="System\Net\Http\Managed\WriteOnlyStream.cs" />
-    <Compile Include="System\Net\Http\Managed\ReadOnlyStream.cs" />
+    <Compile Include="System\Net\Http\Managed\HttpContentWriteStream.cs" />
+    <Compile Include="System\Net\Http\Managed\HttpContentReadStream.cs" />
     <Compile Include="System\Net\Http\MessageProcessingHandler.cs" />
     <Compile Include="System\Net\Http\MultipartContent.cs" />
     <Compile Include="System\Net\Http\MultipartFormDataContent.cs" />

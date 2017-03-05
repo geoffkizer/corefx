@@ -8,9 +8,7 @@ using System.Threading.Tasks;
 
 namespace System.Net.Http.Managed
 {
-    // TODO: Rename to something like "HttpContentWriteStream"
-
-    internal abstract class WriteOnlyStream : Stream
+    internal abstract class HttpContentWriteStream : Stream
     {
         public override bool CanRead => false;
 

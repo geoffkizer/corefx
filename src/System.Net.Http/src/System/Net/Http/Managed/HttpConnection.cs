@@ -101,7 +101,7 @@ namespace System.Net.Http.Managed
             protected override Task<Stream> CreateContentReadStreamAsync() => Task.FromResult<Stream>(_content);
         }
 
-        private sealed class ContentLengthReadStream : ReadOnlyStream
+        private sealed class ContentLengthReadStream : HttpContentReadStream
         {
             private HttpConnection _connection;
             private long _contentBytesRemaining;
@@ -145,7 +145,7 @@ namespace System.Net.Http.Managed
             }
         }
 
-        private sealed class ChunkedEncodingReadStream : ReadOnlyStream
+        private sealed class ChunkedEncodingReadStream : HttpContentReadStream
         {
             private HttpConnection _connection;
             private int _chunkBytesRemaining;
@@ -249,7 +249,7 @@ namespace System.Net.Http.Managed
             }
         }
 
-        private sealed class ConnectionCloseReadStream : ReadOnlyStream
+        private sealed class ConnectionCloseReadStream : HttpContentReadStream
         {
             private HttpConnection _connection;
 
@@ -280,7 +280,7 @@ namespace System.Net.Http.Managed
             }
         }
 
-        private sealed class ChunkedEncodingWriteStream : WriteOnlyStream
+        private sealed class ChunkedEncodingWriteStream : HttpContentWriteStream
         {
             private HttpConnection _connection;
 
@@ -341,7 +341,7 @@ namespace System.Net.Http.Managed
             }
         }
 
-        public sealed class ContentLengthWriteStream : WriteOnlyStream
+        public sealed class ContentLengthWriteStream : HttpContentWriteStream
         {
             private HttpConnection _connection;
 
@@ -692,9 +692,9 @@ namespace System.Net.Http.Managed
             // Write body, if any
             if (requestContent != null)
             {
-                WriteOnlyStream stream = (request.Headers.TransferEncodingChunked == true ?
-                    (WriteOnlyStream)new ChunkedEncodingWriteStream(this) : 
-                    (WriteOnlyStream)new ContentLengthWriteStream(this));
+                HttpContentWriteStream stream = (request.Headers.TransferEncodingChunked == true ?
+                    (HttpContentWriteStream)new ChunkedEncodingWriteStream(this) : 
+                    (HttpContentWriteStream)new ContentLengthWriteStream(this));
 
                 // TODO: CopyToAsync doesn't take a CancellationToken, how do we deal with Cancellation here?
                 await request.Content.CopyToAsync(stream, _transportContext);

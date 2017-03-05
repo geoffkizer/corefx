@@ -8,7 +8,7 @@ using System.Threading.Tasks;
 
 namespace System.Net.Http.Managed
 {
-    internal abstract class ReadOnlyStream : Stream
+    internal abstract class HttpContentReadStream : Stream
     {
         public override bool CanRead => true;
 
