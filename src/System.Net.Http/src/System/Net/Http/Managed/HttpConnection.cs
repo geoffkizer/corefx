@@ -681,6 +681,11 @@ namespace System.Net.Http.Managed
         public async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request,
             CancellationToken cancellationToken)
         {
+            if (request.Version.Major != 1 || request.Version.Minor != 1)
+            {
+                throw new PlatformNotSupportedException($"Only HTTP 1.1 supported -- request.Version was {request.Version}");
+            }
+
             HttpContent requestContent = request.Content;
 
             // Add headers to define content transfer, if not present

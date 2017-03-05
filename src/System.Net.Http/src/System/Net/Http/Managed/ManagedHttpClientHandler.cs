@@ -381,37 +381,31 @@ namespace System.Net.Http.Managed
 
         protected internal override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
-            if (request.Version.Major != 1 || request.Version.Minor != 1)
-            {
-                throw new PlatformNotSupportedException($"Only HTTP 1.1 supported -- request.Version was {request.Version}");
-            }
-
+            Uri connectUri = request.RequestUri;
             Uri proxyUri = null;
             if (_proxy != null)
             {
                 proxyUri = ManagedHttpClientHandler.GetProxyUri(_proxy, request.RequestUri);
+                if (proxyUri != null)
+                {
+                    if (connectUri.Scheme == "https")
+                    {
+                        throw new NotImplementedException("no SSL proxy support");
+                    }
+
+                    connectUri = proxyUri;
+                }
             }
 
-            HttpConnection connection = await GetOrCreateConnection(request, proxyUri, cancellationToken);
+            HttpConnection connection = await GetOrCreateConnection(request, connectUri, proxyUri, cancellationToken);
 
             HttpResponseMessage response = await connection.SendAsync(request, cancellationToken);
 
             return response;
         }
 
-        private async Task<HttpConnection> GetOrCreateConnection(HttpRequestMessage request, Uri proxyUri, CancellationToken cancellationToken)
+        private async Task<HttpConnection> GetOrCreateConnection(HttpRequestMessage request, Uri connectUri, Uri proxyUri, CancellationToken cancellationToken)
         {
-            Uri connectUri = request.RequestUri;
-            if (proxyUri != null)
-            {
-                if (connectUri.Scheme == "https")
-                {
-                    throw new NotImplementedException("no SSL proxy support");
-                }
-
-                connectUri = proxyUri;
-            }
-
             // Simple connection pool.
             // We never expire connections.
             // That's unfortunate, but allows for reasonable perf testing for now.
