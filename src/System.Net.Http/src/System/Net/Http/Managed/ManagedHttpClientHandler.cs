@@ -275,9 +275,14 @@ namespace System.Net.Http.Managed
                 _clientCertificates,
                 _serverCertificateCustomValidationCallback,
                 _checkCertificateRevocationList,
-                _sslProtocols,
-                _useProxy ? _proxy : null);
+                _sslProtocols);
 
+            if (_useProxy && _proxy != null)
+            {
+                handler = new HttpProxyConnectionHandler(_proxy, handler);
+            }
+
+            // TODO: Combine with above
             if (_useProxy && _proxy != null && _proxy.Credentials != null)
             {
                 handler = new ProxyAuthenticationHandler(_proxy, handler);
@@ -322,9 +327,7 @@ namespace System.Net.Http.Managed
             return _handler.SendAsync(request, cancellationToken);
         }
 
-        // Static utility routine; move somewhere else?
         // TODO: Move this
-
         internal static Uri GetProxyUri(IWebProxy proxy, Uri requestUri)
         {
             Debug.Assert(proxy != null);
@@ -349,12 +352,8 @@ namespace System.Net.Http.Managed
     }
 
     // TODO: Move
-    // TODO: Refactor proxy handling into HttpProxyConnectionHandler
-    // TODO: Move proxy auth to HttpProxyConnectionHandler
-
     internal sealed class HttpConnectionHandler : HttpMessageHandler
     {
-        private readonly IWebProxy _proxy;
         private readonly X509CertificateCollection _clientCertificates;
         private readonly Func<HttpRequestMessage, X509Certificate2, X509Chain, SslPolicyErrors, bool> _serverCertificateCustomValidationCallback;
         private readonly bool _checkCertificateRevocationList;
@@ -367,10 +366,8 @@ namespace System.Net.Http.Managed
             X509CertificateCollection clientCertificates,
             Func<HttpRequestMessage, X509Certificate2, X509Chain, SslPolicyErrors, bool> serverCertificateCustomValidationCallback,
             bool checkCertificateRevocationList,
-            SslProtocols sslProtocols,
-            IWebProxy proxy)
+            SslProtocols sslProtocols)
         {
-            _proxy = proxy;
             _clientCertificates = clientCertificates;
             _serverCertificateCustomValidationCallback = serverCertificateCustomValidationCallback;
             _checkCertificateRevocationList = checkCertificateRevocationList;
@@ -382,32 +379,18 @@ namespace System.Net.Http.Managed
         protected internal override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
             Uri connectUri = request.RequestUri;
-            Uri proxyUri = null;
-            if (_proxy != null)
-            {
-                proxyUri = ManagedHttpClientHandler.GetProxyUri(_proxy, request.RequestUri);
-                if (proxyUri != null)
-                {
-                    if (connectUri.Scheme == "https")
-                    {
-                        throw new NotImplementedException("no SSL proxy support");
-                    }
 
-                    connectUri = proxyUri;
-                }
-            }
-
-            HttpConnection connection = await GetOrCreateConnection(request, connectUri, proxyUri, cancellationToken);
+            HttpConnection connection = await GetOrCreateConnection(request);
 
             HttpResponseMessage response = await connection.SendAsync(request, cancellationToken);
 
             return response;
         }
 
-        private static async Task<NetworkStream> ConnectAsync(string host, int port)
+        // TODO: Move
+        public static async Task<NetworkStream> ConnectAsync(string host, int port)
         {
             TcpClient client;
-
             try
             {
                 // You would think TcpClient.Connect would just do this, but apparently not.
@@ -416,6 +399,7 @@ namespace System.Net.Http.Managed
                 // TODO: Does this mean that connecting by name will only work with IPv4
                 // (since that's the default)?  If so, need to rework this logic
                 // to resolve the IPAddress ourselves.  Yuck.
+                // TODO: No cancellationToken on ConnectAsync?
                 IPAddress ipAddress;
                 if (IPAddress.TryParse(host, out ipAddress))
                 {
@@ -465,6 +449,7 @@ namespace System.Net.Http.Managed
 
             try
             {
+                // TODO: No cancellationToken?
                 await sslStream.AuthenticateAsClientAsync(host, _clientCertificates, _sslProtocols, _checkCertificateRevocationList);
             }
             catch (AuthenticationException ae)
@@ -488,13 +473,10 @@ namespace System.Net.Http.Managed
             return sslStream;
         }
 
-        private async Task<HttpConnection> GetOrCreateConnection(HttpRequestMessage request, Uri connectUri, Uri proxyUri, CancellationToken cancellationToken)
+        private async Task<HttpConnection> GetOrCreateConnection(HttpRequestMessage request)
         {
-            // Simple connection pool.
-            // We never expire connections.
-            // That's unfortunate, but allows for reasonable perf testing for now.
-
-            HttpConnectionKey key = new HttpConnectionKey(connectUri);
+            Uri uri = request.RequestUri;
+            HttpConnectionKey key = new HttpConnectionKey(uri);
 
             HttpConnectionPool pool;
             if (_connectionPoolTable.TryGetValue(key, out pool))
@@ -507,13 +489,13 @@ namespace System.Net.Http.Managed
             }
 
             // Connect
-            Stream stream = await ConnectAsync(connectUri.Host, connectUri.Port);
+            Stream stream = await ConnectAsync(uri.Host, uri.Port);
 
             TransportContext transportContext = null;
 
-            if (connectUri.Scheme == "https")
+            if (uri.Scheme == "https")
             {
-                SslStream sslStream = await EstablishSslConnection(connectUri.Host, request, stream);
+                SslStream sslStream = await EstablishSslConnection(uri.Host, request, stream);
 
                 stream = sslStream;
                 transportContext = sslStream.TransportContext;
@@ -524,9 +506,105 @@ namespace System.Net.Http.Managed
                 pool = _connectionPoolTable.GetOrAdd(key, new HttpConnectionPool());
             }
 
-            var connection = new HttpConnection(pool, key, stream, transportContext, (proxyUri != null));
+            var connection = new HttpConnection(pool, key, stream, transportContext, false);
 
             return connection;
+        }
+
+        protected override void Dispose(bool disposing)
+        {
+            if (disposing && !!_disposed)
+            {
+                _disposed = true;
+
+                // Close all open connections
+                // TODO: There's a timing issue here
+                // Revisit when we improve the connection pooling implementation
+                foreach (HttpConnectionPool connectionPool in _connectionPoolTable.Values)
+                {
+                    connectionPool.Dispose();
+                }
+            }
+
+            base.Dispose(disposing);
+        }
+    }
+
+    internal sealed class HttpProxyConnectionHandler : HttpMessageHandler
+    {
+        private readonly IWebProxy _proxy;
+        private readonly HttpMessageHandler _innerHandler;
+
+        private readonly ConcurrentDictionary<HttpConnectionKey, HttpConnectionPool> _connectionPoolTable;
+        private bool _disposed;
+
+        public HttpProxyConnectionHandler(IWebProxy proxy, HttpMessageHandler innerHandler)
+        {
+            if (proxy == null)
+            {
+                throw new ArgumentNullException(nameof(proxy));
+            }
+
+            if (innerHandler == null)
+            {
+                throw new ArgumentNullException(nameof(innerHandler));
+            }
+            
+            _proxy = proxy;
+            _innerHandler = innerHandler;
+
+            _connectionPoolTable = new ConcurrentDictionary<HttpConnectionKey, HttpConnectionPool>();
+        }
+
+        protected internal override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            // TODO: Move GetProxyUri here
+            Uri proxyUri = ManagedHttpClientHandler.GetProxyUri(_proxy, request.RequestUri);
+            if (proxyUri == null)
+            {
+                return await _innerHandler.SendAsync(request, cancellationToken);
+            }
+
+            if (proxyUri.Scheme != "http")
+            {
+                throw new InvalidOperationException($"invalid scheme {proxyUri.Scheme} for proxy");
+            }
+
+            if (request.RequestUri.Scheme == "https")
+            {
+                // TODO: Implement SSL tunneling through proxy
+                throw new NotImplementedException("no support for SSL tunneling through proxy");
+            }
+
+            HttpConnection connection = await GetOrCreateConnection(request, proxyUri);
+
+            HttpResponseMessage response = await connection.SendAsync(request, cancellationToken);
+
+            return response;
+        }
+
+        private async Task<HttpConnection> GetOrCreateConnection(HttpRequestMessage request, Uri proxyUri)
+        {
+            HttpConnectionKey key = new HttpConnectionKey(proxyUri);
+
+            HttpConnectionPool pool;
+            if (_connectionPoolTable.TryGetValue(key, out pool))
+            {
+                HttpConnection poolConnection = pool.GetConnection();
+                if (poolConnection != null)
+                {
+                    return poolConnection;
+                }
+            }
+
+            Stream stream = await HttpConnectionHandler.ConnectAsync(proxyUri.Host, proxyUri.Port);
+
+            if (pool == null)
+            {
+                pool = _connectionPoolTable.GetOrAdd(key, new HttpConnectionPool());
+            }
+
+            return new HttpConnection(pool, key, stream, null, true);
         }
 
         protected override void Dispose(bool disposing)
