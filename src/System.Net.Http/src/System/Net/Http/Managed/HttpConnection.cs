@@ -101,12 +101,12 @@ namespace System.Net.Http.Managed
             protected override Task<Stream> CreateContentReadStreamAsync() => Task.FromResult<Stream>(_content);
         }
 
-        private sealed class ContentLengthResponseStream : ReadOnlyStream
+        private sealed class ContentLengthReadStream : ReadOnlyStream
         {
             private HttpConnection _connection;
             private long _contentBytesRemaining;
 
-            public ContentLengthResponseStream(HttpConnection connection, long contentLength)
+            public ContentLengthReadStream(HttpConnection connection, long contentLength)
             {
                 _connection = connection;
                 _contentBytesRemaining = contentLength;
@@ -280,14 +280,14 @@ namespace System.Net.Http.Managed
             }
         }
 
-        private sealed class ChunkedEncodingRequestStream : WriteOnlyStream
+        private sealed class ChunkedEncodingWriteStream : WriteOnlyStream
         {
             private HttpConnection _connection;
             private byte[] _chunkLengthBuffer;
 
             static readonly byte[] _CRLF = new byte[] { (byte)'\r', (byte)'\n' };
 
-            public ChunkedEncodingRequestStream(HttpConnection connection)
+            public ChunkedEncodingWriteStream(HttpConnection connection)
             {
                 _connection = connection;
 
@@ -325,7 +325,12 @@ namespace System.Net.Http.Managed
                 await _connection.WriteAsync(_CRLF, 0, _CRLF.Length, cancellationToken);
             }
 
-            public async Task CompleteAsync(CancellationToken cancellationToken)
+            public override Task FlushAsync(CancellationToken cancellationToken)
+            {
+                return _connection.FlushAsync(cancellationToken);
+            }
+
+            public override async Task FinishAsync(CancellationToken cancellationToken)
             {
                 // Send 0 byte chunk to indicate end
                 _chunkLengthBuffer[0] = (byte)'0';
@@ -335,10 +340,33 @@ namespace System.Net.Http.Managed
                 // Send final _CRLF
                 await _connection.WriteAsync(_CRLF, 0, _CRLF.Length, cancellationToken);
 
-                // Flush underlying connection buffer
-                await _connection.FlushAsync(cancellationToken);
-
                 _connection = null;
+            }
+        }
+
+        public sealed class ContentLengthWriteStream : WriteOnlyStream
+        {
+            private HttpConnection _connection;
+
+            public ContentLengthWriteStream(HttpConnection connection)
+            {
+                _connection = connection;
+            }
+
+            public override Task WriteAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken)
+            {
+                return _connection.WriteAsync(buffer, offset, count, cancellationToken);
+            }
+
+            public override Task FlushAsync(CancellationToken cancellationToken)
+            {
+                return _connection.FlushAsync(cancellationToken);
+            }
+
+            public override Task FinishAsync(CancellationToken cancellationToken)
+            {
+                _connection = null;
+                return Task.CompletedTask;
             }
         }
 
@@ -383,7 +411,7 @@ namespace System.Net.Http.Managed
             }
         }
 
-        private async Task<HttpResponseMessage> ParseResponse(HttpRequestMessage request, CancellationToken cancellationToken)
+        private async Task<HttpResponseMessage> ParseResponseAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
             HttpResponseMessage response = new HttpResponseMessage();
             response.RequestMessage = request;
@@ -518,11 +546,11 @@ namespace System.Net.Http.Managed
             {
                 // There is implicitly no response body
                 // TODO: Should this mean there's no responseContent at all?
-                responseStream = new ContentLengthResponseStream(this, 0);
+                responseStream = new ContentLengthReadStream(this, 0);
             }
             else if (responseContent.Headers.ContentLength != null)
             {
-                responseStream = new ContentLengthResponseStream(this, responseContent.Headers.ContentLength.Value);
+                responseStream = new ContentLengthReadStream(this, responseContent.Headers.ContentLength.Value);
             }
             else if (response.Headers.TransferEncodingChunked == true)
             {
@@ -573,25 +601,25 @@ namespace System.Net.Http.Managed
         {
             HttpContent requestContent = request.Content;
 
-            // Determine if we need transfer encoding
-            bool transferEncoding = false;
-            long contentLength = 0;
-            if (requestContent != null)
+            // Add headers to define content transfer, if not present
+            if (requestContent != null &&
+                request.Headers.TransferEncodingChunked != true &&
+                requestContent.Headers.ContentLength == null)
             {
-                if (request.Headers.TransferEncodingChunked == true)
+                // We have content, but neither Transfer-Encoding or Content-Length is set.
+                // TODO: Tests expect Transfer-Encoding here always.
+                // This seems wrong to me; if we can compute the content length,
+                // why not use it instead of falling back to Transfer-Encoding?
+#if false
+                if (requestContent.TryComputeLength(out contentLength))
                 {
-                    transferEncoding = true;
-                }
-                else if (requestContent.Headers.ContentLength != null)
-                {
-                    contentLength = requestContent.Headers.ContentLength.Value;
+                    // We know the content length, so set the header
+                    requestContent.Headers.ContentLength = contentLength;
                 }
                 else
+#endif
                 {
-                    // TODO: Is this the correct behavior?
-                    // Seems better to do TryComputeLength on the content first
                     request.Headers.TransferEncodingChunked = true;
-                    transferEncoding = true;
                 }
             }
 
@@ -607,9 +635,6 @@ namespace System.Net.Http.Managed
 
                 request.Headers.Host = hostString;
             }
-
-            // Start sending the request
-            // TODO: can certainly make this more efficient...
 
             // Write request line
             await WriteStringAsync(request.Method.Method, cancellationToken);
@@ -636,56 +661,52 @@ namespace System.Net.Http.Managed
             await WriteCharAsync('\r', cancellationToken);
             await WriteCharAsync('\n', cancellationToken);
 
-            // Write headers
+            // Write request headers
             await WriteHeadersAsync(request.Headers, cancellationToken);
 
-            if (requestContent != null)
-            {
-                await WriteHeadersAsync(requestContent.Headers, cancellationToken);
-            }
-
-            // Also write out a Content-Length: 0 header if no request body, and this is a method that can have one.
-            // TODO: revisit this; should set this as a header and write out as always
-            // Actually, under what circumstances can requestContent be null?  Consider...
             if (requestContent == null)
             {
+                // Write out Content-Length: 0 header to indicate no body, 
+                // unless this is a method that never has a body.
                 if (request.Method != HttpMethod.Get &&
                     request.Method != HttpMethod.Head)
                 {
                     await WriteStringAsync("Content-Length: 0\r\n", cancellationToken);
                 }
             }
+            else
+            {
+                // Write content headers
+                await WriteHeadersAsync(requestContent.Headers, cancellationToken);
+            }
 
             // CRLF for end of headers.
             await WriteCharAsync('\r', cancellationToken);
             await WriteCharAsync('\n', cancellationToken);
 
-            // Flush headers.  We need to do this if we have no body anyway.
-            // TODO: Don't think we should always do this, consider...
-            await FlushAsync(cancellationToken);
-
             // Write body, if any
             if (requestContent != null)
             {
-                // TODO: 100-continue?
+                WriteOnlyStream stream = (request.Headers.TransferEncodingChunked == true ?
+                    (WriteOnlyStream)new ChunkedEncodingWriteStream(this) : 
+                    (WriteOnlyStream)new ContentLengthWriteStream(this));
 
-                if (transferEncoding)
-                {
-                    var stream = new ChunkedEncodingRequestStream(this);
-
-                    // TODO: CopyToAsync doesn't take a CancellationToken, how do we deal with Cancellation here? (and below)
-                    await request.Content.CopyToAsync(stream, _transportContext);
-                    await stream.CompleteAsync(cancellationToken);
-                }
-                else
-                {
-                    // TODO: Is it fine to just pass the underlying stream?
-                    // For small content, seems like this should go through buffering
-                    await request.Content.CopyToAsync(_stream, _transportContext);
-                }
+                // TODO: CopyToAsync doesn't take a CancellationToken, how do we deal with Cancellation here?
+                await request.Content.CopyToAsync(stream, _transportContext);
+                await stream.FinishAsync(cancellationToken);
             }
 
-            return await ParseResponse(request, cancellationToken);
+            await FlushAsync(cancellationToken);
+
+            return await ParseResponseAsync(request, cancellationToken);
+        }
+
+        private void CopyToWriteBuffer(byte[] buffer, int offset, int count)
+        {
+            Debug.Assert(count <= BufferSize - _writeOffset);
+
+            Buffer.BlockCopy(buffer, offset, _writeBuffer, _writeOffset, count);
+            _writeOffset += count;
         }
 
         private async Task WriteAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken)
@@ -695,19 +716,20 @@ namespace System.Net.Http.Managed
             if (count <= remaining)
             {
                 // Fits in current write buffer.  Just copy and return.
-                Buffer.BlockCopy(buffer, offset, _writeBuffer, _writeOffset, count);
-                _writeOffset += count;
+                CopyToWriteBuffer(buffer, offset, count);
                 return;
             }
 
-            // Fit what we can in the current write buffer and flush it.
-            Buffer.BlockCopy(buffer, offset, _writeBuffer, _writeOffset, remaining);
+            if (_writeOffset != 0)
+            {
+                // Fit what we can in the current write buffer and flush it.
+                CopyToWriteBuffer(buffer, offset, remaining);
+                await FlushAsync(cancellationToken);
 
-            await FlushAsync(cancellationToken);
-
-            // Update offset and count to reflect the write we just did.
-            offset += remaining;
-            count -= remaining;
+                // Update offset and count to reflect the write we just did.
+                offset += remaining;
+                count -= remaining;
+            }
 
             if (count >= BufferSize)
             {
@@ -718,8 +740,7 @@ namespace System.Net.Http.Managed
             else
             {
                 // Copy remainder into buffer
-                Buffer.BlockCopy(buffer, offset, _writeBuffer, _writeOffset, 0);
-                _writeOffset += count;
+                CopyToWriteBuffer(buffer, offset, count);
             }
         }
 
@@ -765,8 +786,11 @@ namespace System.Net.Http.Managed
 
         private async Task FlushAsync(CancellationToken cancellationToken)
         {
-            await _stream.WriteAsync(_writeBuffer, 0, _writeOffset, cancellationToken);
-            _writeOffset = 0;
+            if (_writeOffset > 0)
+            { 
+                await _stream.WriteAsync(_writeBuffer, 0, _writeOffset, cancellationToken);
+                _writeOffset = 0;
+            }
         }
 
         private async Task FillAsync(CancellationToken cancellationToken)

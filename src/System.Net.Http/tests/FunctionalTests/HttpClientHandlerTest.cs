@@ -1385,6 +1385,7 @@ namespace System.Net.Http.Functional.Tests
                             SerializeToStreamAsyncDelegate = async (contentStream, contentTransport) =>
                             {
                                 await contentStream.WriteAsync(new byte[50], 0, 50);
+                                await contentStream.FlushAsync();
                                 await trigger.Task;
                                 await contentStream.WriteAsync(new byte[50], 0, 50);
                             },

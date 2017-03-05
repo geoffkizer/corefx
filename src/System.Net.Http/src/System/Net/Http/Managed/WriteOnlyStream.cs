@@ -4,9 +4,12 @@
 
 using System.IO;
 using System.Threading;
+using System.Threading.Tasks;
 
 namespace System.Net.Http.Managed
 {
+    // TODO: Rename to something like "HttpContentWriteStream"
+
     internal abstract class WriteOnlyStream : Stream
     {
         public override bool CanRead => false;
@@ -28,7 +31,7 @@ namespace System.Net.Http.Managed
 
         public override void Flush()
         {
-            throw new NotSupportedException();
+            FlushAsync().Wait();
         }
 
         public override long Seek(long offset, SeekOrigin origin)
@@ -50,5 +53,9 @@ namespace System.Net.Http.Managed
         {
             WriteAsync(buffer, offset, count, CancellationToken.None).Wait();
         }
+
+        public abstract override Task WriteAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken);
+        public abstract override Task FlushAsync(CancellationToken cancellationToken);
+        public abstract Task FinishAsync(CancellationToken cancellationToken);
     }
 }

@@ -459,10 +459,12 @@ namespace System.Net.Http.Managed
 
             NetworkStream networkStream = client.GetStream();
 
+#if false
             // Set default read/write timeouts of 5 seconds.
             // TODO: Make these configurable?
             networkStream.ReadTimeout = 5000;
             networkStream.WriteTimeout = 5000;
+#endif
 
             Stream stream = networkStream;
             TransportContext transportContext = null;
