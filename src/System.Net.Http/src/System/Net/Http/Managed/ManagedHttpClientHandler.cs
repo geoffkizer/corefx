@@ -404,6 +404,90 @@ namespace System.Net.Http.Managed
             return response;
         }
 
+        private static async Task<NetworkStream> ConnectAsync(string host, int port)
+        {
+            TcpClient client;
+
+            try
+            {
+                // You would think TcpClient.Connect would just do this, but apparently not.
+                // It works for IPv4 addresses but seems to barf on IPv6.
+                // I need to explicitly invoke the constructor with AddressFamily = IPv6.
+                // TODO: Does this mean that connecting by name will only work with IPv4
+                // (since that's the default)?  If so, need to rework this logic
+                // to resolve the IPAddress ourselves.  Yuck.
+                IPAddress ipAddress;
+                if (IPAddress.TryParse(host, out ipAddress))
+                {
+                    client = new TcpClient(ipAddress.AddressFamily);
+                    await client.ConnectAsync(ipAddress, port);
+                }
+                else
+                {
+                    client = new TcpClient();
+                    await client.ConnectAsync(host, port);
+                }
+            }
+            catch (SocketException se)
+            {
+                throw new HttpRequestException("could not connect", se);
+            }
+
+            client.NoDelay = true;
+
+            NetworkStream networkStream = client.GetStream();
+
+            // TODO: Timeouts?
+            // Default timeout should be something less than infinity (the Socket default)
+            // Timeouts probably need to be configurable
+            // However, timeouts are also a huge pain when debugging, so consider that too.
+#if false
+            // Set default read/write timeouts of 5 seconds.
+            networkStream.ReadTimeout = 5000;
+            networkStream.WriteTimeout = 5000;
+#endif
+
+            return networkStream;
+        }
+
+        private async Task<SslStream> EstablishSslConnection(string host, HttpRequestMessage request, Stream stream)
+        {
+            RemoteCertificateValidationCallback callback = null;
+            if (_serverCertificateCustomValidationCallback != null)
+            {
+                callback = (object sender, X509Certificate certificate, X509Chain chain, SslPolicyErrors sslPolicyErrors) =>
+                {
+                    return _serverCertificateCustomValidationCallback(request, certificate as X509Certificate2, chain, sslPolicyErrors);
+                };
+            }
+
+            SslStream sslStream = new SslStream(stream, false, callback);
+
+            try
+            {
+                await sslStream.AuthenticateAsClientAsync(host, _clientCertificates, _sslProtocols, _checkCertificateRevocationList);
+            }
+            catch (AuthenticationException ae)
+            {
+                // TODO: Tests expect HttpRequestException here.  Is that correct behavior?
+                sslStream.Dispose();
+                throw new HttpRequestException("could not establish SSL connection", ae);
+            }
+            catch (IOException ie)
+            {
+                // TODO: Tests expect HttpRequestException here.  Is that correct behavior?
+                sslStream.Dispose();
+                throw new HttpRequestException("could not establish SSL connection", ie);
+            }
+            catch (Exception)
+            {
+                sslStream.Dispose();
+                throw;
+            }
+
+            return sslStream;
+        }
+
         private async Task<HttpConnection> GetOrCreateConnection(HttpRequestMessage request, Uri connectUri, Uri proxyUri, CancellationToken cancellationToken)
         {
             // Simple connection pool.
@@ -423,84 +507,13 @@ namespace System.Net.Http.Managed
             }
 
             // Connect
-            TcpClient client;
+            Stream stream = await ConnectAsync(connectUri.Host, connectUri.Port);
 
-            try
-            {
-                // You would think TcpClient.Connect would just do this, but apparently not.
-                // It works for IPv4 addresses but seems to barf on IPv6.
-                // I need to explicitly invoke the constructor with AddressFamily = IPv6.
-                // Probably worth further investigation....
-                IPAddress ipAddress;
-                if (IPAddress.TryParse(connectUri.Host, out ipAddress))
-                {
-                    client = new TcpClient(ipAddress.AddressFamily);
-                    await client.ConnectAsync(ipAddress, connectUri.Port);
-                }
-                else
-                {
-                    client = new TcpClient();
-                    await client.ConnectAsync(connectUri.Host, connectUri.Port);
-                }
-
-            }
-            catch (SocketException se)
-            {
-                throw new HttpRequestException("could not connect", se);
-            }
-
-            client.NoDelay = true;
-
-            NetworkStream networkStream = client.GetStream();
-
-#if false
-            // Set default read/write timeouts of 5 seconds.
-            // TODO: Make these configurable?
-            networkStream.ReadTimeout = 5000;
-            networkStream.WriteTimeout = 5000;
-#endif
-
-            Stream stream = networkStream;
             TransportContext transportContext = null;
 
             if (connectUri.Scheme == "https")
             {
-                RemoteCertificateValidationCallback callback = null;
-                if (_serverCertificateCustomValidationCallback != null)
-                {
-                    callback = (object sender, X509Certificate certificate, X509Chain chain, SslPolicyErrors sslPolicyErrors) =>
-                    {
-                        // TODO: Not sure this is correct...
-                        var cert2 = certificate as X509Certificate2;
-
-                        return _serverCertificateCustomValidationCallback(request, cert2, chain, sslPolicyErrors);
-                    };
-                }
-
-                // Note, the sslStream owns the underlying network stream.
-                SslStream sslStream = new SslStream(stream, false, callback);
-
-                try
-                {
-                    await sslStream.AuthenticateAsClientAsync(connectUri.Host, _clientCertificates, _sslProtocols, _checkCertificateRevocationList);
-                }
-                catch (AuthenticationException ae)
-                {
-                    // TODO: Tests expect HttpRequestException here.  Is that correct behavior?
-                    sslStream.Dispose();
-                    throw new HttpRequestException("could not establish SSL connection", ae);
-                }
-                catch (IOException ie)
-                {
-                    // TODO: Tests expect HttpRequestException here.  Is that correct behavior?
-                    sslStream.Dispose();
-                    throw new HttpRequestException("could not establish SSL connection", ie);
-                }
-                catch (Exception)
-                {
-                    sslStream.Dispose();
-                    throw;
-                }
+                SslStream sslStream = await EstablishSslConnection(connectUri.Host, request, stream);
 
                 stream = sslStream;
                 transportContext = sslStream.TransportContext;
@@ -511,7 +524,7 @@ namespace System.Net.Http.Managed
                 pool = _connectionPoolTable.GetOrAdd(key, new HttpConnectionPool());
             }
 
-            var connection = new HttpConnection(pool, key, client, stream, transportContext, (proxyUri != null));
+            var connection = new HttpConnection(pool, key, stream, transportContext, (proxyUri != null));
 
             return connection;
         }

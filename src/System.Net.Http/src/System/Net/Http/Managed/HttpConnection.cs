@@ -19,7 +19,6 @@ namespace System.Net.Http.Managed
 
         private readonly HttpConnectionPool _pool;
         private readonly HttpConnectionKey _key;
-        private readonly TcpClient _client;
         private readonly Stream _stream;
         private readonly TransportContext _transportContext;
         private readonly bool _usingProxy;
@@ -445,14 +444,12 @@ namespace System.Net.Http.Managed
         public HttpConnection(
             HttpConnectionPool pool, 
             HttpConnectionKey key, 
-            TcpClient client, 
             Stream stream, 
             TransportContext transportContext, 
             bool usingProxy)
         {
             _pool = pool;
             _key = key;
-            _client = client;
             _stream = stream;
             _transportContext = transportContext;
             _usingProxy = usingProxy;
@@ -481,7 +478,6 @@ namespace System.Net.Http.Managed
                 _disposed = true;
 
                 _stream.Dispose();
-                _client.Dispose();
             }
         }
 
