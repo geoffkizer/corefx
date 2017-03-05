@@ -114,6 +114,21 @@ namespace System.Net.Http.Managed
 
             public override async Task<int> ReadAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken)
             {
+                if (buffer == null)
+                {
+                    throw new ArgumentNullException(nameof(buffer));
+                }
+
+                if (offset < 0 || offset > buffer.Length)
+                {
+                    throw new ArgumentOutOfRangeException(nameof(offset));
+                }
+
+                if (count < 0 || count > buffer.Length - offset)
+                {
+                    throw new ArgumentOutOfRangeException(nameof(count));
+                }
+
                 if (_connection == null)
                 {
                     // Response body fully consumed
@@ -158,6 +173,21 @@ namespace System.Net.Http.Managed
 
             public override async Task<int> ReadAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken)
             {
+                if (buffer == null)
+                {
+                    throw new ArgumentNullException(nameof(buffer));
+                }
+
+                if (offset < 0 || offset > buffer.Length)
+                {
+                    throw new ArgumentOutOfRangeException(nameof(offset));
+                }
+
+                if (count < 0 || count > buffer.Length - offset)
+                {
+                    throw new ArgumentOutOfRangeException(nameof(count));
+                }
+
                 if (_connection == null)
                 {
                     // Response body fully consumed
@@ -260,6 +290,21 @@ namespace System.Net.Http.Managed
 
             public override async Task<int> ReadAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken)
             {
+                if (buffer == null)
+                {
+                    throw new ArgumentNullException(nameof(buffer));
+                }
+
+                if (offset < 0 || offset > buffer.Length)
+                {
+                    throw new ArgumentOutOfRangeException(nameof(offset));
+                }
+
+                if (count < 0 || count > buffer.Length - offset)
+                {
+                    throw new ArgumentOutOfRangeException(nameof(count));
+                }
+
                 if (_connection == null)
                 {
                     // Response body fully consumed
@@ -291,6 +336,21 @@ namespace System.Net.Http.Managed
 
             public override async Task WriteAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken)
             {
+                if (buffer == null)
+                {
+                    throw new ArgumentNullException(nameof(buffer));
+                }
+
+                if (offset < 0 || offset > buffer.Length)
+                {
+                    throw new ArgumentOutOfRangeException(nameof(offset));
+                }
+
+                if (count < 0 || count > buffer.Length - offset)
+                {
+                    throw new ArgumentOutOfRangeException(nameof(count));
+                }
+
                 // Don't write if nothing was given
                 // Especially since we don't want to accidentally send a 0 chunk, which would indicate end of body
                 if (count == 0)
@@ -352,6 +412,21 @@ namespace System.Net.Http.Managed
 
             public override Task WriteAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken)
             {
+                if (buffer == null)
+                {
+                    throw new ArgumentNullException(nameof(buffer));
+                }
+
+                if (offset < 0 || offset > buffer.Length)
+                {
+                    throw new ArgumentOutOfRangeException(nameof(offset));
+                }
+
+                if (count < 0 || count > buffer.Length - offset)
+                {
+                    throw new ArgumentOutOfRangeException(nameof(count));
+                }
+
                 return _connection.WriteAsync(buffer, offset, count, cancellationToken);
             }
 
