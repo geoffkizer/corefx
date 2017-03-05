@@ -2,6 +2,7 @@
 // The .NET Foundation licenses this file to you under the MIT license.
 // See the LICENSE file in the project root for more information.
 
+using System.Diagnostics;
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
@@ -10,6 +11,14 @@ namespace System.Net.Http.Managed
 {
     internal abstract class HttpContentWriteStream : Stream
     {
+        protected HttpConnection _connection;
+
+        public HttpContentWriteStream(HttpConnection connection)
+        {
+            Debug.Assert(connection != null);
+            _connection = connection;
+        }
+
         public override bool CanRead => false;
 
         public override bool CanSeek => false;
@@ -55,5 +64,19 @@ namespace System.Net.Http.Managed
         public abstract override Task WriteAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken);
         public abstract override Task FlushAsync(CancellationToken cancellationToken);
         public abstract Task FinishAsync(CancellationToken cancellationToken);
+
+        protected override void Dispose(bool disposing)
+        {
+            if (disposing)
+            {
+                if (_connection != null)
+                {
+                    _connection.Dispose();
+                    _connection = null;
+                }
+            }
+
+            base.Dispose(disposing);
+        }
     }
 }

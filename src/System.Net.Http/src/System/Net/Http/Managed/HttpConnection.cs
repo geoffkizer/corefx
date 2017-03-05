@@ -332,11 +332,9 @@ namespace System.Net.Http.Managed
 
         private sealed class ChunkedEncodingWriteStream : HttpContentWriteStream
         {
-            private HttpConnection _connection;
-
             public ChunkedEncodingWriteStream(HttpConnection connection)
+                : base (connection)
             {
-                _connection = connection;
             }
 
             public override async Task WriteAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken)
@@ -408,11 +406,9 @@ namespace System.Net.Http.Managed
 
         public sealed class ContentLengthWriteStream : HttpContentWriteStream
         {
-            private HttpConnection _connection;
-
             public ContentLengthWriteStream(HttpConnection connection)
+                : base(connection)
             {
-                _connection = connection;
             }
 
             public override Task WriteAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken)
