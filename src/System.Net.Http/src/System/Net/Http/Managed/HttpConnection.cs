@@ -465,9 +465,9 @@ namespace System.Net.Http.Managed
                 await _connection.WriteCharAsync('\n', cancellationToken);
             }
 
-            public override Task FlushAsync(CancellationToken cancellationToken)
+            public override async Task FlushAsync(CancellationToken cancellationToken)
             {
-                return _connection.FlushAsync(cancellationToken);
+                await _connection.FlushAsync(cancellationToken);
             }
 
             public override async Task FinishAsync(CancellationToken cancellationToken)
@@ -492,7 +492,7 @@ namespace System.Net.Http.Managed
             {
             }
 
-            public override Task WriteAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken)
+            public override async Task WriteAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken)
             {
                 if (buffer == null)
                 {
@@ -509,12 +509,12 @@ namespace System.Net.Http.Managed
                     throw new ArgumentOutOfRangeException(nameof(count));
                 }
 
-                return _connection.WriteAsync(buffer, offset, count, cancellationToken);
+                await  _connection.WriteAsync(buffer, offset, count, cancellationToken);
             }
 
-            public override Task FlushAsync(CancellationToken cancellationToken)
+            public override async Task FlushAsync(CancellationToken cancellationToken)
             {
-                return _connection.FlushAsync(cancellationToken);
+                await _connection.FlushAsync(cancellationToken);
             }
 
             public override Task FinishAsync(CancellationToken cancellationToken)
@@ -564,7 +564,7 @@ namespace System.Net.Http.Managed
             }
         }
 
-        private async Task<HttpResponseMessage> ParseResponseAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        private async SlimTask<HttpResponseMessage> ParseResponseAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
             HttpResponseMessage response = new HttpResponseMessage();
             response.RequestMessage = request;
@@ -727,7 +727,7 @@ namespace System.Net.Http.Managed
             return response;
         }
 
-        private async Task WriteHeadersAsync(HttpHeaders headers, CancellationToken cancellationToken)
+        private async SlimTask WriteHeadersAsync(HttpHeaders headers, CancellationToken cancellationToken)
         {
             foreach (KeyValuePair<string, IEnumerable<string>> header in headers)
             {
@@ -875,7 +875,7 @@ namespace System.Net.Http.Managed
             _writeOffset += count;
         }
 
-        private async Task WriteAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken)
+        private async SlimTask WriteAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken)
         {
             int remaining = BufferSize - _writeOffset;
 
@@ -941,7 +941,7 @@ namespace System.Net.Http.Managed
             return true;
         }
 
-        private async Task WriteStringAsync(string s, CancellationToken cancellationToken)
+        private async SlimTask WriteStringAsync(string s, CancellationToken cancellationToken)
         {
             for (int i = 0; i < s.Length; i++)
             {
@@ -949,7 +949,7 @@ namespace System.Net.Http.Managed
             }
         }
 
-        private async Task FlushAsync(CancellationToken cancellationToken)
+        private async SlimTask FlushAsync(CancellationToken cancellationToken)
         {
             if (_writeOffset > 0)
             { 
@@ -958,7 +958,7 @@ namespace System.Net.Http.Managed
             }
         }
 
-        private async Task FillAsync(CancellationToken cancellationToken)
+        private async SlimTask FillAsync(CancellationToken cancellationToken)
         {
             Debug.Assert(_readOffset == _readLength);
 
@@ -1033,7 +1033,7 @@ namespace System.Net.Http.Managed
             _readOffset += count;
         }
 
-        private async Task<int> ReadAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken)
+        private async SlimTask<int> ReadAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken)
         {
             // This is called when reading the response body
 
@@ -1064,7 +1064,7 @@ namespace System.Net.Http.Managed
             return count;
         }
 
-        private async Task CopyFromBuffer(Stream destination, int count, CancellationToken cancellationToken)
+        private async SlimTask CopyFromBuffer(Stream destination, int count, CancellationToken cancellationToken)
         {
             Debug.Assert(count <= _readLength - _readOffset);
 
@@ -1072,7 +1072,7 @@ namespace System.Net.Http.Managed
             _readOffset += count;
         }
 
-        private async Task CopyToAsync(Stream destination, CancellationToken cancellationToken)
+        private async SlimTask CopyToAsync(Stream destination, CancellationToken cancellationToken)
         {
             Debug.Assert(destination != null);
 
@@ -1096,7 +1096,7 @@ namespace System.Net.Http.Managed
         }
 
         // Copy *exactly* [length] bytes into destination; throws on end of stream.
-        private async Task CopyChunkToAsync(Stream destination, long length, CancellationToken cancellationToken)
+        private async SlimTask CopyChunkToAsync(Stream destination, long length, CancellationToken cancellationToken)
         {
             Debug.Assert(destination != null);
             Debug.Assert(length > 0);
