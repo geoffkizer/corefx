@@ -59,7 +59,13 @@ namespace System.Net.Http.Managed
             return ReadAsync(buffer, offset, count, CancellationToken.None).Result;
         }
 
+        public override void CopyTo(Stream destination, int bufferSize)
+        {
+            CopyToAsync(destination, bufferSize, CancellationToken.None).Wait();
+        }
+
         public abstract override Task<int> ReadAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken);
+        public abstract override Task CopyToAsync(Stream destination, int bufferSize, CancellationToken cancellationToken);
 
         protected override void Dispose(bool disposing)
         {

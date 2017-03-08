@@ -6,7 +6,6 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Net.Http.Headers;
-using System.Net.Sockets;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
@@ -167,6 +166,26 @@ namespace System.Net.Http.Managed
 
                 return bytesRead;
             }
+
+            public override async Task CopyToAsync(Stream destination, int bufferSize, CancellationToken cancellationToken)
+            {
+                if (destination == null)
+                {
+                    throw new ArgumentNullException(nameof(destination));
+                }
+
+                if (_connection == null)
+                {
+                    // Response body fully consumed
+                    return;
+                }
+
+                await _connection.CopyChunkToAsync(destination, _contentBytesRemaining, cancellationToken);
+
+                _contentBytesRemaining = 0;
+                _connection.PutConnectionInPool();
+                _connection = null;
+            }
         }
 
         private sealed class ChunkedEncodingReadStream : HttpContentReadStream
@@ -177,6 +196,81 @@ namespace System.Net.Http.Managed
                 : base(connection)
             {
                 _chunkBytesRemaining = 0;
+            }
+
+            private async Task<bool> TryGetNextChunk(CancellationToken cancellationToken)
+            {
+                Debug.Assert(_chunkBytesRemaining == 0);
+
+                // Start of chunk, read chunk size
+                int chunkSize = 0;
+                char c = await _connection.ReadCharAsync(cancellationToken);
+                while (true)
+                {
+                    // Get hex digit
+                    if (c >= '0' && c <= '9')
+                    {
+                        chunkSize = chunkSize * 16 + (c - '0');
+                    }
+                    else if (c >= 'a' && c <= 'f')
+                    {
+                        chunkSize = chunkSize * 16 + (c - 'a' + 10);
+                    }
+                    else if (c >= 'A' && c <= 'F')
+                    {
+                        chunkSize = chunkSize * 16 + (c - 'A' + 10);
+                    }
+                    else
+                    {
+                        throw new IOException("Invalid chunk size in response stream");
+                    }
+
+                    c = await _connection.ReadCharAsync(cancellationToken);
+                    if (c == '\r')
+                    {
+                        if (await _connection.ReadCharAsync(cancellationToken) != '\n')
+                        {
+                            throw new IOException("Saw CR without LF while parsing chunk size");
+                        }
+
+                        break;
+                    }
+                }
+
+                _chunkBytesRemaining = chunkSize;
+                if (chunkSize == 0)
+                {
+                    // Indicates end of response body
+
+                    // We expect final CRLF after this
+                    if (await _connection.ReadByteAsync(cancellationToken) != (byte)'\r' ||
+                        await _connection.ReadByteAsync(cancellationToken) != (byte)'\n')
+                    {
+                        throw new IOException("missing final CRLF for chunked encoding");
+                    }
+
+                    _connection.PutConnectionInPool();
+                    _connection = null;
+                    return false;
+                }
+
+                return true;
+            }
+
+            private async Task ConsumeChunkBytes(int bytesConsumed, CancellationToken cancellationToken)
+            {
+                Debug.Assert(bytesConsumed <= _chunkBytesRemaining);
+                _chunkBytesRemaining -= bytesConsumed;
+
+                if (_chunkBytesRemaining == 0)
+                {
+                    // Parse CRLF at end of chunk
+                    if (await _connection.ReadCharAsync(cancellationToken) != '\r' ||
+                        await _connection.ReadCharAsync(cancellationToken) != '\n')
+                    {
+                        throw new IOException("missing CRLF for end of chunk");
+                    }
+                }
             }
 
             public override async Task<int> ReadAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken)
@@ -204,63 +298,14 @@ namespace System.Net.Http.Managed
 
                 if (_chunkBytesRemaining == 0)
                 {
-                    // Start of chunk, read chunk size
-                    int chunkSize = 0;
-                    byte b = await _connection.ReadByteAsync(cancellationToken);
-
-                    while (true)
+                    if (!await TryGetNextChunk(cancellationToken))
                     {
-                        // Get hex digit
-                        if (b >= (byte)'0' && b <= (byte)'9')
-                        {
-                            chunkSize = chunkSize * 16 + (b - (byte)'0');
-                        }
-                        else if (b >= (byte)'a' && b <= (byte)'f')
-                        {
-                            chunkSize = chunkSize * 16 + (b - (byte)'a' + 10);
-                        }
-                        else if (b >= (byte)'A' && b <= (byte)'F')
-                        {
-                            chunkSize = chunkSize * 16 + (b - (byte)'A' + 10);
-                        }
-                        else
-                        {
-                            throw new IOException("Invalid chunk size in response stream");
-                        }
-
-                        b = await _connection.ReadByteAsync(cancellationToken);
-                        if (b == (byte)'\r')
-                        {
-                            if (await _connection.ReadByteAsync(cancellationToken) != (byte)'\n')
-                                throw new IOException("Saw CR without LF while parsing chunk size");
-
-                            break;
-                        }
-                    }
-
-                    if (chunkSize == 0)
-                    {
-                        // Indicates end of response body
-
-                        // We expect final CRLF after this
-                        if (await _connection.ReadByteAsync(cancellationToken) != (byte)'\r' ||
-                            await _connection.ReadByteAsync(cancellationToken) != (byte)'\n')
-                        {
-                            throw new IOException("missing final CRLF for chunked encoding");
-                        }
-
-                        _connection.PutConnectionInPool();
-                        _connection = null;
+                        // End of response body
                         return 0;
                     }
-
-                    _chunkBytesRemaining = chunkSize;
                 }
 
-                if (count > _chunkBytesRemaining)
-                {
-                    count = _chunkBytesRemaining;
-                }
+                count = Math.Min(count, _chunkBytesRemaining);
 
                 int bytesRead = await _connection.ReadAsync(buffer, offset, count, cancellationToken);
 
@@ -270,20 +315,35 @@ namespace System.Net.Http.Managed
                     throw new IOException("Unexpected end of content stream while processing chunked response body");
                 }
 
-                Debug.Assert(bytesRead <= _chunkBytesRemaining);
-                _chunkBytesRemaining -= bytesRead;
-
-                if (_chunkBytesRemaining == 0)
-                {
-                    // Parse CRLF at end of chunk
-                    if (await _connection.ReadByteAsync(cancellationToken) != (byte)'\r' ||
-                        await _connection.ReadByteAsync(cancellationToken) != (byte)'\n')
-                    {
-                        throw new IOException("missing CRLF for end of chunk");
-                    }
-                }
+                await ConsumeChunkBytes(bytesRead, cancellationToken);
 
                 return bytesRead;
+            }
+
+            public override async Task CopyToAsync(Stream destination, int bufferSize, CancellationToken cancellationToken)
+            {
+                if (destination == null)
+                {
+                    throw new ArgumentNullException(nameof(destination));
+                }
+
+                if (_connection == null)
+                {
+                    // Response body fully consumed
+                    return;
+                }
+
+                if (_chunkBytesRemaining > 0)
+                {
+                    await _connection.CopyChunkToAsync(destination, _chunkBytesRemaining, cancellationToken);
+                    await ConsumeChunkBytes(_chunkBytesRemaining, cancellationToken);
+                }
+
+                while (await TryGetNextChunk(cancellationToken))
+                {
+                    await _connection.CopyChunkToAsync(destination, _chunkBytesRemaining, cancellationToken);
+                    await ConsumeChunkBytes(_chunkBytesRemaining, cancellationToken);
+                }
             }
         }
 
@@ -328,6 +388,26 @@ namespace System.Net.Http.Managed
                 }
 
                 return bytesRead;
+            }
+
+            public override async Task CopyToAsync(Stream destination, int bufferSize, CancellationToken cancellationToken)
+            {
+                if (destination == null)
+                {
+                    throw new ArgumentNullException(nameof(destination));
+                }
+
+                if (_connection == null)
+                {
+                    // Response body fully consumed
+                    return;
+                }
+
+                await _connection.CopyToAsync(destination, cancellationToken);
+
+                // We cannot reuse this connection, so close it.
+                _connection.Dispose();
+                _connection = null;
             }
         }
 
@@ -787,7 +867,7 @@ namespace System.Net.Http.Managed
             return await ParseResponseAsync(request, cancellationToken);
         }
 
-        private void CopyToWriteBuffer(byte[] buffer, int offset, int count)
+        private void WriteToBuffer(byte[] buffer, int offset, int count)
         {
             Debug.Assert(count <= BufferSize - _writeOffset);
 
@@ -802,14 +882,14 @@ namespace System.Net.Http.Managed
             if (count <= remaining)
             {
                 // Fits in current write buffer.  Just copy and return.
-                CopyToWriteBuffer(buffer, offset, count);
+                WriteToBuffer(buffer, offset, count);
                 return;
             }
 
             if (_writeOffset != 0)
             {
                 // Fit what we can in the current write buffer and flush it.
-                CopyToWriteBuffer(buffer, offset, remaining);
+                WriteToBuffer(buffer, offset, remaining);
                 await FlushAsync(cancellationToken);
 
                 // Update offset and count to reflect the write we just did.
@@ -826,7 +906,7 @@ namespace System.Net.Http.Managed
             else
             {
                 // Copy remainder into buffer
-                CopyToWriteBuffer(buffer, offset, count);
+                WriteToBuffer(buffer, offset, count);
             }
         }
 
@@ -945,6 +1025,14 @@ namespace System.Net.Http.Managed
             return new ValueTask<char>(ReadCharSlowAsync(cancellationToken));
         }
 
+        private void ReadFromBuffer(byte[] buffer, int offset, int count)
+        {
+            Debug.Assert(count <= _readLength - _readOffset);
+
+            Buffer.BlockCopy(_readBuffer, _readOffset, buffer, offset, count);
+            _readOffset += count;
+        }
+
         private async Task<int> ReadAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken)
         {
             // This is called when reading the response body
@@ -954,10 +1042,7 @@ namespace System.Net.Http.Managed
             {
                 // We have data in the read buffer.  Return it to the caller.
                 count = Math.Min(count, remaining);
-                Buffer.BlockCopy(_readBuffer, _readOffset, buffer, offset, count);
-
-                _readOffset += count;
-                Debug.Assert(_readOffset <= _readLength);
+                ReadFromBuffer(buffer, offset, count);
                 return count;
             }
 
@@ -969,10 +1054,7 @@ namespace System.Net.Http.Managed
                 await FillAsync(cancellationToken);
 
                 count = Math.Min(count, _readLength);
-                Buffer.BlockCopy(_readBuffer, _readOffset, buffer, offset, count);
-
-                _readOffset += count;
-                Debug.Assert(_readOffset <= _readLength);
+                ReadFromBuffer(buffer, offset, count);
                 return count;
             }
 
@@ -980,6 +1062,75 @@ namespace System.Net.Http.Managed
             // Do an unbuffered read directly against the underlying stream.
             count = await _stream.ReadAsync(buffer, offset, count, cancellationToken);
             return count;
+        }
+
+        private async Task CopyFromBuffer(Stream destination, int count, CancellationToken cancellationToken)
+        {
+            Debug.Assert(count <= _readLength - _readOffset);
+
+            await destination.WriteAsync(_readBuffer, _readOffset, count, cancellationToken);
+            _readOffset += count;
+        }
+
+        private async Task CopyToAsync(Stream destination, CancellationToken cancellationToken)
+        {
+            Debug.Assert(destination != null);
+
+            int remaining = _readLength - _readOffset;
+            if (remaining > 0)
+            {
+                await CopyFromBuffer(destination, remaining, cancellationToken);
+            }
+
+            while (true)
+            {
+                await FillAsync(cancellationToken);
+                if (_readLength == 0)
+                {
+                    // End of stream
+                    break;
+                }
+
+                await CopyFromBuffer(destination, _readLength, cancellationToken);
+            }
+        }
+
+        // Copy *exactly* [length] bytes into destination; throws on end of stream.
+        private async Task CopyChunkToAsync(Stream destination, long length, CancellationToken cancellationToken)
+        {
+            Debug.Assert(destination != null);
+            Debug.Assert(length > 0);
+
+            int remaining = _readLength - _readOffset;
+            if (remaining > 0)
+            {
+                remaining = (int)Math.Min(remaining, length);
+                await CopyFromBuffer(destination, remaining, cancellationToken);
+
+                length -= remaining;
+                if (length == 0)
+                {
+                    return;
+                }
+            }
+
+            while (true)
+            {
+                await FillAsync(cancellationToken);
+                if (_readLength == 0)
+                {
+                    throw new HttpRequestException("unexpected end of stream");
+                }
+
+                remaining = (int)Math.Min(_readLength, length);
+                await CopyFromBuffer(destination, remaining, cancellationToken);
+
+                length -= remaining;
+                if (length == 0)
+                {
+                    return;
+                }
+            }
         }
 
         private void PutConnectionInPool()
