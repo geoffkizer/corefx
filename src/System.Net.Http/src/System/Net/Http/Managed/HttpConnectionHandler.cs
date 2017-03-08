@@ -38,7 +38,22 @@ namespace System.Net.Http.Managed
 
         protected internal override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
-            HttpConnection connection = await GetOrCreateConnection(request);
+            HttpConnection connection = null;
+
+            // Try to get a connection from the connection pool
+            HttpConnectionKey key = new HttpConnectionKey(request.RequestUri);
+            HttpConnectionPool pool;
+            if (_connectionPoolTable.TryGetValue(key, out pool))
+            {
+                connection = pool.GetConnection();
+            }
+
+            if (connection == null)
+            {
+                // No connection available in pool.  Create a new one.
+                connection = await CreateConnection(request, key, pool);
+            }
+
             return await connection.SendAsync(request, cancellationToken);
         }
 
@@ -81,20 +96,9 @@ namespace System.Net.Http.Managed
             return sslStream;
         }
 
-        private async Task<HttpConnection> GetOrCreateConnection(HttpRequestMessage request)
+        private async Task<HttpConnection> CreateConnection(HttpRequestMessage request, HttpConnectionKey key, HttpConnectionPool pool)
         {
             Uri uri = request.RequestUri;
-            HttpConnectionKey key = new HttpConnectionKey(uri);
-
-            HttpConnectionPool pool;
-            if (_connectionPoolTable.TryGetValue(key, out pool))
-            {
-                HttpConnection poolConnection = pool.GetConnection();
-                if (poolConnection != null)
-                {
-                    return poolConnection;
-                }
-            }
 
             Stream stream = await ConnectHelper.ConnectAsync(uri.Host, uri.Port);
 
