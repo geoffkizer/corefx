@@ -7,8 +7,6 @@ using System.Threading.Tasks;
 
 namespace System.Net.Http.Managed
 {
-    // TODO: Much code possibly shared with client
-
     public sealed class HttpServer
     {
         private IPEndPoint _ipEndpoint;
@@ -30,7 +28,7 @@ namespace System.Net.Http.Managed
             _handler = handler;
         }
 
-        public async Task Run()
+        public async void Run()
         {
             TcpListener listener = new TcpListener(_ipEndpoint);
             listener.Start();
@@ -38,13 +36,13 @@ namespace System.Net.Http.Managed
             while (true)
             {
                 TcpClient client = await listener.AcceptTcpClientAsync();
-
-                HandleConnection(client);
+                Task.Run(() => HandleConnection(client));
             }
         }
 
         private void HandleConnection(TcpClient client)
         {
+//            HttpConnection = new HttpConnection()
 #if false
             Task.Run(() =>
             {
