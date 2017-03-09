@@ -6,7 +6,13 @@ using System.Collections.Concurrent;
 
 namespace System.Net.Http.Managed
 {
-    internal sealed class HttpConnectionPool : IDisposable
+    internal abstract class HttpConnectionManager
+    {
+        public abstract void AddConnection(HttpConnection connection);
+        public abstract void PutConnection(HttpConnection connection);
+    }
+
+    internal sealed class HttpConnectionPool : HttpConnectionManager, IDisposable
     {
         HttpConnectionKey _key;
         ConcurrentDictionary<HttpConnection, HttpConnection> _activeConnections;
@@ -38,7 +44,7 @@ namespace System.Net.Http.Managed
             return null;
         }
 
-        public void AddConnection(HttpConnection connection)
+        public override void AddConnection(HttpConnection connection)
         {
             if (!_activeConnections.TryAdd(connection, connection))
             {
@@ -46,7 +52,7 @@ namespace System.Net.Http.Managed
             }
         }
 
-        public void PutConnection(HttpConnection connection)
+        public override void PutConnection(HttpConnection connection)
         {
             HttpConnection unused;
             if (!_activeConnections.TryRemove(connection, out unused))

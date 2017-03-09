@@ -16,7 +16,7 @@ namespace System.Net.Http.Managed
     {
         private const int BufferSize = 4096;
 
-        private readonly HttpConnectionPool _pool;
+        private readonly HttpConnectionManager _manager;
         private readonly Stream _stream;
         private readonly TransportContext _transportContext;
         private readonly bool _usingProxy;
@@ -524,12 +524,12 @@ namespace System.Net.Http.Managed
         }
 
         public HttpConnection(
-            HttpConnectionPool pool, 
+            HttpConnectionManager manager, 
             Stream stream, 
             TransportContext transportContext, 
             bool usingProxy)
         {
-            _pool = pool;
+            _manager = manager;
             _stream = stream;
             _transportContext = transportContext;
             _usingProxy = usingProxy;
@@ -543,7 +543,7 @@ namespace System.Net.Http.Managed
             _readLength = 0;
             _readOffset = 0;
 
-            _pool.AddConnection(this);
+            _manager.AddConnection(this);
         }
 
         public void Dispose()
@@ -1130,7 +1130,7 @@ namespace System.Net.Http.Managed
             // Make sure there's nothing in the write buffer that should have been flushed
             Debug.Assert(_writeOffset == 0);
 
-            _pool.PutConnection(this);
+            _manager.PutConnection(this);
         }
     }
 }
