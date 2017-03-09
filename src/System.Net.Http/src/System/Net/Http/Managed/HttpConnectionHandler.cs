@@ -114,10 +114,10 @@ namespace System.Net.Http.Managed
 
             if (pool == null)
             {
-                pool = _connectionPoolTable.GetOrAdd(key, new HttpConnectionPool());
+                pool = _connectionPoolTable.GetOrAdd(key, new HttpConnectionPool(key));
             }
 
-            var connection = new HttpConnection(pool, key, stream, transportContext, false);
+            var connection = new HttpConnection(pool, stream, transportContext, false);
 
             return connection;
         }

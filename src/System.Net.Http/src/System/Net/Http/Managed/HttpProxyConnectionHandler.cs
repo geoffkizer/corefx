@@ -119,10 +119,10 @@ namespace System.Net.Http.Managed
 
             if (pool == null)
             {
-                pool = _connectionPoolTable.GetOrAdd(key, new HttpConnectionPool());
+                pool = _connectionPoolTable.GetOrAdd(key, new HttpConnectionPool(key));
             }
 
-            return new HttpConnection(pool, key, stream, null, true);
+            return new HttpConnection(pool, stream, null, true);
         }
 
         protected override void Dispose(bool disposing)

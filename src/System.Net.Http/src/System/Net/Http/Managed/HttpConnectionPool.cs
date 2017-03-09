@@ -8,15 +8,19 @@ namespace System.Net.Http.Managed
 {
     internal sealed class HttpConnectionPool : IDisposable
     {
+        HttpConnectionKey _key;
         ConcurrentDictionary<HttpConnection, HttpConnection> _activeConnections;
         ConcurrentBag<HttpConnection> _idleConnections;
         bool _disposed;
 
-        public HttpConnectionPool()
+        public HttpConnectionPool(HttpConnectionKey key)
         {
+            _key = key;
             _activeConnections = new ConcurrentDictionary<HttpConnection, HttpConnection>();
             _idleConnections = new ConcurrentBag<HttpConnection>();
         }
+
+        public HttpConnectionKey Key => _key;
 
         public HttpConnection GetConnection()
         {

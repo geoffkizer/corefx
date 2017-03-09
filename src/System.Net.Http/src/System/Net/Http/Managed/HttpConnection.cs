@@ -17,7 +17,6 @@ namespace System.Net.Http.Managed
         private const int BufferSize = 4096;
 
         private readonly HttpConnectionPool _pool;
-        private readonly HttpConnectionKey _key;
         private readonly Stream _stream;
         private readonly TransportContext _transportContext;
         private readonly bool _usingProxy;
@@ -526,13 +525,11 @@ namespace System.Net.Http.Managed
 
         public HttpConnection(
             HttpConnectionPool pool, 
-            HttpConnectionKey key, 
             Stream stream, 
             TransportContext transportContext, 
             bool usingProxy)
         {
             _pool = pool;
-            _key = key;
             _stream = stream;
             _transportContext = transportContext;
             _usingProxy = usingProxy;
@@ -547,11 +544,6 @@ namespace System.Net.Http.Managed
             _readOffset = 0;
 
             _pool.AddConnection(this);
-        }
-
-        public HttpConnectionKey Key
-        {
-            get { return _key; }
         }
 
         public void Dispose()
