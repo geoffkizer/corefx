@@ -935,9 +935,13 @@ namespace System.Net.Http.Managed
                 await response.Content.CopyToAsync(stream, _transportContext);
                 await stream.FinishAsync(cancellationToken);
             }
+        }
 
-            // TODO: Don't always flush here; pipelining!
-            await FlushAsync(cancellationToken);
+        internal async Task ReceiveAsync(HttpClientHandler handler, CancellationToken cancellationToken)
+        {
+            HttpRequestMessage request = await ParseRequestAsync(cancellationToken);
+            HttpResponseMessage response = await handler.SendAsync(request, cancellationToken);
+            await SendResponseAsync(response, cancellationToken);
         }
 
         private async SlimTask WriteHeadersAsync(HttpHeaders headers, CancellationToken cancellationToken)
@@ -1162,7 +1166,7 @@ namespace System.Net.Http.Managed
             }
         }
 
-        private async SlimTask FlushAsync(CancellationToken cancellationToken)
+        internal async SlimTask FlushAsync(CancellationToken cancellationToken)
         {
             if (_writeOffset > 0)
             { 
@@ -1345,6 +1349,7 @@ namespace System.Net.Http.Managed
                 }
             }
         }
+        internal bool HasBufferedReadBytes => (_readOffset < _readLength);
 
         private void PutConnectionInPool()
         {
