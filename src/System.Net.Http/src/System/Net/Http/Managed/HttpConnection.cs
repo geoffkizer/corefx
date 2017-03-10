@@ -1175,8 +1175,8 @@ namespace System.Net.Http.Managed
         {
             if (_writeOffset > 0)
             {
-                Console.WriteLine("Write bytes:");
-                Console.WriteLine(System.Text.Encoding.UTF8.GetString(_writeBuffer, 0, _writeOffset));
+//                Console.WriteLine("Write bytes:");
+//                Console.WriteLine(System.Text.Encoding.UTF8.GetString(_writeBuffer, 0, _writeOffset));
 
                 await _stream.WriteAsync(_writeBuffer, 0, _writeOffset, cancellationToken);
                 _writeOffset = 0;
@@ -1190,8 +1190,8 @@ namespace System.Net.Http.Managed
             _readOffset = 0;
             _readLength = await _stream.ReadAsync(_readBuffer, 0, BufferSize, cancellationToken);
 
-            Console.WriteLine("Read bytes:");
-            Console.WriteLine(System.Text.Encoding.UTF8.GetString(_readBuffer, 0, _readLength));
+//            Console.WriteLine("Read bytes:");
+//            Console.WriteLine(System.Text.Encoding.UTF8.GetString(_readBuffer, 0, _readLength));
         }
 
         private async Task<byte> ReadByteSlowAsync(CancellationToken cancellationToken)
