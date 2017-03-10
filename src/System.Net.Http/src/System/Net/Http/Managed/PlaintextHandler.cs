@@ -5,6 +5,7 @@
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using System.Net.Http.Headers;
 
 // TODO: This is temporary
 
@@ -13,6 +14,7 @@ namespace System.Net.Http.Managed
     public sealed class PlaintextHandler : HttpMessageHandler
     {
         private static readonly byte[] _helloWorldPayload = Encoding.UTF8.GetBytes("Hello, World!");
+        private static readonly MediaTypeHeaderValue _contentTypeHeader = new MediaTypeHeaderValue("text/plain");
 
         public PlaintextHandler()
         {
@@ -25,6 +27,10 @@ namespace System.Net.Http.Managed
             {
                 HttpResponseMessage response = new HttpResponseMessage(HttpStatusCode.OK);
                 response.Content = new ByteArrayContent(_helloWorldPayload);
+                response.Content.Headers.ContentType = _contentTypeHeader;
+                // TODO
+//                response.Headers.Date = 
+
                 return Task.FromResult(response);
             }
 
