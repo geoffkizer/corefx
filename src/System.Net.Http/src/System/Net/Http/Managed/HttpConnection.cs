@@ -752,7 +752,7 @@ namespace System.Net.Http.Managed
                 c = await ReadCharAsync(cancellationToken);
             } while (c != ' ');
 
-            request.RequestUri = new Uri(_sb.ToString());
+            string uri = _sb.ToString();
             _sb.Clear();
 
             // Read Http version
@@ -838,6 +838,15 @@ namespace System.Net.Http.Managed
                 c = await ReadCharAsync(cancellationToken);
             }
 
+            // Get Host header and construct Uri
+            if (string.IsNullOrEmpty(request.Headers.Host))
+            {
+                throw new HttpRequestException("invalid Host header");
+            }
+
+            // TODO: https
+            request.RequestUri = new Uri("http://" + request.Headers.Host + uri);
+
             // Instantiate requestStream
             HttpContentReadStream requestStream;
 
@@ -876,18 +885,16 @@ namespace System.Net.Http.Managed
                 responseContent.Headers.ContentLength == null)
             {
                 // We have content, but neither Transfer-Encoding or Content-Length is set.
-                // TODO: Tests expect Transfer-Encoding here always.
-                // This seems wrong to me; if we can compute the content length,
-                // why not use it instead of falling back to Transfer-Encoding?
-#if false
-                if (requestContent.TryComputeLength(out contentLength))
+                // If we can compute the length, then add a Content-Length header.
+                long contentLength;
+                if (responseContent.TryComputeLength(out contentLength))
                 {
                     // We know the content length, so set the header
-                    requestContent.Headers.ContentLength = contentLength;
+                    responseContent.Headers.ContentLength = contentLength;
                 }
                 else
-#endif
                 {
+                    // Length is unknown; add chunked transfer encoding
                     response.Headers.TransferEncodingChunked = true;
                 }
             }
@@ -907,18 +914,16 @@ namespace System.Net.Http.Managed
             {
                 await WriteHeadersAsync(responseContent.Headers, cancellationToken);
             }
-
-#if false   // TODO
-                // Also write out a Content-Length: 0 header if no request body, and this is a method that can have one.
-                if (responseContent == null)
+            else
+            {
+                // If no content, write out Content-Length: 0, unless this is a response than never has a body
+                if (!(response.RequestMessage.Method == HttpMethod.Head ||
+                      response.StatusCode == HttpStatusCode.NoContent ||
+                      response.StatusCode == HttpStatusCode.NotModified))
                 {
-                    if (request.Method != HttpMethod.Get &&
-                        request.Method != HttpMethod.Head)
-                    {
-                        await WriteStringAsync("Content-Length: 0\r\n");
-                    }
+                    await WriteStringAsync("Content-Length: 0\r\n", cancellationToken);
                 }
-#endif
+            }
 
             // CRLF for end of headers.
             await WriteCharAsync('\r', cancellationToken);
@@ -937,7 +942,7 @@ namespace System.Net.Http.Managed
             }
         }
 
-        internal async Task ReceiveAsync(HttpClientHandler handler, CancellationToken cancellationToken)
+        internal async Task ReceiveAsync(HttpMessageHandler handler, CancellationToken cancellationToken)
         {
             HttpRequestMessage request = await ParseRequestAsync(cancellationToken);
             HttpResponseMessage response = await handler.SendAsync(request, cancellationToken);
@@ -1169,7 +1174,10 @@ namespace System.Net.Http.Managed
         internal async SlimTask FlushAsync(CancellationToken cancellationToken)
         {
             if (_writeOffset > 0)
-            { 
+            {
+                Console.WriteLine("Write bytes:");
+                Console.WriteLine(System.Text.Encoding.UTF8.GetString(_writeBuffer, 0, _writeOffset));
+
                 await _stream.WriteAsync(_writeBuffer, 0, _writeOffset, cancellationToken);
                 _writeOffset = 0;
             }
@@ -1181,6 +1189,9 @@ namespace System.Net.Http.Managed
 
             _readOffset = 0;
             _readLength = await _stream.ReadAsync(_readBuffer, 0, BufferSize, cancellationToken);
+
+            Console.WriteLine("Read bytes:");
+            Console.WriteLine(System.Text.Encoding.UTF8.GetString(_readBuffer, 0, _readLength));
         }
 
         private async Task<byte> ReadByteSlowAsync(CancellationToken cancellationToken)

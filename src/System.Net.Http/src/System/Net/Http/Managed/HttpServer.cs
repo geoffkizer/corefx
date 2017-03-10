@@ -2,6 +2,7 @@
 // The .NET Foundation licenses this file to you under the MIT license.
 // See the LICENSE file in the project root for more information.
 
+using System.IO;
 using System.Net.Sockets;
 using System.Threading;
 using System.Threading.Tasks;
@@ -11,7 +12,7 @@ namespace System.Net.Http.Managed
     public sealed class HttpServer
     {
         private IPEndPoint _ipEndpoint;
-        private HttpClientHandler _handler;
+        private HttpMessageHandler _handler;
         private HttpServerConnectionManager _manager;
 
         private static bool s_trace = false;
@@ -24,7 +25,7 @@ namespace System.Net.Http.Managed
             }
         }
 
-        public HttpServer(IPEndPoint ipEndpoint, HttpClientHandler handler)
+        public HttpServer(IPEndPoint ipEndpoint, HttpMessageHandler handler)
         {
             _ipEndpoint = ipEndpoint;
             _handler = handler;
@@ -45,6 +46,10 @@ namespace System.Net.Http.Managed
             }
         }
 
+        // TODO: This class has become a no-op.
+        // I thought I might need it to do some connection management, but it doesn't seem
+        // like there's any value to it at this point...
+
         private class HttpServerConnectionManager : HttpConnectionManager
         {
             private HttpServer _server;
@@ -58,30 +63,36 @@ namespace System.Net.Http.Managed
             {
             }
 
-            public override async void PutConnection(HttpConnection connection)
+            public override void PutConnection(HttpConnection connection)
             {
-                // If there is pending read data, then it must be a subsequent pipelined request;
-                // If not, then flush now.
-                if (!connection.HasBufferedReadBytes)
-                {
-                    await connection.FlushAsync(CancellationToken.None);
-                }
-
-                await _server.ReceiveAsync(connection, CancellationToken.None);
             }
         }
 
         private void HandleConnection(HttpConnection connection, CancellationToken cancellationToken)
         {
             Task.Run(() => ReceiveAsync(connection, cancellationToken));
-
-            // ReceiveAsync will process the incoming request and send the response
-            // When complete, HttpServerConnectionManager.PutConnection will be called
         }
 
-        private Task ReceiveAsync(HttpConnection connection, CancellationToken cancellationToken)
+        private async void ReceiveAsync(HttpConnection connection, CancellationToken cancellationToken)
         {
-            return connection.ReceiveAsync(_handler, cancellationToken);
+            try
+            {
+                while (true)
+                {
+                    await connection.ReceiveAsync(_handler, cancellationToken);
+
+                    // If there is pending read data, then it must be a subsequent pipelined request;
+                    // If not, then flush now.
+                    if (!connection.HasBufferedReadBytes)
+                    {
+                        await connection.FlushAsync(CancellationToken.None);
+                    }
+                }
+            }
+            catch (IOException)
+            {
+                // Client has disconnected.  Eat the exception.
+            }
         }
     }
 }
