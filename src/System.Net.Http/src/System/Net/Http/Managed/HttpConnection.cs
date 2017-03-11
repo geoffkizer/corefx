@@ -776,6 +776,8 @@ namespace System.Net.Http.Managed
 
             var requestContent = new HttpConnectionContent(CancellationToken.None);
 
+            string hostHeader = null;
+
             // Parse headers
             c = await ReadCharAsync(cancellationToken);
             while (true)
@@ -835,17 +837,23 @@ namespace System.Net.Http.Managed
                     }
                 }
 
+                // Capture Host header so we can use to construct the request Uri below
+                if (headerName == "Host")
+                {
+                    hostHeader = headerValue;
+                }
+
                 c = await ReadCharAsync(cancellationToken);
             }
 
-            // Get Host header and construct Uri
-            if (string.IsNullOrEmpty(request.Headers.Host))
+            // Validate Host header and construct Uri
+            if (Uri.CheckHostName(hostHeader) == UriHostNameType.Unknown)
             {
                 throw new HttpRequestException("invalid Host header");
             }
 
             // TODO: https
-            request.RequestUri = new Uri("http://" + request.Headers.Host + uri);
+            request.RequestUri = new Uri("http://" + hostHeader + uri);
 
             // Instantiate requestStream
             HttpContentReadStream requestStream;
