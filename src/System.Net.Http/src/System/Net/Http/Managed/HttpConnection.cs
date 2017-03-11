@@ -1209,6 +1209,11 @@ namespace System.Net.Http.Managed
             if (_readOffset == _readLength)
             {
                 await FillAsync(cancellationToken);
+                if (_readLength == 0)
+                {
+                    // End of stream
+                    throw new IOException("unexpected end of stream");
+                }
             }
 
             byte b = _readBuffer[_readOffset++];

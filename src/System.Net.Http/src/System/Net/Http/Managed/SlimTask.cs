@@ -136,6 +136,17 @@ namespace System.Threading.Tasks
             }
         }
 
+        public void SetResult(TResult result)
+        {
+            _result = result;
+
+            Action continuation = Interlocked.Exchange(ref _continuation, s_completedSentinel);
+            if (continuation != null)
+            {
+                continuation();
+            }
+        }
+
         public void SetException(Exception exception)
         {
             _exception = exception;
@@ -151,18 +162,14 @@ namespace System.Threading.Tasks
         {
             if (Interlocked.CompareExchange(ref _continuation, continuation, null) == s_completedSentinel)
             {
-                continuation();
-            }
-        }
-
-        public void SetResult(TResult result)
-        {
-            _result = result;
-
-            Action continuation = Interlocked.Exchange(ref _continuation, s_completedSentinel);
-            if (continuation != null)
-            {
-                continuation();
+                // The task has been completed in the time between when we checked IsCompleted and now.
+                // Schedule the continuation to run on the thread pool.
+                // TODO: Is this the correct thing to do?  We can't run the continuation on the 
+                // calling thread, because it might lead to a stack overflow.
+                // The alternative would seem to be to have the SetResult caller spin in the case where
+                // IsCompleted has been called, but UnsafeOnCompleted hasn't been called yet.
+                // This window should be very narrow.
+                Task.Run(continuation);
             }
         }
 
