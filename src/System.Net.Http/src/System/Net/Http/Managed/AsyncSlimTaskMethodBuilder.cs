@@ -55,7 +55,11 @@ namespace System.Runtime.CompilerServices
         /// <param name="exception">The exception to bind to the task.</param>
         public void SetException(Exception exception)
         {
-            Debug.Assert(_state != null);
+            if (_state == null)
+            {
+                _state = new SlimTaskState<TResult>();
+            }
+
             _state.SetException(exception);
         }
 
@@ -153,7 +157,11 @@ namespace System.Runtime.CompilerServices
         /// <param name="exception">The exception to bind to the task.</param>
         public void SetException(Exception exception)
         {
-            Debug.Assert(_state != null);
+            if (_state == null)
+            {
+                _state = new SlimTaskState<VoidTaskResult>();
+            }
+
             _state.SetException(exception);
         }
 

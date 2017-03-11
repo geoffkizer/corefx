@@ -719,7 +719,7 @@ namespace System.Net.Http.Managed
             return response;
         }
 
-        private async Task<HttpRequestMessage> ParseRequestAsync(CancellationToken cancellationToken)
+        private async SlimTask<HttpRequestMessage> ParseRequestAsync(CancellationToken cancellationToken)
         {
             HttpRequestMessage request = new HttpRequestMessage();
 
@@ -887,7 +887,7 @@ namespace System.Net.Http.Managed
             return request;
         }
 
-        public async Task SendResponseAsync(HttpResponseMessage response, CancellationToken cancellationToken)
+        public async SlimTask SendResponseAsync(HttpResponseMessage response, CancellationToken cancellationToken)
         {
             HttpContent responseContent = response.Content;
 
@@ -954,7 +954,7 @@ namespace System.Net.Http.Managed
             }
         }
 
-        internal async Task ReceiveAsync(HttpMessageHandler handler, CancellationToken cancellationToken)
+        internal async SlimTask ReceiveAsync(HttpMessageHandler handler, CancellationToken cancellationToken)
         {
             HttpRequestMessage request = await ParseRequestAsync(cancellationToken);
             HttpResponseMessage response = await handler.SendAsync(request, cancellationToken);
@@ -991,7 +991,7 @@ namespace System.Net.Http.Managed
             }
         }
 
-        public async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request,
+        public async SlimTask<HttpResponseMessage> SendAsync(HttpRequestMessage request,
             CancellationToken cancellationToken)
         {
             if (request.Version.Major != 1 || request.Version.Minor != 1)
