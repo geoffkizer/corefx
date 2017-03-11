@@ -1144,30 +1144,19 @@ namespace System.Net.Http.Managed
             }
         }
 
-        private SlimTask WriteCharAsync(char c, CancellationToken cancellationToken)
+        private async SlimTask WriteCharAsync(char c, CancellationToken cancellationToken)
         {
             if ((c & 0xFF80) != 0)
             {
                 throw new HttpRequestException("Non-ASCII characters found");
             }
 
-            if (_writeOffset < BufferSize)
+            if (_writeOffset == BufferSize)
             {
-                _writeBuffer[_writeOffset++] = (byte)c;
-                return new SlimTask();
+                await FlushAsync(cancellationToken);
             }
 
-            return WriteCharSlowAsync(c, cancellationToken);
-        }
-
-        private async SlimTask WriteCharSlowAsync(char c, CancellationToken cancellationToken)
-        {
-            Debug.Assert((c & 0xFF80) == 0);
-
-            await FlushAsync(cancellationToken);
-
-            _writeBuffer[0] = (byte)c;
-            _writeOffset = 1;
+            _writeBuffer[_writeOffset++] = (byte)c;
         }
 
         private async SlimTask WriteStringAsync(string s, CancellationToken cancellationToken)
@@ -1212,14 +1201,17 @@ namespace System.Net.Http.Managed
 //            Console.WriteLine(System.Text.Encoding.UTF8.GetString(_readBuffer, 0, _readLength));
         }
 
-        private async SlimTask<char> ReadCharSlowAsync(CancellationToken cancellationToken)
+        private async SlimTask<char> ReadCharAsync(CancellationToken cancellationToken)
         {
-            await FillAsync(cancellationToken);
-
-            if (_readLength == 0)
+            if (_readOffset == _readLength)
             {
-                // End of stream
-                throw new IOException("unexpected end of stream");
+                await FillAsync(cancellationToken);
+
+                if (_readLength == 0)
+                {
+                    // End of stream
+                    throw new IOException("unexpected end of stream");
+                }
             }
 
             byte b = _readBuffer[_readOffset++];
@@ -1229,22 +1221,6 @@ namespace System.Net.Http.Managed
             }
 
             return (char)b;
-        }
-
-        private SlimTask<char> ReadCharAsync(CancellationToken cancellationToken)
-        {
-            if (_readOffset < _readLength)
-            {
-                byte b = _readBuffer[_readOffset++];
-                if ((b & 0x80) != 0)
-                {
-                    throw new HttpRequestException("Invalid character read from stream");
-                }
-
-                return new SlimTask<char>((char)b);
-            }
-
-            return ReadCharSlowAsync(cancellationToken);
         }
 
         private void ReadFromBuffer(byte[] buffer, int offset, int count)
