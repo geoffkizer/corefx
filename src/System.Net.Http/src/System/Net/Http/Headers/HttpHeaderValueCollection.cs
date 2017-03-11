@@ -62,32 +62,6 @@ namespace System.Net.Http.Headers
             }
         }
 
-        // TODO: Remove string-based constructors and use HeaderKey ones instead
-        // To enable this, I need to modify HttpKnownHeaderNames to be HeaderKeys instead of raw strings.
-
-        internal HttpHeaderValueCollection(string headerName, HttpHeaders store)
-            : this(new HeaderKey(headerName), store)
-        {
-        }
-
-        internal HttpHeaderValueCollection(string headerName, HttpHeaders store,
-            Action<HttpHeaderValueCollection<T>, T> validator)
-            : this(new HeaderKey(headerName), store, validator)
-        {
-        }
-
-        internal HttpHeaderValueCollection(string headerName, HttpHeaders store, T specialValue)
-            : this(new HeaderKey(headerName), store, specialValue)
-        {
-        }
-
-        internal HttpHeaderValueCollection(string headerName, HttpHeaders store, T specialValue,
-            Action<HttpHeaderValueCollection<T>, T> validator)
-            : this(new HeaderKey(headerName), store, specialValue, validator)
-        {
-
-        }
-
         internal HttpHeaderValueCollection(HeaderKey headerKey, HttpHeaders store)
             : this(headerKey, store, null, null)
         {
