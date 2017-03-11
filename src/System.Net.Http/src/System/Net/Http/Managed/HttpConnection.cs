@@ -1165,7 +1165,18 @@ namespace System.Net.Http.Managed
         {
             for (int i = 0; i < s.Length; i++)
             {
-                await WriteCharAsync(s[i], cancellationToken);
+                char c = s[i];
+                if ((c & 0xFF80) != 0)
+                {
+                    throw new HttpRequestException("Non-ASCII characters found");
+                }
+
+                if (_writeOffset == BufferSize)
+                {
+                    await FlushAsync(cancellationToken);
+                }
+
+                _writeBuffer[_writeOffset++] = (byte)c;
             }
         }
 
