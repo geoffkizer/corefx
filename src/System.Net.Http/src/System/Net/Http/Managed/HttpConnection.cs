@@ -242,8 +242,8 @@ namespace System.Net.Http.Managed
                     // Indicates end of response body
 
                     // We expect final CRLF after this
-                    if (await _connection.ReadByteAsync(cancellationToken) != (byte)'\r' ||
-                        await _connection.ReadByteAsync(cancellationToken) != (byte)'\n')
+                    if (await _connection.ReadCharAsync(cancellationToken) != '\r' ||
+                        await _connection.ReadCharAsync(cancellationToken) != '\n')
                     {
                         throw new IOException("missing final CRLF for chunked encoding");
                     }
@@ -1144,33 +1144,20 @@ namespace System.Net.Http.Managed
             }
         }
 
-        private SlimTask WriteCharAsync(char c, CancellationToken cancellationToken)
+        private async SlimTask WriteCharAsync(char c, CancellationToken cancellationToken)
         {
             if ((c & 0xFF80) != 0)
             {
                 throw new HttpRequestException("Non-ASCII characters found");
             }
 
-            return WriteByteAsync((byte)c, cancellationToken);
-        }
-
-        private SlimTask WriteByteAsync(byte b, CancellationToken cancellationToken)
-        {
-            if (_writeOffset < BufferSize)
+            Debug.Assert(_writeOffset <= BufferSize);
+            if (_writeOffset == BufferSize)
             {
-                _writeBuffer[_writeOffset++] = b;
-                return new SlimTask();
+                await FlushAsync(cancellationToken);
             }
 
-            return WriteByteSlowAsync(b, cancellationToken);
-        }
-
-        private async SlimTask WriteByteSlowAsync(byte b, CancellationToken cancellationToken)
-        {
-            await _stream.WriteAsync(_writeBuffer, 0, BufferSize, cancellationToken);
-
-            _writeBuffer[0] = b;
-            _writeOffset = 1;
+            _writeBuffer[_writeOffset++] = (byte)c;
         }
 
         private async SlimTask WriteStringAsync(string s, CancellationToken cancellationToken)
@@ -1215,38 +1202,13 @@ namespace System.Net.Http.Managed
 //            Console.WriteLine(System.Text.Encoding.UTF8.GetString(_readBuffer, 0, _readLength));
         }
 
-        private async Task<byte> ReadByteSlowAsync(CancellationToken cancellationToken)
+        private async SlimTask<char> ReadCharAsync(CancellationToken cancellationToken)
         {
-            await FillAsync(cancellationToken);
+            Debug.Assert(_readOffset <= _readLength);
 
-            if (_readLength == 0)
+            if (_readOffset == _readLength)
             {
-                // End of stream
-                throw new IOException("unexpected end of stream");
-            }
-
-            return _readBuffer[_readOffset++];
-        }
-
-        // TODO: Revisit perf characteristics of this approach
-        private ValueTask<byte> ReadByteAsync(CancellationToken cancellationToken)
-        {
-            if (_readOffset < _readLength)
-            {
-                return new ValueTask<byte>(_readBuffer[_readOffset++]);
-            }
-
-            return new ValueTask<byte>(ReadByteSlowAsync(cancellationToken));
-        }
-
-        private async Task<char> ReadCharSlowAsync(CancellationToken cancellationToken)
-        {
-            await FillAsync(cancellationToken);
-
-            if (_readLength == 0)
-            {
-                // End of stream
-                throw new IOException("unexpected end of stream");
+                await FillAsync(cancellationToken);
             }
 
             byte b = _readBuffer[_readOffset++];
@@ -1256,22 +1218,6 @@ namespace System.Net.Http.Managed
             }
 
             return (char)b;
-        }
-
-        private ValueTask<char> ReadCharAsync(CancellationToken cancellationToken)
-        {
-            if (_readOffset < _readLength)
-            {
-                byte b = _readBuffer[_readOffset++];
-                if ((b & 0x80) != 0)
-                {
-                    throw new HttpRequestException("Invalid character read from stream");
-                }
-
-                return new ValueTask<char>((char)b);
-            }
-
-            return new ValueTask<char>(ReadCharSlowAsync(cancellationToken));
         }
 
         private void ReadFromBuffer(byte[] buffer, int offset, int count)
