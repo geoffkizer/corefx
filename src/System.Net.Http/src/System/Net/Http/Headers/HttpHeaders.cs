@@ -85,8 +85,8 @@ namespace System.Net.Http.Headers
     public abstract class HttpHeaders : IEnumerable<KeyValuePair<string, IEnumerable<string>>>
     {
         private Dictionary<HeaderKey, HeaderStoreItemInfo> _headerStore;
-        private Dictionary<string, HttpHeaderParser> _parserStore;
-        private HashSet<string> _invalidHeaders;
+        private Dictionary<HeaderKey, HttpHeaderParser> _parserStore;
+        private HashSet<HeaderKey> _invalidHeaders;
 
         private enum StoreLocation
         {
@@ -442,8 +442,8 @@ namespace System.Net.Http.Headers
 
         #endregion
 
-        internal void SetConfiguration(Dictionary<string, HttpHeaderParser> parserStore,
-            HashSet<string> invalidHeaders)
+        internal void SetConfiguration(Dictionary<HeaderKey, HttpHeaderParser> parserStore,
+            HashSet<HeaderKey> invalidHeaders)
         {
             Debug.Assert(_parserStore == null, "Parser store was already set.");
 
@@ -1213,7 +1213,7 @@ namespace System.Net.Http.Headers
             }
 
             HttpHeaderParser parser = null;
-            if (_parserStore.TryGetValue(headerKey.Name, out parser))
+            if (_parserStore.TryGetValue(headerKey, out parser))
             {
                 return parser;
             }
@@ -1234,7 +1234,7 @@ namespace System.Net.Http.Headers
             }
 
             headerKey = new HeaderKey(name);
-            if ((_invalidHeaders != null) && (_invalidHeaders.Contains(name)))
+            if ((_invalidHeaders != null) && (_invalidHeaders.Contains(headerKey)))
             {
                 throw new InvalidOperationException(SR.net_http_headers_not_allowed_header_name);
             }
@@ -1255,7 +1255,7 @@ namespace System.Net.Http.Headers
             }
 
             headerKey = new HeaderKey(name);
-            if ((_invalidHeaders != null) && (_invalidHeaders.Contains(name)))
+            if ((_invalidHeaders != null) && (_invalidHeaders.Contains(headerKey)))
             {
                 return false;
             }

@@ -3,6 +3,7 @@
 // See the LICENSE file in the project root for more information.
 
 using System.Diagnostics;
+using System.Net.Http.Headers;
 
 namespace System.Net
 {
@@ -19,10 +20,11 @@ namespace System.Net
             return TryGetHeaderName(
                 array, startIndex, length,
                 (arr, index) => arr[index],
-                (known, arr, start, len) => CharArrayHelpers.EqualsOrdinal(known, arr, start, len),
+                (known, arr, start, len) => CharArrayHelpers.EqualsOrdinal(known.Name, arr, start, len),
                 out name);
         }
 
+#if false   // Unused?  (Probably used for Unix, ignore for now)
         /// <summary>
         /// Gets a known header name string from a matching IntPtr buffer, using a case-sensitive
         /// ordinal comparison. Used to avoid allocating new strings for known header names.
@@ -46,11 +48,12 @@ namespace System.Net
                 (known, buf, start, len) => EqualsOrdinal(known, buf, len),
                 out name);
         }
+#endif
 
         private static bool TryGetHeaderName<T>(
             T key, int startIndex, int length,
             Func<T, int, char> charAt,
-            Func<string, T, int, int, bool> equals,
+            Func<HeaderKey, T, int, int, bool> equals,
             out string name)
         {
             Debug.Assert(key != null);
@@ -77,7 +80,7 @@ namespace System.Net
             //
             // Matching is case-sensitive: we only want to return a known header that exactly matches the key.
 
-            string potentialHeader = null;
+            HeaderKey potentialHeader;
 
             switch (length)
             {
@@ -307,21 +310,21 @@ namespace System.Net
         /// Returns true if <paramref name="known"/> matches the <paramref name="key"/> char[] array segment,
         /// using an ordinal comparison.
         /// </summary>
-        private static bool TryMatch<T>(string known, T key, int startIndex, int length, Func<string, T, int, int, bool> equals, out string name)
+        private static bool TryMatch<T>(HeaderKey known, T key, int startIndex, int length, Func<HeaderKey, T, int, int, bool> equals, out string name)
         {
-            Debug.Assert(known != null);
-            Debug.Assert(known.Length > 0);
+            Debug.Assert(known.Name != null);
+            Debug.Assert(known.Name.Length > 0);
             Debug.Assert(startIndex >= 0);
             Debug.Assert(length > 0);
             Debug.Assert(equals != null);
 
             // The lengths should be equal because this method is only called
             // from within a "switch (length) { ... }".
-            Debug.Assert(known.Length == length);
+            Debug.Assert(known.Name.Length == length);
 
             if (equals(known, key, startIndex, length))
             {
-                name = known;
+                name = known.Name;
                 return true;
             }
 

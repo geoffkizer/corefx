@@ -218,7 +218,7 @@ namespace System.Net.Http.Headers
             _parent = parent;
         }
 
-        internal static void AddParsers(Dictionary<string, HttpHeaderParser> parserStore)
+        internal static void AddParsers(Dictionary<HeaderKey, HttpHeaderParser> parserStore)
         {
             Debug.Assert(parserStore != null);
 
@@ -233,7 +233,7 @@ namespace System.Net.Http.Headers
             parserStore.Add(HttpKnownHeaderNames.Warning, GenericHeaderParser.MultipleValueWarningParser);
         }
 
-        internal static void AddKnownHeaders(HashSet<string> headerSet)
+        internal static void AddKnownHeaders(HashSet<HeaderKey> headerSet)
         {
             Debug.Assert(headerSet != null);
 

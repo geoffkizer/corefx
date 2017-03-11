@@ -322,8 +322,8 @@ namespace System.Net.Http
                         // decompressing the response stream in the handler (due to
                         // WINHTTP not supporting it in a particular downlevel platform).
                         // This matches the behavior of WINHTTP when it does decompression itself.
-                        if (string.Equals(HttpKnownHeaderNames.ContentLength, headerName, StringComparison.OrdinalIgnoreCase) ||
-                            string.Equals(HttpKnownHeaderNames.ContentEncoding, headerName, StringComparison.OrdinalIgnoreCase))
+                        if (string.Equals(HttpKnownHeaderNames.ContentLength.Name, headerName, StringComparison.OrdinalIgnoreCase) ||
+                            string.Equals(HttpKnownHeaderNames.ContentEncoding.Name, headerName, StringComparison.OrdinalIgnoreCase))
                         {
                             continue;
                         }

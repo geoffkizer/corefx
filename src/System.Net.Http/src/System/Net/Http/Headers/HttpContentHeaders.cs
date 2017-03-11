@@ -12,8 +12,8 @@ namespace System.Net.Http.Headers
         Justification = "This is not a collection")]
     public sealed class HttpContentHeaders : HttpHeaders
     {
-        private static readonly Dictionary<string, HttpHeaderParser> s_parserStore = CreateParserStore();
-        private static readonly HashSet<string> s_invalidHeaders = CreateInvalidHeaders();
+        private static readonly Dictionary<HeaderKey, HttpHeaderParser> s_parserStore = CreateParserStore();
+        private static readonly HashSet<HeaderKey> s_invalidHeaders = CreateInvalidHeaders();
 
         private readonly HttpContent _parent;
         private bool _contentLengthSet;
@@ -153,9 +153,9 @@ namespace System.Net.Http.Headers
             SetConfiguration(s_parserStore, s_invalidHeaders);
         }
 
-        private static Dictionary<string, HttpHeaderParser> CreateParserStore()
+        private static Dictionary<HeaderKey, HttpHeaderParser> CreateParserStore()
         {
-            var parserStore = new Dictionary<string, HttpHeaderParser>(11, StringComparer.OrdinalIgnoreCase);
+            var parserStore = new Dictionary<HeaderKey, HttpHeaderParser>(11);
 
             parserStore.Add(HttpKnownHeaderNames.Allow, GenericHeaderParser.TokenListParser);
             parserStore.Add(HttpKnownHeaderNames.ContentDisposition, GenericHeaderParser.ContentDispositionParser);
@@ -172,9 +172,9 @@ namespace System.Net.Http.Headers
             return parserStore;
         }
 
-        private static HashSet<string> CreateInvalidHeaders()
+        private static HashSet<HeaderKey> CreateInvalidHeaders()
         {
-            var invalidHeaders = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var invalidHeaders = new HashSet<HeaderKey>();
 
             HttpRequestHeaders.AddKnownHeaders(invalidHeaders);
             HttpResponseHeaders.AddKnownHeaders(invalidHeaders);
@@ -183,7 +183,7 @@ namespace System.Net.Http.Headers
             return invalidHeaders;
         }
 
-        internal static void AddKnownHeaders(HashSet<string> headerSet)
+        internal static void AddKnownHeaders(HashSet<HeaderKey> headerSet)
         {
             Debug.Assert(headerSet != null);
 

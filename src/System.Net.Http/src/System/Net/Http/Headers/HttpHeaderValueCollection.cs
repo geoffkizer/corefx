@@ -65,8 +65,6 @@ namespace System.Net.Http.Headers
         // TODO: Remove string-based constructors and use HeaderKey ones instead
         // To enable this, I need to modify HttpKnownHeaderNames to be HeaderKeys instead of raw strings.
 
-        // TODO: These aren't implemented
-
         internal HttpHeaderValueCollection(string headerName, HttpHeaders store)
             : this(new HeaderKey(headerName), store)
         {
