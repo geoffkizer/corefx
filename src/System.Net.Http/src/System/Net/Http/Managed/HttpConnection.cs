@@ -847,10 +847,14 @@ namespace System.Net.Http.Managed
             }
 
             // Validate Host header and construct Uri
+            // TODO: this isn't quite right; it's expecting just a host name without port
+            // Do validation in a different way
+#if false
             if (Uri.CheckHostName(hostHeader) == UriHostNameType.Unknown)
             {
                 throw new HttpRequestException("invalid Host header");
             }
+#endif
 
             // TODO: https
             request.RequestUri = new Uri("http://" + hostHeader + uri);
