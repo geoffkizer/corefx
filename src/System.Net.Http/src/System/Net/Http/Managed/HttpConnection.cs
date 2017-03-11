@@ -1132,7 +1132,7 @@ namespace System.Net.Http.Managed
             }
         }
 
-        private ValueTask<bool> WriteCharAsync(char c, CancellationToken cancellationToken)
+        private SlimTask WriteCharAsync(char c, CancellationToken cancellationToken)
         {
             if ((c & 0xFF80) != 0)
             {
@@ -1142,25 +1142,23 @@ namespace System.Net.Http.Managed
             return WriteByteAsync((byte)c, cancellationToken);
         }
 
-        private ValueTask<bool> WriteByteAsync(byte b, CancellationToken cancellationToken)
+        private SlimTask WriteByteAsync(byte b, CancellationToken cancellationToken)
         {
             if (_writeOffset < BufferSize)
             {
                 _writeBuffer[_writeOffset++] = b;
-                return new ValueTask<bool>(true);
+                return new SlimTask();
             }
 
-            return new ValueTask<bool>(WriteByteSlowAsync(b, cancellationToken));
+            return WriteByteSlowAsync(b, cancellationToken);
         }
 
-        private async Task<bool> WriteByteSlowAsync(byte b, CancellationToken cancellationToken)
+        private async SlimTask WriteByteSlowAsync(byte b, CancellationToken cancellationToken)
         {
             await _stream.WriteAsync(_writeBuffer, 0, BufferSize, cancellationToken);
 
             _writeBuffer[0] = b;
             _writeOffset = 1;
-
-            return true;
         }
 
         private async SlimTask WriteStringAsync(string s, CancellationToken cancellationToken)
