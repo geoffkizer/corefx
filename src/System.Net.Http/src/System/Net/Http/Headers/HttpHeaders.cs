@@ -101,9 +101,9 @@ namespace System.Net.Http.Headers
 
         public void Add(string name, string value)
         {
-            CheckHeaderName(name);
+            HeaderKey headerKey;
+            CheckHeaderName(name, out headerKey);
 
-            HeaderKey headerKey = new HeaderKey(name);
             Add(headerKey, value);
         }
 
@@ -133,9 +133,8 @@ namespace System.Net.Http.Headers
                 throw new ArgumentNullException(nameof(values));
             }
 
-            CheckHeaderName(name);
-
-            HeaderKey headerKey = new HeaderKey(name);
+            HeaderKey headerKey;
+            CheckHeaderName(name, out headerKey);
 
             HeaderStoreItemInfo info;
             bool addToStore;
@@ -166,7 +165,8 @@ namespace System.Net.Http.Headers
 
         public bool TryAddWithoutValidation(string name, string value)
         {
-            if (!TryCheckHeaderName(name))
+            HeaderKey headerKey;
+            if (!TryCheckHeaderName(name, out headerKey))
             {
                 return false;
             }
@@ -178,8 +178,6 @@ namespace System.Net.Http.Headers
                 // E.g. adding two null-strings (or empty, or whitespace-only) results in "My-Header: ,".
                 value = string.Empty;
             }
-
-            HeaderKey headerKey = new HeaderKey(name);
 
             HeaderStoreItemInfo info = GetOrCreateHeaderInfo(headerKey, false);
             AddValue(info, value, StoreLocation.Raw);
@@ -193,12 +191,12 @@ namespace System.Net.Http.Headers
             {
                 throw new ArgumentNullException(nameof(values));
             }
-            if (!TryCheckHeaderName(name))
+
+            HeaderKey headerKey;
+            if (!TryCheckHeaderName(name, out headerKey))
             {
                 return false;
             }
-
-            HeaderKey headerKey = new HeaderKey(name);
 
             HeaderStoreItemInfo info = GetOrCreateHeaderInfo(headerKey, false);
             foreach (string value in values)
@@ -222,23 +220,24 @@ namespace System.Net.Http.Headers
 
         public bool Remove(string name)
         {
-            CheckHeaderName(name);
+            HeaderKey headerKey;
+            CheckHeaderName(name, out headerKey);
 
             if (_headerStore == null)
             {
                 return false;
             }
 
-            HeaderKey headerKey = new HeaderKey(name);
             return Remove(headerKey);
         }
 
         public IEnumerable<string> GetValues(string name)
         {
-            CheckHeaderName(name);
+            HeaderKey headerKey;
+            CheckHeaderName(name, out headerKey);
 
             IEnumerable<string> values;
-            if (!TryGetValues(name, out values))
+            if (!TryGetValues(headerKey, out values))
             {
                 throw new InvalidOperationException(SR.net_http_headers_not_found);
             }
@@ -248,19 +247,23 @@ namespace System.Net.Http.Headers
 
         public bool TryGetValues(string name, out IEnumerable<string> values)
         {
-            if (!TryCheckHeaderName(name))
+            HeaderKey headerKey;
+            if (!TryCheckHeaderName(name, out headerKey))
             {
                 values = null;
                 return false;
             }
 
+            return TryGetValues(headerKey, out values);
+        }
+
+        internal bool TryGetValues(HeaderKey headerKey, out IEnumerable<string> values)
+        {
             if (_headerStore == null)
             {
                 values = null;
                 return false;
             }
-
-            HeaderKey headerKey = new HeaderKey(name);
 
             HeaderStoreItemInfo info = null;
             if (TryGetAndParseHeaderInfo(headerKey, out info))
@@ -275,14 +278,13 @@ namespace System.Net.Http.Headers
 
         public bool Contains(string name)
         {
-            CheckHeaderName(name);
+            HeaderKey headerKey;
+            CheckHeaderName(name, out headerKey);
 
             if (_headerStore == null)
             {
                 return false;
             }
-
-            HeaderKey headerKey = new HeaderKey(name);
 
             // We can't just call headerStore.ContainsKey() since after parsing the value the header may not exist
             // anymore (if the value contains invalid newline chars, we remove the header). So try to parse the 
@@ -307,6 +309,8 @@ namespace System.Net.Http.Headers
             {
                 sb.Append(header.Key);
                 sb.Append(": ");
+
+                // TODO: Shouldn't need to construct a HeaderKey here
                 sb.Append(this.GetHeaderString(new HeaderKey(header.Key)));
                 sb.Append("\r\n");
             }
@@ -1217,7 +1221,7 @@ namespace System.Net.Http.Headers
             return null;
         }
 
-        private void CheckHeaderName(string name)
+        private void CheckHeaderName(string name, out HeaderKey headerKey)
         {
             if (string.IsNullOrEmpty(name))
             {
@@ -1229,14 +1233,17 @@ namespace System.Net.Http.Headers
                 throw new FormatException(SR.net_http_headers_invalid_header_name);
             }
 
+            headerKey = new HeaderKey(name);
             if ((_invalidHeaders != null) && (_invalidHeaders.Contains(name)))
             {
                 throw new InvalidOperationException(SR.net_http_headers_not_allowed_header_name);
             }
         }
 
-        private bool TryCheckHeaderName(string name)
+        private bool TryCheckHeaderName(string name, out HeaderKey headerKey)
         {
+            headerKey = default(HeaderKey);
+
             if (string.IsNullOrEmpty(name))
             {
                 return false;
@@ -1247,6 +1254,7 @@ namespace System.Net.Http.Headers
                 return false;
             }
 
+            headerKey = new HeaderKey(name);
             if ((_invalidHeaders != null) && (_invalidHeaders.Contains(name)))
             {
                 return false;
