@@ -1212,7 +1212,7 @@ namespace System.Net.Http.Managed
 //            Console.WriteLine(System.Text.Encoding.UTF8.GetString(_readBuffer, 0, _readLength));
         }
 
-        private async Task<char> ReadCharSlowAsync(CancellationToken cancellationToken)
+        private async SlimTask<char> ReadCharSlowAsync(CancellationToken cancellationToken)
         {
             await FillAsync(cancellationToken);
 
@@ -1231,7 +1231,7 @@ namespace System.Net.Http.Managed
             return (char)b;
         }
 
-        private ValueTask<char> ReadCharAsync(CancellationToken cancellationToken)
+        private SlimTask<char> ReadCharAsync(CancellationToken cancellationToken)
         {
             if (_readOffset < _readLength)
             {
@@ -1241,10 +1241,10 @@ namespace System.Net.Http.Managed
                     throw new HttpRequestException("Invalid character read from stream");
                 }
 
-                return new ValueTask<char>((char)b);
+                return new SlimTask<char>((char)b);
             }
 
-            return new ValueTask<char>(ReadCharSlowAsync(cancellationToken));
+            return ReadCharSlowAsync(cancellationToken);
         }
 
         private void ReadFromBuffer(byte[] buffer, int offset, int count)
