@@ -142,6 +142,34 @@ namespace System.Net.Http.Headers
         private static int ParseHost(string value, int startIndex, out object parsedValue)
         {
             string host = null;
+
+            // Quick hack to optimize for IP address-based host headers.
+            // GetHostLength is quite expensive, so this is actually cheaper.
+            // In reality, we should just optimize the whole logic here better.
+            string[] splits = value.Split(':');
+            if (splits.Length <= 2)
+            {
+                IPAddress addr;
+                if (IPAddress.TryParse(splits[0], out addr))
+                {
+                    if (splits.Length == 1)
+                    {
+                        parsedValue = value;
+                        return value.Length;
+                    }
+
+                    int port;
+                    if (int.TryParse(splits[1], out port))
+                    {
+                        if (port >= IPEndPoint.MinPort && port <= IPEndPoint.MaxPort)
+                        {
+                            parsedValue = value;
+                            return value.Length;
+                        }
+                    }
+                }
+            }
+            
             int hostLength = HttpRuleParser.GetHostLength(value, startIndex, false, out host);
 
             parsedValue = host;
