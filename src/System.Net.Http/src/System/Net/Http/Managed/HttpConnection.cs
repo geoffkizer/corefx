@@ -242,8 +242,8 @@ namespace System.Net.Http.Managed
                     // Indicates end of response body
 
                     // We expect final CRLF after this
-                    if (await _connection.ReadByteAsync(cancellationToken) != (byte)'\r' ||
-                        await _connection.ReadByteAsync(cancellationToken) != (byte)'\n')
+                    if (await _connection.ReadCharAsync(cancellationToken) != '\r' ||
+                        await _connection.ReadCharAsync(cancellationToken) != '\n')
                     {
                         throw new IOException("missing final CRLF for chunked encoding");
                     }
@@ -1151,25 +1151,22 @@ namespace System.Net.Http.Managed
                 throw new HttpRequestException("Non-ASCII characters found");
             }
 
-            return WriteByteAsync((byte)c, cancellationToken);
-        }
-
-        private SlimTask WriteByteAsync(byte b, CancellationToken cancellationToken)
-        {
             if (_writeOffset < BufferSize)
             {
-                _writeBuffer[_writeOffset++] = b;
+                _writeBuffer[_writeOffset++] = (byte)c;
                 return new SlimTask();
             }
 
-            return WriteByteSlowAsync(b, cancellationToken);
+            return WriteCharSlowAsync(c, cancellationToken);
         }
 
-        private async SlimTask WriteByteSlowAsync(byte b, CancellationToken cancellationToken)
+        private async SlimTask WriteCharSlowAsync(char c, CancellationToken cancellationToken)
         {
-            await _stream.WriteAsync(_writeBuffer, 0, BufferSize, cancellationToken);
+            Debug.Assert((c & 0xFF80) == 0);
 
-            _writeBuffer[0] = b;
+            await FlushAsync(cancellationToken);
+
+            _writeBuffer[0] = (byte)c;
             _writeOffset = 1;
         }
 
@@ -1213,30 +1210,6 @@ namespace System.Net.Http.Managed
 
 //            Console.WriteLine("Read bytes:");
 //            Console.WriteLine(System.Text.Encoding.UTF8.GetString(_readBuffer, 0, _readLength));
-        }
-
-        private async Task<byte> ReadByteSlowAsync(CancellationToken cancellationToken)
-        {
-            await FillAsync(cancellationToken);
-
-            if (_readLength == 0)
-            {
-                // End of stream
-                throw new IOException("unexpected end of stream");
-            }
-
-            return _readBuffer[_readOffset++];
-        }
-
-        // TODO: Revisit perf characteristics of this approach
-        private ValueTask<byte> ReadByteAsync(CancellationToken cancellationToken)
-        {
-            if (_readOffset < _readLength)
-            {
-                return new ValueTask<byte>(_readBuffer[_readOffset++]);
-            }
-
-            return new ValueTask<byte>(ReadByteSlowAsync(cancellationToken));
         }
 
         private async Task<char> ReadCharSlowAsync(CancellationToken cancellationToken)
