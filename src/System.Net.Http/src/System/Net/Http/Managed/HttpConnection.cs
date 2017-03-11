@@ -1170,7 +1170,31 @@ namespace System.Net.Http.Managed
             _writeOffset = 1;
         }
 
-        private async SlimTask WriteStringAsync(string s, CancellationToken cancellationToken)
+        private SlimTask WriteStringAsync(string s, CancellationToken cancellationToken)
+        {
+            int remaining = BufferSize - _writeOffset;
+            if (s.Length <= remaining)
+            {
+                for (int i = 0; i < s.Length; i++)
+                {
+                    char c = s[i];
+                    if ((c & 0xFF80) != 0)
+                    {
+                        throw new HttpRequestException("Non-ASCII characters found");
+                    }
+
+                    _writeBuffer[_writeOffset++] = (byte)c;
+                }
+
+                return new SlimTask();
+            }
+            else
+            {
+                return WriteStringSlowAsync(s, cancellationToken);
+            }
+        }
+
+        private async SlimTask WriteStringSlowAsync(string s, CancellationToken cancellationToken)
         {
             for (int i = 0; i < s.Length; i++)
             {
