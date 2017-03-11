@@ -481,12 +481,6 @@ namespace System.Net.Http.Headers
             AddValue(info, value, StoreLocation.Parsed);
         }
 
-        // TODO: Remove this
-        internal void SetParsedValue(string name, object value)
-        {
-            SetParsedValue(new HeaderKey(name), value);
-        }
-
         internal void SetOrRemoveParsedValue(HeaderKey headerKey, object value)
         {
             if (value == null)
@@ -497,12 +491,6 @@ namespace System.Net.Http.Headers
             {
                 SetParsedValue(headerKey, value);
             }
-        }
-
-        // TODO: Remove this
-        internal void SetOrRemoveParsedValue(string name, object value)
-        {
-            SetOrRemoveParsedValue(new HeaderKey(name), value);
         }
 
         internal bool Remove(HeaderKey headerKey)
@@ -643,12 +631,6 @@ namespace System.Net.Http.Headers
             }
 
             return false;
-        }
-
-        // TODO: Remove this
-        internal bool ContainsParsedValue(string name, object value)
-        {
-            return ContainsParsedValue(new HeaderKey(name), value);
         }
 
         internal virtual void AddHeaders(HttpHeaders sourceHeaders)
@@ -1122,12 +1104,6 @@ namespace System.Net.Http.Headers
             }
 
             return info.ParsedValue;
-        }
-
-        // TODO: Typed headers depend on this.  Remove eventually.
-        internal object GetParsedValues(string name)
-        {
-            return GetParsedValues(new HeaderKey(name));
         }
 
         private void PrepareHeaderInfoForAdd(HeaderKey headerKey, out HeaderStoreItemInfo info, out bool addToStore)
