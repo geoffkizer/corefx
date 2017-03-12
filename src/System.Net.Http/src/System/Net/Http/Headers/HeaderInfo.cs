@@ -16,12 +16,12 @@ namespace System.Net.Http.Headers
 
         public static bool operator ==(HeaderInfo left, HeaderInfo right)
         {
-            return (left == null ? right == null : left.Equals(right));
+            return ((object)left == null ? (object)right == null : left.Equals(right));
         }
 
         public static bool operator !=(HeaderInfo left, HeaderInfo right)
         {
-            return !(left == null ? right == null : left.Equals(right));
+            return !(left == right);
         }
 
         public static HeaderInfo Get(string name)
