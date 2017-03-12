@@ -16,12 +16,12 @@ namespace System.Net.Http.Headers
 
         public static bool operator ==(HeaderInfo left, HeaderInfo right)
         {
-            return left.Equals(right);
+            return (left == null ? right == null : left.Equals(right));
         }
 
         public static bool operator !=(HeaderInfo left, HeaderInfo right)
         {
-            return !left.Equals(right);
+            return !(left == null ? right == null : left.Equals(right));
         }
 
         public static HeaderInfo Get(string name)
@@ -29,10 +29,7 @@ namespace System.Net.Http.Headers
             Debug.Assert(!string.IsNullOrEmpty(name));
             Debug.Assert(HttpRuleParser.GetTokenLength(name, 0) == name.Length);
 
-            // This is stupid and is only for testing purposes
-            var charArray = name.ToCharArray();
-
-            return KnownHeaders.TryGetKnownHeader(charArray, 0, charArray.Length) ?? new CustomHeaderInfo(name);
+            return KnownHeaders.TryGetKnownHeader(new KnownHeaders.StringCharSpan(name)) ?? new CustomHeaderInfo(name);
         }
 
         private sealed class CustomHeaderInfo : HeaderInfo
@@ -182,12 +179,35 @@ namespace System.Net.Http.Headers
             // These need to be treated as known headers, but have their capitalization preserved.
             // This probably means something like adding a "NonstandardKnownHeaderInfo".  Ugh.
 
-            internal static HeaderInfo TryGetKnownHeader(char[] key, int startIndex, int length)
+            // Helper interface for making TryGetKnownHeader generic over strings and char arrays
+            internal interface ICharSpan
             {
-                Debug.Assert(key != null);
-                Debug.Assert(startIndex >= 0);
-                Debug.Assert(length >= 0);
+                int Length { get; }
+                char CharAt(int index);
+                bool IsEqualTo(string other);
+            }
 
+            internal struct StringCharSpan : ICharSpan
+            {
+                private string _string;
+
+                public StringCharSpan(string s)
+                {
+                    _string = s;
+                }
+
+                public int Length => _string.Length;
+
+                public char CharAt(int index) => _string[index];
+
+                public bool IsEqualTo(string other) => StringComparer.Ordinal.Equals(_string, other);
+            }
+
+            // TODO: This method probably ought to live on HeaderInfo class, not here
+
+            internal static HeaderInfo TryGetKnownHeader<T>(T key)
+                where T : struct, ICharSpan     // Enforce struct for performance
+            {
                 // When adding a new constant, add it to HttpKnownHeaderNames.cs as well.
 
                 // The lookup works as follows: first switch on the length of the passed-in key.
@@ -208,13 +228,14 @@ namespace System.Net.Http.Headers
 
                 HeaderInfo potentialHeader = null;
 
+                int length = key.Length;
                 switch (length)
                 {
                     case 2:
                         potentialHeader = TE; goto TryMatch; // TE
 
                     case 3:
-                        switch (key[startIndex])
+                        switch (key.CharAt(0))
                         {
                             case 'A': potentialHeader = Age; goto TryMatch; // [A]ge
                             case 'P': potentialHeader = P3P; goto TryMatch; // [P]3P
@@ -224,7 +245,7 @@ namespace System.Net.Http.Headers
                         break;
 
                     case 4:
-                        switch (key[startIndex])
+                        switch (key.CharAt(0))
                         {
                             case 'D': potentialHeader = Date; goto TryMatch; // [D]ate
                             case 'E': potentialHeader = ETag; goto TryMatch; // [E]Tag
@@ -236,7 +257,7 @@ namespace System.Net.Http.Headers
                         break;
 
                     case 5:
-                        switch (key[startIndex])
+                        switch (key.CharAt(0))
                         {
                             case 'A': potentialHeader = Allow; goto TryMatch; // [A]llow
                             case 'R': potentialHeader = Range; goto TryMatch; // [R]ange
@@ -244,7 +265,7 @@ namespace System.Net.Http.Headers
                         break;
 
                     case 6:
-                        switch (key[startIndex])
+                        switch (key.CharAt(0))
                         {
                             case 'A': potentialHeader = Accept; goto TryMatch; // [A]ccept
                             case 'C': potentialHeader = Cookie; goto TryMatch; // [C]ookie
@@ -256,7 +277,7 @@ namespace System.Net.Http.Headers
                         break;
 
                     case 7:
-                        switch (key[startIndex])
+                        switch (key.CharAt(0))
                         {
                             case 'A': potentialHeader = AltSvc; goto TryMatch;  // [A]lt-Svc
                             case 'C': potentialHeader = Cookie2; goto TryMatch; // [C]ookie2
@@ -269,7 +290,7 @@ namespace System.Net.Http.Headers
                         break;
 
                     case 8:
-                        switch (key[startIndex + 3])
+                        switch (key.CharAt(3))
                         {
                             case 'M': potentialHeader = IfMatch; goto TryMatch;  // If-[M]atch
                             case 'R': potentialHeader = IfRange; goto TryMatch;  // If-[R]ange
@@ -278,7 +299,7 @@ namespace System.Net.Http.Headers
                         break;
 
                     case 10:
-                        switch (key[startIndex])
+                        switch (key.CharAt(0))
                         {
                             case 'C': potentialHeader = Connection; goto TryMatch; // [C]onnection
                             case 'K': potentialHeader = KeepAlive; goto TryMatch;  // [K]eep-Alive
@@ -288,7 +309,7 @@ namespace System.Net.Http.Headers
                         break;
 
                     case 11:
-                        switch (key[startIndex])
+                        switch (key.CharAt(0))
                         {
                             case 'C': potentialHeader = ContentMD5; goto TryMatch; // [C]ontent-MD5
                             case 'R': potentialHeader = RetryAfter; goto TryMatch; // [R]etry-After
@@ -297,7 +318,7 @@ namespace System.Net.Http.Headers
                         break;
 
                     case 12:
-                        switch (key[startIndex + 2])
+                        switch (key.CharAt(2))
                         {
                             case 'c': potentialHeader = AcceptPatch; goto TryMatch; // Ac[c]ept-Patch
                             case 'n': potentialHeader = ContentType; goto TryMatch; // Co[n]tent-Type
@@ -309,7 +330,7 @@ namespace System.Net.Http.Headers
                         break;
 
                     case 13:
-                        switch (key[startIndex + 6])
+                        switch (key.CharAt(6))
                         {
                             case '-': potentialHeader = AcceptRanges; goto TryMatch;  // Accept[-]Ranges
                             case 'i': potentialHeader = Authorization; goto TryMatch; // Author[i]zation
@@ -321,7 +342,7 @@ namespace System.Net.Http.Headers
                         break;
 
                     case 14:
-                        switch (key[startIndex])
+                        switch (key.CharAt(0))
                         {
                             case 'A': potentialHeader = AcceptCharset; goto TryMatch; // [A]ccept-Charset
                             case 'C': potentialHeader = ContentLength; goto TryMatch; // [C]ontent-Length
@@ -329,7 +350,7 @@ namespace System.Net.Http.Headers
                         break;
 
                     case 15:
-                        switch (key[startIndex + 7])
+                        switch (key.CharAt(7))
                         {
                             case '-': potentialHeader = XFrameOptions; goto TryMatch;  // X-Frame[-]Options
                             case 'm': potentialHeader = XUACompatible; goto TryMatch;  // X-UA-Co[m]patible
@@ -340,7 +361,7 @@ namespace System.Net.Http.Headers
                         break;
 
                     case 16:
-                        switch (key[startIndex + 11])
+                        switch (key.CharAt(11))
                         {
                             case 'o': potentialHeader = ContentEncoding; goto TryMatch; // Content-Enc[o]ding
                             case 'g': potentialHeader = ContentLanguage; goto TryMatch; // Content-Lan[g]uage
@@ -352,7 +373,7 @@ namespace System.Net.Http.Headers
                         break;
 
                     case 17:
-                        switch (key[startIndex])
+                        switch (key.CharAt(0))
                         {
                             case 'I': potentialHeader = IfModifiedSince; goto TryMatch;  // [I]f-Modified-Since
                             case 'S': potentialHeader = SecWebSocketKey; goto TryMatch;  // [S]ec-WebSocket-Key
@@ -361,7 +382,7 @@ namespace System.Net.Http.Headers
                         break;
 
                     case 18:
-                        switch (key[startIndex])
+                        switch (key.CharAt(0))
                         {
                             case 'P': potentialHeader = ProxyAuthenticate; goto TryMatch; // [P]roxy-Authenticate
                             case 'X': potentialHeader = XContentDuration; goto TryMatch;  // [X]-Content-Duration
@@ -369,7 +390,7 @@ namespace System.Net.Http.Headers
                         break;
 
                     case 19:
-                        switch (key[startIndex])
+                        switch (key.CharAt(0))
                         {
                             case 'C': potentialHeader = ContentDisposition; goto TryMatch; // [C]ontent-Disposition
                             case 'I': potentialHeader = IfUnmodifiedSince; goto TryMatch;  // [I]f-Unmodified-Since
@@ -384,7 +405,7 @@ namespace System.Net.Http.Headers
                         potentialHeader = SecWebSocketVersion; goto TryMatch; // Sec-WebSocket-Version
 
                     case 22:
-                        switch (key[startIndex])
+                        switch (key.CharAt(0))
                         {
                             case 'A': potentialHeader = AccessControlMaxAge; goto TryMatch;  // [A]ccess-Control-Max-Age
                             case 'S': potentialHeader = SecWebSocketProtocol; goto TryMatch; // [S]ec-WebSocket-Protocol
@@ -399,7 +420,7 @@ namespace System.Net.Http.Headers
                         potentialHeader = SecWebSocketExtensions; goto TryMatch; // Sec-WebSocket-Extensions
 
                     case 25:
-                        switch (key[startIndex])
+                        switch (key.CharAt(0))
                         {
                             case 'S': potentialHeader = StrictTransportSecurity; goto TryMatch; // [S]trict-Transport-Security
                             case 'U': potentialHeader = UpgradeInsecureRequests; goto TryMatch; // [U]pgrade-Insecure-Requests
@@ -410,7 +431,7 @@ namespace System.Net.Http.Headers
                         potentialHeader = AccessControlAllowOrigin; goto TryMatch; // Access-Control-Allow-Origin
 
                     case 28:
-                        switch (key[startIndex + 21])
+                        switch (key.CharAt(21))
                         {
                             case 'H': potentialHeader = AccessControlAllowHeaders; goto TryMatch; // Access-Control-Allow-[H]eaders
                             case 'M': potentialHeader = AccessControlAllowMethods; goto TryMatch; // Access-Control-Allow-[M]ethods
@@ -430,12 +451,7 @@ namespace System.Net.Http.Headers
                 Debug.Assert(potentialHeader != null);
                 Debug.Assert(potentialHeader.Name.Length == length);
 
-                if (CharArrayHelpers.EqualsOrdinal(potentialHeader.Name, key, startIndex, length))
-                {
-                    return potentialHeader;
-                }
-
-                return null;
+                return key.IsEqualTo(potentialHeader.Name) ? potentialHeader : null;
             }
         }
     }
