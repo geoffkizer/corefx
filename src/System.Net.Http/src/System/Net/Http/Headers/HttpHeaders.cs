@@ -37,6 +37,7 @@ namespace System.Net.Http.Headers
         private Dictionary<HeaderInfo, HeaderStoreItemInfo> _headerStore;
         private Dictionary<HeaderInfo, HttpHeaderParser> _parserStore;
         private HashSet<HeaderInfo> _invalidHeaders;
+        private HeaderInfo.HttpHeaderType _allowedHeaderTypes;
 
         private enum StoreLocation
         {
@@ -46,7 +47,13 @@ namespace System.Net.Http.Headers
         }
 
         protected HttpHeaders()
+            : this(HeaderInfo.HttpHeaderType.All)
         {
+        }
+
+        internal HttpHeaders(HeaderInfo.HttpHeaderType allowedHeaderTypes)
+        {
+            _allowedHeaderTypes = allowedHeaderTypes;
         }
 
         public void Add(string name, string value)
@@ -330,7 +337,7 @@ namespace System.Net.Http.Headers
             return stringValue;
         }
 
-        #region IEnumerable<KeyValuePair<string, IEnumerable<string>>> Members
+#region IEnumerable<KeyValuePair<string, IEnumerable<string>>> Members
 
         public IEnumerator<KeyValuePair<string, IEnumerable<string>>> GetEnumerator()
         {
@@ -380,16 +387,16 @@ namespace System.Net.Http.Headers
             }
         }
 
-        #endregion
+#endregion
 
-        #region IEnumerable Members
+#region IEnumerable Members
 
         Collections.IEnumerator Collections.IEnumerable.GetEnumerator()
         {
             return GetEnumerator();
         }
 
-        #endregion
+#endregion
 
         internal void SetConfiguration(Dictionary<HeaderInfo, HttpHeaderParser> parserStore,
             HashSet<HeaderInfo> invalidHeaders)
@@ -1130,7 +1137,7 @@ namespace System.Net.Http.Headers
             }
         }
 
-        private HttpHeaderParser GetParser(HeaderInfo headerInfo)
+        private HttpHeaderParser GetParser2(HeaderInfo headerInfo)
         {
             if (_parserStore == null)
             {
@@ -1146,6 +1153,13 @@ namespace System.Net.Http.Headers
             return null;
         }
 
+        private HttpHeaderParser GetParser(HeaderInfo headerInfo)
+        {
+            var p = headerInfo.Parser;
+            Debug.Assert(p == GetParser2(headerInfo));
+            return p;
+        }
+
         private void CheckHeaderName(string name, out HeaderInfo headerInfo)
         {
             if (string.IsNullOrEmpty(name))
@@ -1159,7 +1173,10 @@ namespace System.Net.Http.Headers
             }
 
             headerInfo = HeaderInfo.Get(name);
-            if ((_invalidHeaders != null) && (_invalidHeaders.Contains(headerInfo)))
+
+            bool isInvalid = (headerInfo.HeaderType & _allowedHeaderTypes) == 0;
+            Debug.Assert(isInvalid == ((_invalidHeaders != null) && (_invalidHeaders.Contains(headerInfo))));
+            if (isInvalid)
             {
                 throw new InvalidOperationException(SR.net_http_headers_not_allowed_header_name);
             }
@@ -1180,7 +1197,10 @@ namespace System.Net.Http.Headers
             }
 
             headerInfo = HeaderInfo.Get(name);
-            if ((_invalidHeaders != null) && (_invalidHeaders.Contains(headerInfo)))
+
+            bool isInvalid = (headerInfo.HeaderType & _allowedHeaderTypes) == 0;
+            Debug.Assert(isInvalid == ((_invalidHeaders != null) && (_invalidHeaders.Contains(headerInfo))));
+            if (isInvalid)
             {
                 return false;
             }
@@ -1343,7 +1363,7 @@ namespace System.Net.Http.Headers
             return value.Equals(storeValue);
         }
 
-        #region Private Classes
+#region Private Classes
 
         private class HeaderStoreItemInfo
         {
@@ -1406,6 +1426,6 @@ namespace System.Net.Http.Headers
                 _parser = parser;
             }
         }
-        #endregion
+#endregion
     }
 }

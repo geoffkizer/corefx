@@ -147,6 +147,7 @@ namespace System.Net.Http.Headers
         }
 
         internal HttpContentHeaders(HttpContent parent)
+            : base(HeaderInfo.HttpHeaderType.Content | HeaderInfo.HttpHeaderType.Custom)
         {
             _parent = parent;
 

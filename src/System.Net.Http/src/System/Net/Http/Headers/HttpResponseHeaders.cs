@@ -178,6 +178,7 @@ namespace System.Net.Http.Headers
         #endregion
 
         internal HttpResponseHeaders()
+            : base(HeaderInfo.HttpHeaderType.General | HeaderInfo.HttpHeaderType.Response | HeaderInfo.HttpHeaderType.Custom)
         {
             _generalHeaders = new HttpGeneralHeaders(this);
 

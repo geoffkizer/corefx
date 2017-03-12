@@ -344,6 +344,7 @@ namespace System.Net.Http.Headers
         #endregion
 
         internal HttpRequestHeaders()
+            : base(HeaderInfo.HttpHeaderType.General | HeaderInfo.HttpHeaderType.Request | HeaderInfo.HttpHeaderType.Custom)
         {
             _generalHeaders = new HttpGeneralHeaders(this);
 
