@@ -225,11 +225,11 @@ namespace System.Net.Http.Headers
             return current;
         }
 
-        internal static DateTimeOffset? GetDateTimeOffsetValue(HeaderKey headerKey, HttpHeaders store)
+        internal static DateTimeOffset? GetDateTimeOffsetValue(HeaderInfo headerInfo, HttpHeaders store)
         {
             Debug.Assert(store != null);
 
-            object storedValue = store.GetParsedValues(headerKey);
+            object storedValue = store.GetParsedValues(headerInfo);
             if (storedValue != null)
             {
                 return (DateTimeOffset)storedValue;
@@ -237,11 +237,11 @@ namespace System.Net.Http.Headers
             return null;
         }
 
-        internal static TimeSpan? GetTimeSpanValue(HeaderKey headerKey, HttpHeaders store)
+        internal static TimeSpan? GetTimeSpanValue(HeaderInfo headerInfo, HttpHeaders store)
         {
             Debug.Assert(store != null);
 
-            object storedValue = store.GetParsedValues(headerKey);
+            object storedValue = store.GetParsedValues(headerInfo);
             if (storedValue != null)
             {
                 return (TimeSpan)storedValue;

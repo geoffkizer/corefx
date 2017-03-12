@@ -12,8 +12,8 @@ namespace System.Net.Http.Headers
         Justification = "This is not a collection")]
     public sealed class HttpRequestHeaders : HttpHeaders
     {
-        private static readonly Dictionary<HeaderKey, HttpHeaderParser> s_parserStore = CreateParserStore();
-        private static readonly HashSet<HeaderKey> s_invalidHeaders = CreateInvalidHeaders();
+        private static readonly Dictionary<HeaderInfo, HttpHeaderParser> s_parserStore = CreateParserStore();
+        private static readonly HashSet<HeaderInfo> s_invalidHeaders = CreateInvalidHeaders();
 
         private HttpGeneralHeaders _generalHeaders;
         private HttpHeaderValueCollection<MediaTypeWithQualityHeaderValue> _accept;
@@ -36,7 +36,7 @@ namespace System.Net.Http.Headers
                 if (_accept == null)
                 {
                     _accept = new HttpHeaderValueCollection<MediaTypeWithQualityHeaderValue>(
-                        HttpKnownHeaderKeys.Accept, this);
+                        HeaderInfo.KnownHeaders.Accept, this);
                 }
                 return _accept;
             }
@@ -51,7 +51,7 @@ namespace System.Net.Http.Headers
                 if (_acceptCharset == null)
                 {
                     _acceptCharset = new HttpHeaderValueCollection<StringWithQualityHeaderValue>(
-                        HttpKnownHeaderKeys.AcceptCharset, this);
+                        HeaderInfo.KnownHeaders.AcceptCharset, this);
                 }
                 return _acceptCharset;
             }
@@ -64,7 +64,7 @@ namespace System.Net.Http.Headers
                 if (_acceptEncoding == null)
                 {
                     _acceptEncoding = new HttpHeaderValueCollection<StringWithQualityHeaderValue>(
-                        HttpKnownHeaderKeys.AcceptEncoding, this);
+                        HeaderInfo.KnownHeaders.AcceptEncoding, this);
                 }
                 return _acceptEncoding;
             }
@@ -77,7 +77,7 @@ namespace System.Net.Http.Headers
                 if (_acceptLanguage == null)
                 {
                     _acceptLanguage = new HttpHeaderValueCollection<StringWithQualityHeaderValue>(
-                        HttpKnownHeaderKeys.AcceptLanguage, this);
+                        HeaderInfo.KnownHeaders.AcceptLanguage, this);
                 }
                 return _acceptLanguage;
             }
@@ -85,8 +85,8 @@ namespace System.Net.Http.Headers
 
         public AuthenticationHeaderValue Authorization
         {
-            get { return (AuthenticationHeaderValue)GetParsedValues(HttpKnownHeaderKeys.Authorization); }
-            set { SetOrRemoveParsedValue(HttpKnownHeaderKeys.Authorization, value); }
+            get { return (AuthenticationHeaderValue)GetParsedValues(HeaderInfo.KnownHeaders.Authorization); }
+            set { SetOrRemoveParsedValue(HeaderInfo.KnownHeaders.Authorization, value); }
         }
 
         public HttpHeaderValueCollection<NameValueWithParametersHeaderValue> Expect
@@ -125,7 +125,7 @@ namespace System.Net.Http.Headers
 
         public string From
         {
-            get { return (string)GetParsedValues(HttpKnownHeaderKeys.From); }
+            get { return (string)GetParsedValues(HeaderInfo.KnownHeaders.From); }
             set
             {
                 // Null and empty string are equivalent. In this case it means, remove the From header value (if any).
@@ -138,13 +138,13 @@ namespace System.Net.Http.Headers
                 {
                     throw new FormatException(SR.net_http_headers_invalid_from_header);
                 }
-                SetOrRemoveParsedValue(HttpKnownHeaderKeys.From, value);
+                SetOrRemoveParsedValue(HeaderInfo.KnownHeaders.From, value);
             }
         }
 
         public string Host
         {
-            get { return (string)GetParsedValues(HttpKnownHeaderKeys.Host); }
+            get { return (string)GetParsedValues(HeaderInfo.KnownHeaders.Host); }
             set
             {
                 // Null and empty string are equivalent. In this case it means, remove the Host header value (if any).
@@ -158,7 +158,7 @@ namespace System.Net.Http.Headers
                 {
                     throw new FormatException(SR.net_http_headers_invalid_host_header);
                 }
-                SetOrRemoveParsedValue(HttpKnownHeaderKeys.Host, value);
+                SetOrRemoveParsedValue(HeaderInfo.KnownHeaders.Host, value);
             }
         }
 
@@ -169,7 +169,7 @@ namespace System.Net.Http.Headers
                 if (_ifMatch == null)
                 {
                     _ifMatch = new HttpHeaderValueCollection<EntityTagHeaderValue>(
-                        HttpKnownHeaderKeys.IfMatch, this);
+                        HeaderInfo.KnownHeaders.IfMatch, this);
                 }
                 return _ifMatch;
             }
@@ -177,8 +177,8 @@ namespace System.Net.Http.Headers
 
         public DateTimeOffset? IfModifiedSince
         {
-            get { return HeaderUtilities.GetDateTimeOffsetValue(HttpKnownHeaderKeys.IfModifiedSince, this); }
-            set { SetOrRemoveParsedValue(HttpKnownHeaderKeys.IfModifiedSince, value); }
+            get { return HeaderUtilities.GetDateTimeOffsetValue(HeaderInfo.KnownHeaders.IfModifiedSince, this); }
+            set { SetOrRemoveParsedValue(HeaderInfo.KnownHeaders.IfModifiedSince, value); }
         }
 
         public HttpHeaderValueCollection<EntityTagHeaderValue> IfNoneMatch
@@ -188,7 +188,7 @@ namespace System.Net.Http.Headers
                 if (_ifNoneMatch == null)
                 {
                     _ifNoneMatch = new HttpHeaderValueCollection<EntityTagHeaderValue>(
-                        HttpKnownHeaderKeys.IfNoneMatch, this);
+                        HeaderInfo.KnownHeaders.IfNoneMatch, this);
                 }
                 return _ifNoneMatch;
             }
@@ -196,47 +196,47 @@ namespace System.Net.Http.Headers
 
         public RangeConditionHeaderValue IfRange
         {
-            get { return (RangeConditionHeaderValue)GetParsedValues(HttpKnownHeaderKeys.IfRange); }
-            set { SetOrRemoveParsedValue(HttpKnownHeaderKeys.IfRange, value); }
+            get { return (RangeConditionHeaderValue)GetParsedValues(HeaderInfo.KnownHeaders.IfRange); }
+            set { SetOrRemoveParsedValue(HeaderInfo.KnownHeaders.IfRange, value); }
         }
 
         public DateTimeOffset? IfUnmodifiedSince
         {
-            get { return HeaderUtilities.GetDateTimeOffsetValue(HttpKnownHeaderKeys.IfUnmodifiedSince, this); }
-            set { SetOrRemoveParsedValue(HttpKnownHeaderKeys.IfUnmodifiedSince, value); }
+            get { return HeaderUtilities.GetDateTimeOffsetValue(HeaderInfo.KnownHeaders.IfUnmodifiedSince, this); }
+            set { SetOrRemoveParsedValue(HeaderInfo.KnownHeaders.IfUnmodifiedSince, value); }
         }
 
         public int? MaxForwards
         {
             get
             {
-                object storedValue = GetParsedValues(HttpKnownHeaderKeys.MaxForwards);
+                object storedValue = GetParsedValues(HeaderInfo.KnownHeaders.MaxForwards);
                 if (storedValue != null)
                 {
                     return (int)storedValue;
                 }
                 return null;
             }
-            set { SetOrRemoveParsedValue(HttpKnownHeaderKeys.MaxForwards, value); }
+            set { SetOrRemoveParsedValue(HeaderInfo.KnownHeaders.MaxForwards, value); }
         }
 
 
         public AuthenticationHeaderValue ProxyAuthorization
         {
-            get { return (AuthenticationHeaderValue)GetParsedValues(HttpKnownHeaderKeys.ProxyAuthorization); }
-            set { SetOrRemoveParsedValue(HttpKnownHeaderKeys.ProxyAuthorization, value); }
+            get { return (AuthenticationHeaderValue)GetParsedValues(HeaderInfo.KnownHeaders.ProxyAuthorization); }
+            set { SetOrRemoveParsedValue(HeaderInfo.KnownHeaders.ProxyAuthorization, value); }
         }
 
         public RangeHeaderValue Range
         {
-            get { return (RangeHeaderValue)GetParsedValues(HttpKnownHeaderKeys.Range); }
-            set { SetOrRemoveParsedValue(HttpKnownHeaderKeys.Range, value); }
+            get { return (RangeHeaderValue)GetParsedValues(HeaderInfo.KnownHeaders.Range); }
+            set { SetOrRemoveParsedValue(HeaderInfo.KnownHeaders.Range, value); }
         }
 
         public Uri Referrer
         {
-            get { return (Uri)GetParsedValues(HttpKnownHeaderKeys.Referer); }
-            set { SetOrRemoveParsedValue(HttpKnownHeaderKeys.Referer, value); }
+            get { return (Uri)GetParsedValues(HeaderInfo.KnownHeaders.Referer); }
+            set { SetOrRemoveParsedValue(HeaderInfo.KnownHeaders.Referer, value); }
         }
 
         public HttpHeaderValueCollection<TransferCodingWithQualityHeaderValue> TE
@@ -246,7 +246,7 @@ namespace System.Net.Http.Headers
                 if (_te == null)
                 {
                     _te = new HttpHeaderValueCollection<TransferCodingWithQualityHeaderValue>(
-                        HttpKnownHeaderKeys.TE, this);
+                        HeaderInfo.KnownHeaders.TE, this);
                 }
                 return _te;
             }
@@ -258,7 +258,7 @@ namespace System.Net.Http.Headers
             {
                 if (_userAgent == null)
                 {
-                    _userAgent = new HttpHeaderValueCollection<ProductInfoHeaderValue>(HttpKnownHeaderKeys.UserAgent,
+                    _userAgent = new HttpHeaderValueCollection<ProductInfoHeaderValue>(HeaderInfo.KnownHeaders.UserAgent,
                         this);
                 }
                 return _userAgent;
@@ -272,7 +272,7 @@ namespace System.Net.Http.Headers
                 if (_expect == null)
                 {
                     _expect = new HttpHeaderValueCollection<NameValueWithParametersHeaderValue>(
-                        HttpKnownHeaderKeys.Expect, this, HeaderUtilities.ExpectContinue);
+                        HeaderInfo.KnownHeaders.Expect, this, HeaderUtilities.ExpectContinue);
                 }
                 return _expect;
             }
@@ -350,38 +350,38 @@ namespace System.Net.Http.Headers
             base.SetConfiguration(s_parserStore, s_invalidHeaders);
         }
 
-        private static Dictionary<HeaderKey, HttpHeaderParser> CreateParserStore()
+        private static Dictionary<HeaderInfo, HttpHeaderParser> CreateParserStore()
         {
-            var parserStore = new Dictionary<HeaderKey, HttpHeaderParser>();
+            var parserStore = new Dictionary<HeaderInfo, HttpHeaderParser>();
 
-            parserStore.Add(HttpKnownHeaderKeys.Accept, MediaTypeHeaderParser.MultipleValuesParser);
-            parserStore.Add(HttpKnownHeaderKeys.AcceptCharset, GenericHeaderParser.MultipleValueStringWithQualityParser);
-            parserStore.Add(HttpKnownHeaderKeys.AcceptEncoding, GenericHeaderParser.MultipleValueStringWithQualityParser);
-            parserStore.Add(HttpKnownHeaderKeys.AcceptLanguage, GenericHeaderParser.MultipleValueStringWithQualityParser);
-            parserStore.Add(HttpKnownHeaderKeys.Authorization, GenericHeaderParser.SingleValueAuthenticationParser);
-            parserStore.Add(HttpKnownHeaderKeys.Expect, GenericHeaderParser.MultipleValueNameValueWithParametersParser);
-            parserStore.Add(HttpKnownHeaderKeys.From, GenericHeaderParser.MailAddressParser);
-            parserStore.Add(HttpKnownHeaderKeys.Host, GenericHeaderParser.HostParser);
-            parserStore.Add(HttpKnownHeaderKeys.IfMatch, GenericHeaderParser.MultipleValueEntityTagParser);
-            parserStore.Add(HttpKnownHeaderKeys.IfModifiedSince, DateHeaderParser.Parser);
-            parserStore.Add(HttpKnownHeaderKeys.IfNoneMatch, GenericHeaderParser.MultipleValueEntityTagParser);
-            parserStore.Add(HttpKnownHeaderKeys.IfRange, GenericHeaderParser.RangeConditionParser);
-            parserStore.Add(HttpKnownHeaderKeys.IfUnmodifiedSince, DateHeaderParser.Parser);
-            parserStore.Add(HttpKnownHeaderKeys.MaxForwards, Int32NumberHeaderParser.Parser);
-            parserStore.Add(HttpKnownHeaderKeys.ProxyAuthorization, GenericHeaderParser.SingleValueAuthenticationParser);
-            parserStore.Add(HttpKnownHeaderKeys.Range, GenericHeaderParser.RangeParser);
-            parserStore.Add(HttpKnownHeaderKeys.Referer, UriHeaderParser.RelativeOrAbsoluteUriParser);
-            parserStore.Add(HttpKnownHeaderKeys.TE, TransferCodingHeaderParser.MultipleValueWithQualityParser);
-            parserStore.Add(HttpKnownHeaderKeys.UserAgent, ProductInfoHeaderParser.MultipleValueParser);
+            parserStore.Add(HeaderInfo.KnownHeaders.Accept, MediaTypeHeaderParser.MultipleValuesParser);
+            parserStore.Add(HeaderInfo.KnownHeaders.AcceptCharset, GenericHeaderParser.MultipleValueStringWithQualityParser);
+            parserStore.Add(HeaderInfo.KnownHeaders.AcceptEncoding, GenericHeaderParser.MultipleValueStringWithQualityParser);
+            parserStore.Add(HeaderInfo.KnownHeaders.AcceptLanguage, GenericHeaderParser.MultipleValueStringWithQualityParser);
+            parserStore.Add(HeaderInfo.KnownHeaders.Authorization, GenericHeaderParser.SingleValueAuthenticationParser);
+            parserStore.Add(HeaderInfo.KnownHeaders.Expect, GenericHeaderParser.MultipleValueNameValueWithParametersParser);
+            parserStore.Add(HeaderInfo.KnownHeaders.From, GenericHeaderParser.MailAddressParser);
+            parserStore.Add(HeaderInfo.KnownHeaders.Host, GenericHeaderParser.HostParser);
+            parserStore.Add(HeaderInfo.KnownHeaders.IfMatch, GenericHeaderParser.MultipleValueEntityTagParser);
+            parserStore.Add(HeaderInfo.KnownHeaders.IfModifiedSince, DateHeaderParser.Parser);
+            parserStore.Add(HeaderInfo.KnownHeaders.IfNoneMatch, GenericHeaderParser.MultipleValueEntityTagParser);
+            parserStore.Add(HeaderInfo.KnownHeaders.IfRange, GenericHeaderParser.RangeConditionParser);
+            parserStore.Add(HeaderInfo.KnownHeaders.IfUnmodifiedSince, DateHeaderParser.Parser);
+            parserStore.Add(HeaderInfo.KnownHeaders.MaxForwards, Int32NumberHeaderParser.Parser);
+            parserStore.Add(HeaderInfo.KnownHeaders.ProxyAuthorization, GenericHeaderParser.SingleValueAuthenticationParser);
+            parserStore.Add(HeaderInfo.KnownHeaders.Range, GenericHeaderParser.RangeParser);
+            parserStore.Add(HeaderInfo.KnownHeaders.Referer, UriHeaderParser.RelativeOrAbsoluteUriParser);
+            parserStore.Add(HeaderInfo.KnownHeaders.TE, TransferCodingHeaderParser.MultipleValueWithQualityParser);
+            parserStore.Add(HeaderInfo.KnownHeaders.UserAgent, ProductInfoHeaderParser.MultipleValueParser);
 
             HttpGeneralHeaders.AddParsers(parserStore);
 
             return parserStore;
         }
 
-        private static HashSet<HeaderKey> CreateInvalidHeaders()
+        private static HashSet<HeaderInfo> CreateInvalidHeaders()
         {
-            var invalidHeaders = new HashSet<HeaderKey>();
+            var invalidHeaders = new HashSet<HeaderInfo>();
             HttpContentHeaders.AddKnownHeaders(invalidHeaders);
             return invalidHeaders;
 
@@ -390,29 +390,29 @@ namespace System.Net.Http.Headers
             // any headers sent from the client as either content headers or request headers.
         }
 
-        internal static void AddKnownHeaders(HashSet<HeaderKey> headerSet)
+        internal static void AddKnownHeaders(HashSet<HeaderInfo> headerSet)
         {
             Debug.Assert(headerSet != null);
 
-            headerSet.Add(HttpKnownHeaderKeys.Accept);
-            headerSet.Add(HttpKnownHeaderKeys.AcceptCharset);
-            headerSet.Add(HttpKnownHeaderKeys.AcceptEncoding);
-            headerSet.Add(HttpKnownHeaderKeys.AcceptLanguage);
-            headerSet.Add(HttpKnownHeaderKeys.Authorization);
-            headerSet.Add(HttpKnownHeaderKeys.Expect);
-            headerSet.Add(HttpKnownHeaderKeys.From);
-            headerSet.Add(HttpKnownHeaderKeys.Host);
-            headerSet.Add(HttpKnownHeaderKeys.IfMatch);
-            headerSet.Add(HttpKnownHeaderKeys.IfModifiedSince);
-            headerSet.Add(HttpKnownHeaderKeys.IfNoneMatch);
-            headerSet.Add(HttpKnownHeaderKeys.IfRange);
-            headerSet.Add(HttpKnownHeaderKeys.IfUnmodifiedSince);
-            headerSet.Add(HttpKnownHeaderKeys.MaxForwards);
-            headerSet.Add(HttpKnownHeaderKeys.ProxyAuthorization);
-            headerSet.Add(HttpKnownHeaderKeys.Range);
-            headerSet.Add(HttpKnownHeaderKeys.Referer);
-            headerSet.Add(HttpKnownHeaderKeys.TE);
-            headerSet.Add(HttpKnownHeaderKeys.UserAgent);
+            headerSet.Add(HeaderInfo.KnownHeaders.Accept);
+            headerSet.Add(HeaderInfo.KnownHeaders.AcceptCharset);
+            headerSet.Add(HeaderInfo.KnownHeaders.AcceptEncoding);
+            headerSet.Add(HeaderInfo.KnownHeaders.AcceptLanguage);
+            headerSet.Add(HeaderInfo.KnownHeaders.Authorization);
+            headerSet.Add(HeaderInfo.KnownHeaders.Expect);
+            headerSet.Add(HeaderInfo.KnownHeaders.From);
+            headerSet.Add(HeaderInfo.KnownHeaders.Host);
+            headerSet.Add(HeaderInfo.KnownHeaders.IfMatch);
+            headerSet.Add(HeaderInfo.KnownHeaders.IfModifiedSince);
+            headerSet.Add(HeaderInfo.KnownHeaders.IfNoneMatch);
+            headerSet.Add(HeaderInfo.KnownHeaders.IfRange);
+            headerSet.Add(HeaderInfo.KnownHeaders.IfUnmodifiedSince);
+            headerSet.Add(HeaderInfo.KnownHeaders.MaxForwards);
+            headerSet.Add(HeaderInfo.KnownHeaders.ProxyAuthorization);
+            headerSet.Add(HeaderInfo.KnownHeaders.Range);
+            headerSet.Add(HeaderInfo.KnownHeaders.Referer);
+            headerSet.Add(HeaderInfo.KnownHeaders.TE);
+            headerSet.Add(HeaderInfo.KnownHeaders.UserAgent);
         }
 
         internal override void AddHeaders(HttpHeaders sourceHeaders)
