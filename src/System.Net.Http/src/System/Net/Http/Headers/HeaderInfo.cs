@@ -4,8 +4,6 @@
 
 using System.Diagnostics;
 
-// TODO: Rename file
-
 namespace System.Net.Http.Headers
 {
     internal abstract class HeaderInfo : IEquatable<HeaderInfo>
