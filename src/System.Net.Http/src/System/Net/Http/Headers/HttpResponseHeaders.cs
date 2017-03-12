@@ -12,8 +12,8 @@ namespace System.Net.Http.Headers
         Justification = "This is not a collection")]
     public sealed class HttpResponseHeaders : HttpHeaders
     {
-        private static readonly Dictionary<string, HttpHeaderParser> s_parserStore = CreateParserStore();
-        private static readonly HashSet<string> s_invalidHeaders = CreateInvalidHeaders();
+        private static readonly Dictionary<HeaderKey, HttpHeaderParser> s_parserStore = CreateParserStore();
+        private static readonly HashSet<HeaderKey> s_invalidHeaders = CreateInvalidHeaders();
 
         private HttpGeneralHeaders _generalHeaders;
         private HttpHeaderValueCollection<string> _acceptRanges;
@@ -30,7 +30,7 @@ namespace System.Net.Http.Headers
             {
                 if (_acceptRanges == null)
                 {
-                    _acceptRanges = new HttpHeaderValueCollection<string>(HttpKnownHeaderNames.AcceptRanges,
+                    _acceptRanges = new HttpHeaderValueCollection<string>(HttpKnownHeaderKeys.AcceptRanges,
                         this, HeaderUtilities.TokenValidator);
                 }
                 return _acceptRanges;
@@ -39,20 +39,20 @@ namespace System.Net.Http.Headers
 
         public TimeSpan? Age
         {
-            get { return HeaderUtilities.GetTimeSpanValue(HttpKnownHeaderNames.Age, this); }
-            set { SetOrRemoveParsedValue(HttpKnownHeaderNames.Age, value); }
+            get { return HeaderUtilities.GetTimeSpanValue(HttpKnownHeaderKeys.Age, this); }
+            set { SetOrRemoveParsedValue(HttpKnownHeaderKeys.Age, value); }
         }
 
         public EntityTagHeaderValue ETag
         {
-            get { return (EntityTagHeaderValue)GetParsedValues(HttpKnownHeaderNames.ETag); }
-            set { SetOrRemoveParsedValue(HttpKnownHeaderNames.ETag, value); }
+            get { return (EntityTagHeaderValue)GetParsedValues(HttpKnownHeaderKeys.ETag); }
+            set { SetOrRemoveParsedValue(HttpKnownHeaderKeys.ETag, value); }
         }
 
         public Uri Location
         {
-            get { return (Uri)GetParsedValues(HttpKnownHeaderNames.Location); }
-            set { SetOrRemoveParsedValue(HttpKnownHeaderNames.Location, value); }
+            get { return (Uri)GetParsedValues(HttpKnownHeaderKeys.Location); }
+            set { SetOrRemoveParsedValue(HttpKnownHeaderKeys.Location, value); }
         }
 
         public HttpHeaderValueCollection<AuthenticationHeaderValue> ProxyAuthenticate
@@ -62,7 +62,7 @@ namespace System.Net.Http.Headers
                 if (_proxyAuthenticate == null)
                 {
                     _proxyAuthenticate = new HttpHeaderValueCollection<AuthenticationHeaderValue>(
-                        HttpKnownHeaderNames.ProxyAuthenticate, this);
+                        HttpKnownHeaderKeys.ProxyAuthenticate, this);
                 }
                 return _proxyAuthenticate;
             }
@@ -70,8 +70,8 @@ namespace System.Net.Http.Headers
 
         public RetryConditionHeaderValue RetryAfter
         {
-            get { return (RetryConditionHeaderValue)GetParsedValues(HttpKnownHeaderNames.RetryAfter); }
-            set { SetOrRemoveParsedValue(HttpKnownHeaderNames.RetryAfter, value); }
+            get { return (RetryConditionHeaderValue)GetParsedValues(HttpKnownHeaderKeys.RetryAfter); }
+            set { SetOrRemoveParsedValue(HttpKnownHeaderKeys.RetryAfter, value); }
         }
 
         public HttpHeaderValueCollection<ProductInfoHeaderValue> Server
@@ -80,7 +80,7 @@ namespace System.Net.Http.Headers
             {
                 if (_server == null)
                 {
-                    _server = new HttpHeaderValueCollection<ProductInfoHeaderValue>(HttpKnownHeaderNames.Server, this);
+                    _server = new HttpHeaderValueCollection<ProductInfoHeaderValue>(HttpKnownHeaderKeys.Server, this);
                 }
                 return _server;
             }
@@ -92,7 +92,7 @@ namespace System.Net.Http.Headers
             {
                 if (_vary == null)
                 {
-                    _vary = new HttpHeaderValueCollection<string>(HttpKnownHeaderNames.Vary,
+                    _vary = new HttpHeaderValueCollection<string>(HttpKnownHeaderKeys.Vary,
                         this, HeaderUtilities.TokenValidator);
                 }
                 return _vary;
@@ -106,7 +106,7 @@ namespace System.Net.Http.Headers
                 if (_wwwAuthenticate == null)
                 {
                     _wwwAuthenticate = new HttpHeaderValueCollection<AuthenticationHeaderValue>(
-                        HttpKnownHeaderNames.WWWAuthenticate, this);
+                        HttpKnownHeaderKeys.WWWAuthenticate, this);
                 }
                 return _wwwAuthenticate;
             }
@@ -184,28 +184,28 @@ namespace System.Net.Http.Headers
             base.SetConfiguration(s_parserStore, s_invalidHeaders);
         }
 
-        private static Dictionary<string, HttpHeaderParser> CreateParserStore()
+        private static Dictionary<HeaderKey, HttpHeaderParser> CreateParserStore()
         {
-            var parserStore = new Dictionary<string, HttpHeaderParser>(StringComparer.OrdinalIgnoreCase);
+            var parserStore = new Dictionary<HeaderKey, HttpHeaderParser>();
 
-            parserStore.Add(HttpKnownHeaderNames.AcceptRanges, GenericHeaderParser.TokenListParser);
-            parserStore.Add(HttpKnownHeaderNames.Age, TimeSpanHeaderParser.Parser);
-            parserStore.Add(HttpKnownHeaderNames.ETag, GenericHeaderParser.SingleValueEntityTagParser);
-            parserStore.Add(HttpKnownHeaderNames.Location, UriHeaderParser.RelativeOrAbsoluteUriParser);
-            parserStore.Add(HttpKnownHeaderNames.ProxyAuthenticate, GenericHeaderParser.MultipleValueAuthenticationParser);
-            parserStore.Add(HttpKnownHeaderNames.RetryAfter, GenericHeaderParser.RetryConditionParser);
-            parserStore.Add(HttpKnownHeaderNames.Server, ProductInfoHeaderParser.MultipleValueParser);
-            parserStore.Add(HttpKnownHeaderNames.Vary, GenericHeaderParser.TokenListParser);
-            parserStore.Add(HttpKnownHeaderNames.WWWAuthenticate, GenericHeaderParser.MultipleValueAuthenticationParser);
+            parserStore.Add(HttpKnownHeaderKeys.AcceptRanges, GenericHeaderParser.TokenListParser);
+            parserStore.Add(HttpKnownHeaderKeys.Age, TimeSpanHeaderParser.Parser);
+            parserStore.Add(HttpKnownHeaderKeys.ETag, GenericHeaderParser.SingleValueEntityTagParser);
+            parserStore.Add(HttpKnownHeaderKeys.Location, UriHeaderParser.RelativeOrAbsoluteUriParser);
+            parserStore.Add(HttpKnownHeaderKeys.ProxyAuthenticate, GenericHeaderParser.MultipleValueAuthenticationParser);
+            parserStore.Add(HttpKnownHeaderKeys.RetryAfter, GenericHeaderParser.RetryConditionParser);
+            parserStore.Add(HttpKnownHeaderKeys.Server, ProductInfoHeaderParser.MultipleValueParser);
+            parserStore.Add(HttpKnownHeaderKeys.Vary, GenericHeaderParser.TokenListParser);
+            parserStore.Add(HttpKnownHeaderKeys.WWWAuthenticate, GenericHeaderParser.MultipleValueAuthenticationParser);
 
             HttpGeneralHeaders.AddParsers(parserStore);
 
             return parserStore;
         }
 
-        private static HashSet<string> CreateInvalidHeaders()
+        private static HashSet<HeaderKey> CreateInvalidHeaders()
         {
-            var invalidHeaders = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var invalidHeaders = new HashSet<HeaderKey>();
             HttpContentHeaders.AddKnownHeaders(invalidHeaders);
             return invalidHeaders;
 
@@ -214,19 +214,19 @@ namespace System.Net.Http.Headers
             // any headers sent from the server as either content headers or response headers.
         }
 
-        internal static void AddKnownHeaders(HashSet<string> headerSet)
+        internal static void AddKnownHeaders(HashSet<HeaderKey> headerSet)
         {
             Debug.Assert(headerSet != null);
 
-            headerSet.Add(HttpKnownHeaderNames.AcceptRanges);
-            headerSet.Add(HttpKnownHeaderNames.Age);
-            headerSet.Add(HttpKnownHeaderNames.ETag);
-            headerSet.Add(HttpKnownHeaderNames.Location);
-            headerSet.Add(HttpKnownHeaderNames.ProxyAuthenticate);
-            headerSet.Add(HttpKnownHeaderNames.RetryAfter);
-            headerSet.Add(HttpKnownHeaderNames.Server);
-            headerSet.Add(HttpKnownHeaderNames.Vary);
-            headerSet.Add(HttpKnownHeaderNames.WWWAuthenticate);
+            headerSet.Add(HttpKnownHeaderKeys.AcceptRanges);
+            headerSet.Add(HttpKnownHeaderKeys.Age);
+            headerSet.Add(HttpKnownHeaderKeys.ETag);
+            headerSet.Add(HttpKnownHeaderKeys.Location);
+            headerSet.Add(HttpKnownHeaderKeys.ProxyAuthenticate);
+            headerSet.Add(HttpKnownHeaderKeys.RetryAfter);
+            headerSet.Add(HttpKnownHeaderKeys.Server);
+            headerSet.Add(HttpKnownHeaderKeys.Vary);
+            headerSet.Add(HttpKnownHeaderKeys.WWWAuthenticate);
         }
 
         internal override void AddHeaders(HttpHeaders sourceHeaders)
