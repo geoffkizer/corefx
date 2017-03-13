@@ -387,9 +387,55 @@ namespace System.Net.Http.Headers
             }
         }
 
-#endregion
+        internal IEnumerator<KeyValuePair<HeaderInfo, IEnumerable<string>>> GetHeaderInfoEnumerator()
+        {
+            if (_headerStore == null)
+            {
+                yield break;
+            }
 
-#region IEnumerable Members
+            List<HeaderInfo> invalidHeaders = null;
+
+            foreach (var header in _headerStore)
+            {
+                HeaderStoreItemInfo info = header.Value;
+
+                // Make sure we parse all raw values before returning the result. Note that this has to be
+                // done before we calculate the array length (next line): A raw value may contain a list of
+                // values.
+                if (!ParseRawHeaderValues(header.Key, info, false))
+                {
+                    // We have an invalid header value (contains invalid newline chars). Mark it as "to-be-deleted"
+                    // and skip this header.
+                    if (invalidHeaders == null)
+                    {
+                        invalidHeaders = new List<HeaderInfo>();
+                    }
+                    invalidHeaders.Add(header.Key);
+                }
+                else
+                {
+                    string[] values = GetValuesAsStrings(info);
+                    yield return new KeyValuePair<HeaderInfo, IEnumerable<string>>(header.Key, values);
+                }
+            }
+
+            // While we were enumerating headers, we also parsed header values. If during parsing it turned out that
+            // the header value was invalid (contains invalid newline chars), remove the header from the store after
+            // completing the enumeration.
+            if (invalidHeaders != null)
+            {
+                Debug.Assert(_headerStore != null);
+                foreach (HeaderInfo invalidheaderInfo in invalidHeaders)
+                {
+                    _headerStore.Remove(invalidheaderInfo);
+                }
+            }
+        }
+
+        #endregion
+
+        #region IEnumerable Members
 
         Collections.IEnumerator Collections.IEnumerable.GetEnumerator()
         {

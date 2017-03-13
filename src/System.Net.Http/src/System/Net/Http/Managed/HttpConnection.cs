@@ -963,9 +963,21 @@ namespace System.Net.Http.Managed
 
         private async SlimTask WriteHeadersAsync(HttpHeaders headers, CancellationToken cancellationToken)
         {
-            foreach (KeyValuePair<string, IEnumerable<string>> header in headers)
+            var e = headers.GetHeaderInfoEnumerator();
+            while (e.MoveNext())
             {
-                await WriteStringAsync(header.Key, cancellationToken);
+                KeyValuePair<HeaderInfo, IEnumerable<string>> header = e.Current;
+
+                byte[] rawBytes = header.Key.RawBytes;
+                if (rawBytes == null)
+                {
+                    await WriteStringAsync(header.Key.Name, cancellationToken);
+                }
+                else
+                {
+                    await WriteAsync(rawBytes, 0, rawBytes.Length, cancellationToken);
+                }
+
                 await WriteCharAsync(':', cancellationToken);
                 await WriteCharAsync(' ', cancellationToken);
 

@@ -13,6 +13,7 @@ namespace System.Net.Http.Headers
         public abstract string Name { get; }
         public abstract HttpHeaderParser Parser { get; }
         public abstract HttpHeaderType HeaderType { get; }
+        public abstract byte[] RawBytes { get; }
 
         public override bool Equals(object obj) => (obj is HeaderInfo headerInfo ? Equals(headerInfo) : false);
 
@@ -49,6 +50,7 @@ namespace System.Net.Http.Headers
             public override string Name => _name;
             public override HttpHeaderParser Parser => null;
             public override HttpHeaderType HeaderType => HttpHeaderType.Custom;
+            public override byte[] RawBytes => null;
 
             public override bool Equals(HeaderInfo other) =>
                 (other is CustomHeaderInfo customHeaderInfo ?
@@ -67,6 +69,7 @@ namespace System.Net.Http.Headers
             private int _hashcode;
             private HttpHeaderType _headerType;
             private HttpHeaderParser _parser;
+            private byte[] _rawBytes;
 
             public KnownHeaderInfo(string name, HttpHeaderType headerType, HttpHeaderParser parser)
             {
@@ -78,6 +81,8 @@ namespace System.Net.Http.Headers
                 _name = name;
                 _headerType = headerType;
                 _parser = parser;
+
+                _rawBytes = System.Text.Encoding.UTF8.GetBytes(name);
 
                 _hashcode = StringComparer.OrdinalIgnoreCase.GetHashCode(_name);
             }
@@ -97,6 +102,7 @@ namespace System.Net.Http.Headers
             public override string Name => _name;
             public override HttpHeaderParser Parser => _parser;
             public override HttpHeaderType HeaderType => _headerType;
+            public override byte[] RawBytes => _rawBytes;
 
             public override bool Equals(HeaderInfo other)
             {
