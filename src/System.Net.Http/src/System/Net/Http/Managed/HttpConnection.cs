@@ -779,6 +779,7 @@ namespace System.Net.Http.Managed
             string hostHeader = null;
 
             // Parse headers
+            // TODO: Share with response parsing path
             c = await ReadCharAsync(cancellationToken);
             while (true)
             {
@@ -797,7 +798,11 @@ namespace System.Net.Http.Managed
                     c = await ReadCharAsync(cancellationToken);
                 }
 
-                string headerName = _sb.ToString();
+                //                string headerName = _sb.ToString();
+
+                // TODO: validate header name
+                HeaderInfo headerInfo = HeaderInfo.Get(_sb);
+
                 _sb.Clear();
 
                 // Get header value
@@ -824,21 +829,19 @@ namespace System.Net.Http.Managed
                 // TryAddWithoutValidation will fail if the header name has trailing whitespace.
                 // So, trim it here.
                 // TODO: Not clear to me from the RFC that this is really correct; RFC seems to indicate this should be an error.
-                headerName = headerName.TrimEnd();
+//                headerName = headerName.TrimEnd();
 
-                // Add header to appropriate collection
-                // Don't ask me why this is the right API to call, but apparently it is
-                if (!request.Headers.TryAddWithoutValidation(headerName, headerValue))
+                if (headerInfo.HeaderType == HeaderInfo.HttpHeaderType.Content)
                 {
-                    if (!requestContent.Headers.TryAddWithoutValidation(headerName, headerValue))
-                    {
-                        // TODO: Not sure why this would happen.  Invalid chars in header name?
-                        throw new Exception($"could not add request header, {headerName}: {headerValue}");
-                    }
+                    requestContent.Headers.TryAddWithoutValidation(headerInfo, headerValue);
+                }
+                else
+                {
+                    request.Headers.TryAddWithoutValidation(headerInfo, headerValue);
                 }
 
                 // Capture Host header so we can use to construct the request Uri below
-                if (headerName == "Host")
+                if (headerInfo == HeaderInfo.KnownHeaders.Host)
                 {
                     hostHeader = headerValue;
                 }

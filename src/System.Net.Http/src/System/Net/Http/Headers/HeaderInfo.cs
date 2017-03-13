@@ -3,6 +3,7 @@
 // See the LICENSE file in the project root for more information.
 
 using System.Diagnostics;
+using System.Text;
 
 namespace System.Net.Http.Headers
 {
@@ -33,6 +34,15 @@ namespace System.Net.Http.Headers
             Debug.Assert(HttpRuleParser.GetTokenLength(name, 0) == name.Length);
 
             return KnownHeaders.TryGetKnownHeader(new KnownHeaders.StringCharSpan(name)) ?? new CustomHeaderInfo(name);
+        }
+
+        public static HeaderInfo Get(StringBuilder sb)
+        {
+            // TODO
+//            Debug.Assert(!string.IsNullOrEmpty(name));
+//            Debug.Assert(HttpRuleParser.GetTokenLength(name, 0) == name.Length);
+
+            return KnownHeaders.TryGetKnownHeader(new KnownHeaders.StringBuilderCharSpan(sb)) ?? new CustomHeaderInfo(sb.ToString());
         }
 
         private sealed class CustomHeaderInfo : HeaderInfo
@@ -245,6 +255,34 @@ namespace System.Net.Http.Headers
                 public char CharAt(int index) => _string[index];
 
                 public bool IsEqualTo(string other) => StringComparer.Ordinal.Equals(_string, other);
+            }
+
+            internal struct StringBuilderCharSpan : ICharSpan
+            {
+                private StringBuilder _sb;
+
+                public StringBuilderCharSpan(StringBuilder sb)
+                {
+                    _sb = sb;
+                }
+
+                public int Length => _sb.Length;
+
+                public char CharAt(int index) => _sb[index];
+
+                public bool IsEqualTo(string other)
+                {
+                    Debug.Assert(other.Length == _sb.Length);
+                    for (int i = 0; i < other.Length; i++)
+                    {
+                        if (other[i] != _sb[i])
+                        {
+                            return false;
+                        }
+                    }
+
+                    return true;
+                }
             }
 
             // TODO: This method probably ought to live on HeaderInfo class, not here

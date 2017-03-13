@@ -142,6 +142,22 @@ namespace System.Net.Http.Headers
             return true;
         }
 
+        // TODO: Never fails, so this is a bad name
+
+        internal void TryAddWithoutValidation(HeaderInfo headerInfo, string value)
+        {
+            if (value == null)
+            {
+                // We allow empty header values. (e.g. "My-Header: "). If the user adds multiple null/empty
+                // values, we'll just add them to the collection. This will result in delimiter-only values:
+                // E.g. adding two null-strings (or empty, or whitespace-only) results in "My-Header: ,".
+                value = string.Empty;
+            }
+
+            HeaderStoreItemInfo info = GetOrCreateHeaderInfo(headerInfo, false);
+            AddValue(info, value, StoreLocation.Raw);
+        }
+
         public bool TryAddWithoutValidation(string name, IEnumerable<string> values)
         {
             if (values == null)
