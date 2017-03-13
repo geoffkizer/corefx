@@ -789,7 +789,10 @@ namespace System.Net.Http.Headers
         {
             // Prevent multiple threads from parsing the raw value at the same time, or else we would get
             // false duplicates or false nulls.
-            lock (info)
+
+            // TODO: I don't understand why we lock *here*, when we don't lock anywhere else.
+            // Seems like this is unnecessary.
+//            lock (info)
             {
                 // Unlike TryGetHeaderInfo() this method tries to parse all non-validated header values (if any)
                 // before returning to the caller.
