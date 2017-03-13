@@ -20,6 +20,11 @@ namespace System.Net.Http.Managed
             s_response = new HttpResponseMessage(HttpStatusCode.OK);
             s_response.Content = new ByteArrayContent(Encoding.UTF8.GetBytes("Hello, World!"));
             s_response.Content.Headers.ContentType = new MediaTypeHeaderValue("text/plain");
+
+            // This is a hack to force header generation/parsing/whatever up front
+            foreach (var h in s_response.Content.Headers)
+            {
+            }
         }
 
         public PlaintextHandler()
