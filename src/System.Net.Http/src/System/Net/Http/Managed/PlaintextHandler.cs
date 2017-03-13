@@ -13,8 +13,13 @@ namespace System.Net.Http.Managed
 {
     public sealed class PlaintextHandler : HttpMessageHandler
     {
-        private static readonly byte[] _helloWorldPayload = Encoding.UTF8.GetBytes("Hello, World!");
-        private static readonly MediaTypeHeaderValue _contentTypeHeader = new MediaTypeHeaderValue("text/plain");
+        private static readonly HttpContent s_responseContent;
+
+        static PlaintextHandler()
+        {
+            s_responseContent = new ByteArrayContent(Encoding.UTF8.GetBytes("Hello, World!"));
+            s_responseContent.Headers.ContentType = new MediaTypeHeaderValue("text/plain");
+        }
 
         public PlaintextHandler()
         {
@@ -26,8 +31,8 @@ namespace System.Net.Http.Managed
                 request.RequestUri.LocalPath == "/plaintext")
             {
                 HttpResponseMessage response = new HttpResponseMessage(HttpStatusCode.OK);
-                response.Content = new ByteArrayContent(_helloWorldPayload);
-                response.Content.Headers.ContentType = _contentTypeHeader;
+                response.Content = s_responseContent;
+
                 // TODO
 //                response.Headers.Date = 
 
