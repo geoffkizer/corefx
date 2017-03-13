@@ -13,12 +13,13 @@ namespace System.Net.Http.Managed
 {
     public sealed class PlaintextHandler : HttpMessageHandler
     {
-        private static readonly HttpContent s_responseContent;
+        private static readonly HttpResponseMessage s_response;
 
         static PlaintextHandler()
         {
-            s_responseContent = new ByteArrayContent(Encoding.UTF8.GetBytes("Hello, World!"));
-            s_responseContent.Headers.ContentType = new MediaTypeHeaderValue("text/plain");
+            s_response = new HttpResponseMessage(HttpStatusCode.OK);
+            s_response.Content = new ByteArrayContent(Encoding.UTF8.GetBytes("Hello, World!"));
+            s_response.Content.Headers.ContentType = new MediaTypeHeaderValue("text/plain");
         }
 
         public PlaintextHandler()
@@ -30,13 +31,10 @@ namespace System.Net.Http.Managed
             if (request.Method == HttpMethod.Get &&
                 request.RequestUri.LocalPath == "/plaintext")
             {
-                HttpResponseMessage response = new HttpResponseMessage(HttpStatusCode.OK);
-                response.Content = s_responseContent;
-
                 // TODO
-//                response.Headers.Date = 
+                //                response.Headers.Date = 
 
-                return Task.FromResult(response);
+                return Task.FromResult(s_response);
             }
 
             return Task.FromResult(new HttpResponseMessage(HttpStatusCode.NotFound));
