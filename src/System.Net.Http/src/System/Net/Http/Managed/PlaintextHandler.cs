@@ -25,6 +25,12 @@ namespace System.Net.Http.Managed
             foreach (var h in s_response.Content.Headers)
             {
             }
+
+            // Another hack.
+            // Not entirely sure why this is necessary...
+            long length;
+            s_response.Content.TryComputeLength(out length);
+            s_response.Content.Headers.ContentLength = length;
         }
 
         public PlaintextHandler()
