@@ -30,6 +30,17 @@ namespace System.Net.Sockets
             }
         }
 
+        public ThreadPoolBoundHandle TryGetThreadPoolBoundHandle()
+        {
+            if (_released)
+            {
+                // Keep the exception message pointing at the external type.
+                throw new ObjectDisposedException(typeof(Socket).FullName);
+            }
+
+            return _iocpBoundHandle;
+        }
+
         // Binds the Socket Win32 Handle to the ThreadPool's CompletionPort.
         public ThreadPoolBoundHandle GetOrAllocateThreadPoolBoundHandle(bool trySkipCompletionPortOnSuccess)
         {

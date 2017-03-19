@@ -290,6 +290,13 @@ namespace System.Net.Sockets
 
         internal ThreadPoolBoundHandle GetOrAllocateThreadPoolBoundHandle()
         {
+            // Common case is that this is already initialized, so try to make this fast.
+            ThreadPoolBoundHandle boundHandle = _handle.TryGetThreadPoolBoundHandle();
+            if (boundHandle != null)
+            {
+                return boundHandle;
+            }
+
             // There is a known bug that exists through Windows 7 with UDP and
             // SetFileCompletionNotificationModes.
             // So, don't try to enable skipping the completion port on success in this case.
