@@ -11,79 +11,36 @@ namespace System.Net.Sockets
     [CLSCompliant(false)]
     public static class SocketDirect
     {
-        [StructLayout(LayoutKind.Sequential)]
-        internal unsafe struct Overlapped
-        {
-            // NativeOverlapped must be the first member, since we cast to/from it
-            public NativeOverlapped _nativeOverlapped;
-            public GCHandle _completionCallbackHandle;
-
-            internal Action<int, int> GetCompletionCallback()
-            {
-                return (Action<int, int>)_completionCallbackHandle.Target;
-            }
-
-            internal static unsafe void IOCompletionCallback(uint errorCode, uint bytesTransferred, NativeOverlapped* nativeOverlapped)
-            {
-                Overlapped* overlapped = (Overlapped*)nativeOverlapped;
-                Action<int, int> completionCallback = (Action<int, int>)overlapped->_completionCallbackHandle.Target;
-
-                completionCallback((int)errorCode, (int)bytesTransferred);
-            }
-        }
-
         public unsafe struct OverlappedHandle : IDisposable
         {
-            private Overlapped* _overlappedPtr;
+            private PreAllocatedOverlapped _preallocatedOverlapped;
 
-            public unsafe OverlappedHandle(Action<int, int> completionCallback)
+            public OverlappedHandle(ThreadPoolBoundHandle boundHandle, Action<int, int> completionCallback)
             {
-                _overlappedPtr = (Overlapped*)Marshal.AllocHGlobal(sizeof(Overlapped));
-                _overlappedPtr->_nativeOverlapped = default(NativeOverlapped);
-                _overlappedPtr->_completionCallbackHandle = GCHandle.Alloc(completionCallback);
+                _preallocatedOverlapped = new PreAllocatedOverlapped(
+                    (errorCode, bytesTransferred, nativeOverlapped) =>
+                    {
+                        boundHandle.FreeNativeOverlapped(nativeOverlapped);
+                        completionCallback((int)errorCode, (int)bytesTransferred);
+                    },
+                    null, null);
             }
+
+            public PreAllocatedOverlapped PreAllocatedOverlapped => _preallocatedOverlapped;
 
             public void Dispose()
             {
-                if (_overlappedPtr != null)
+                if (_preallocatedOverlapped != null)
                 {
-                    Marshal.FreeHGlobal((IntPtr)_overlappedPtr);
-                    _overlappedPtr = null;
+                    _preallocatedOverlapped.Dispose();
+                    _preallocatedOverlapped = null;
                 }
-            }
-
-            internal NativeOverlapped* GetNativeOverlapped()
-            {
-                return (NativeOverlapped*)_overlappedPtr;
             }
         }
 
-        [DllImport(Interop.Libraries.Kernel32, SetLastError = true)]
-        private static extern unsafe bool BindIoCompletionCallback(
-            IntPtr handle,
-            IOCompletionCallback completionCallback,
-            int flags);
-
-        [DllImport(Interop.Libraries.Kernel32, SetLastError = true)]
-        private static unsafe extern bool SetFileCompletionNotificationModes(
-            IntPtr handle,
-            Interop.Kernel32.FileCompletionNotificationModes flags);
-
-        public static unsafe void BindToWin32ThreadPool(IntPtr socketHandle)
+        public static ThreadPoolBoundHandle BindToClrThreadPool(Socket s)
         {
-            bool success = BindIoCompletionCallback(socketHandle, Overlapped.IOCompletionCallback, 0);
-            if (!success)
-            {
-                throw new Exception($"BindIoCompletionCallback failed, GetLastError = { Marshal.GetLastWin32Error() }");
-            }
-
-            success = SetFileCompletionNotificationModes(socketHandle,
-                Interop.Kernel32.FileCompletionNotificationModes.SkipCompletionPortOnSuccess |
-                Interop.Kernel32.FileCompletionNotificationModes.SkipSetEventOnHandle);
-            if (!success)
-            {
-                throw new Exception($"SetFileCompletionNotificationModes failed, GetLastError = { Marshal.GetLastWin32Error() }");
-            }
+            return s.GetOrAllocateThreadPoolBoundHandle();
         }
 
         [DllImport(Interop.Libraries.Ws2_32, SetLastError = true)]
@@ -102,7 +59,7 @@ namespace System.Net.Sockets
 
         // Note, only single buffer supported for now
         public static unsafe SocketError Receive(
-            IntPtr socketHandle,
+            ThreadPoolBoundHandle socketHandle,
             byte* buffer,
             int bufferLength,
             out int bytesTransferred,
@@ -113,10 +70,16 @@ namespace System.Net.Sockets
             wsaBuffer.Pointer = (IntPtr)buffer;
             wsaBuffer.Length = bufferLength;
 
-            SocketError socketError = Interop.Winsock.WSARecv(socketHandle, &wsaBuffer, 1, out bytesTransferred, ref socketFlags, overlapped.GetNativeOverlapped(), IntPtr.Zero);
+            NativeOverlapped* nativeOverlapped = socketHandle.AllocateNativeOverlapped(overlapped.PreAllocatedOverlapped);
+            SocketError socketError = Interop.Winsock.WSARecv(socketHandle.Handle.DangerousGetHandle(), &wsaBuffer, 1, out bytesTransferred, ref socketFlags, nativeOverlapped, IntPtr.Zero);
             if (socketError != SocketError.Success)
             {
                 socketError = SocketPal.GetLastSocketError();
+            }
+
+            if (socketError != SocketError.IOPending)
+            {
+                socketHandle.FreeNativeOverlapped(nativeOverlapped);
             }
 
             return socketError;
@@ -124,7 +87,7 @@ namespace System.Net.Sockets
 
         // Note, only single buffer supported for now
         public static unsafe SocketError Send(
-            IntPtr socketHandle,
+            ThreadPoolBoundHandle socketHandle,
             byte* buffer,
             int bufferLength,
             out int bytesTransferred,
@@ -135,10 +98,16 @@ namespace System.Net.Sockets
             wsaBuffer.Pointer = (IntPtr)buffer;
             wsaBuffer.Length = bufferLength;
 
-            SocketError socketError = Interop.Winsock.WSASend(socketHandle, &wsaBuffer, 1, out bytesTransferred, socketFlags, overlapped.GetNativeOverlapped(), IntPtr.Zero);
+            NativeOverlapped* nativeOverlapped = socketHandle.AllocateNativeOverlapped(overlapped.PreAllocatedOverlapped);
+            SocketError socketError = Interop.Winsock.WSASend(socketHandle.Handle.DangerousGetHandle(), &wsaBuffer, 1, out bytesTransferred, socketFlags, nativeOverlapped, IntPtr.Zero);
             if (socketError != SocketError.Success)
             {
                 socketError = SocketPal.GetLastSocketError();
+            }
+
+            if (socketError != SocketError.IOPending)
+            {
+                socketHandle.FreeNativeOverlapped(nativeOverlapped);
             }
 
             return socketError;
