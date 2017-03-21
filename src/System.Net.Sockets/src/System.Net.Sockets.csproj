@@ -21,6 +21,7 @@
   </PropertyGroup>
   <ItemGroup>
     <!-- All configurations -->
+    <Compile Include="System\Net\Sockets\SocketDirect.cs" />
     <Compile Include="System\Net\Sockets\TransmitFileOptions.cs" />
     <Compile Include="System\Net\Sockets\SocketReceiveFromResult.cs" />
     <Compile Include="System\Net\Sockets\SocketReceiveMessageFromResult.cs" />
