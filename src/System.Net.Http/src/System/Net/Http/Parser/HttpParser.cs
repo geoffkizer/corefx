@@ -16,7 +16,7 @@ using System.Threading.Tasks;
 
 
 // TODO:
-// Figure out content read end stuff (used to be PutConnectionInPool)
+// Figure out content read end stuff (used to be PutConnectionInPool) -- use Task CompletedTask
 // Get rid of ReadChar*; deal with bytes only
 
 namespace System.Net.Http.Parser
@@ -51,400 +51,86 @@ namespace System.Net.Http.Parser
     // May be a perf win
     // Also enables avoiding boxing for structs, if we care about this
 
-    internal sealed class HttpParser : IDisposable
+    // TODO: I've used static methods for now,
+    // but ideally I would put all parser state on a class and be able to reuse this.  Consider.
+
+    // TODO: This operates on chars currently, but there's no reason not to operate directly on bytes.
+
+    public static class HttpParser
     {
-        private const int BufferSize = 4096;
+        // TODO: SlimTask?
 
-        private readonly Stream _stream;
-        private readonly TransportContext _transportContext;
-        private readonly bool _usingProxy;
-
-        private IHttpParserHandler _handler;
-
-//        private readonly StringBuilder _sb;
-
-        private readonly byte[] _readBuffer;
-        private int _readOffset;
-        private int _readLength;
-
-        private HttpElementType _currentElement;
-        private int _elementStartOffset;
-
-        private bool _disposed;
-
-        private sealed class ContentLengthReadStream : HttpContentReadStream
+        private static async Task ParseResponseHeaderAsync(BufferedStream bufferedStream, IHttpParserHandler handler, CancellationToken cancellationToken)
         {
-            private long _contentBytesRemaining;
+            HttpElementType currentElement = HttpElementType.None;
+            int elementStartOffset;
 
-            public ContentLengthReadStream(HttpParser parser, long contentLength)
-                : base(parser)
+            void SetCurrentElement(HttpElementType elementType)
             {
-                if (contentLength == 0)
-                {
-                    _parser = null;
-                    _contentBytesRemaining = 0;
-//                    parser.PutparserInPool();
-                }
-                else
-                {
-                    _contentBytesRemaining = contentLength;
-                }
+                Debug.Assert(elementType != HttpElementType.None);
+                Debug.Assert(currentElement == HttpElementType.None);
+
+                currentElement = elementType;
+
+                // Last byte read is considered the start of the element
+                elementStartOffset = bufferedStream.ReadOffset - 1;
+                Debug.Assert(elementStartOffset >= 0);
             }
 
-            public override async Task<int> ReadAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken)
+            void EmitElement()
             {
-                if (buffer == null)
-                {
-                    throw new ArgumentNullException(nameof(buffer));
-                }
+                Debug.Assert(currentElement != HttpElementType.None);
+                Debug.Assert(elementStartOffset < bufferedStream.ReadOffset);
 
-                if (offset < 0 || offset > buffer.Length)
-                {
-                    throw new ArgumentOutOfRangeException(nameof(offset));
-                }
+                // The last read byte is not part of the element to emit
+                int elementEndOffset = bufferedStream.ReadOffset - 1;
+                Debug.Assert(elementEndOffset >= elementStartOffset);
 
-                if (count < 0 || count > buffer.Length - offset)
-                {
-                    throw new ArgumentOutOfRangeException(nameof(count));
-                }
+                handler.OnHttpElement(currentElement, new ArraySegment<byte>(bufferedStream.ReadBuffer, elementStartOffset, elementEndOffset - elementStartOffset), true);
 
-                if (_parser == null)
-                {
-                    // Response body fully consumed
-                    return 0;
-                }
-
-                Debug.Assert(_contentBytesRemaining > 0);
-
-                count = (int)Math.Min(count, _contentBytesRemaining);
-
-                int bytesRead = await _parser.ReadAsync(buffer, offset, count, cancellationToken);
-
-                if (bytesRead == 0)
-                {
-                    // Unexpected end of response stream
-                    throw new IOException("Unexpected end of content stream");
-                }
-
-                Debug.Assert(bytesRead <= _contentBytesRemaining);
-                _contentBytesRemaining -= bytesRead;
-
-                if (_contentBytesRemaining == 0)
-                {
-                    // End of response body
-//                    _parser.PutparserInPool();
-                    _parser = null;
-                }
-
-                return bytesRead;
+                currentElement = HttpElementType.None;
             }
 
-            public override async Task CopyToAsync(Stream destination, int bufferSize, CancellationToken cancellationToken)
+            char GetNextByte()
             {
-                if (destination == null)
+                byte b = bufferedStream.ReadBuffer[bufferedStream.ReadOffset++];
+                if ((b & 0x80) != 0)
                 {
-                    throw new ArgumentNullException(nameof(destination));
+                    // Non-ASCII character received
+                    throw new HttpRequestException("Invalid character read from stream");
                 }
 
-                if (_parser == null)
-                {
-                    // Response body fully consumed
-                    return;
-                }
-
-                await _parser.CopyChunkToAsync(destination, _contentBytesRemaining, cancellationToken);
-
-                _contentBytesRemaining = 0;
-//                _parser.PutparserInPool();
-                _parser = null;
-            }
-        }
-
-        private sealed class ChunkedEncodingReadStream : HttpContentReadStream
-        {
-            private int _chunkBytesRemaining;
-
-            public ChunkedEncodingReadStream(HttpParser parser)
-                : base(parser)
-            {
-                _chunkBytesRemaining = 0;
+                return (char)b;
             }
 
-            private async Task<bool> TryGetNextChunk(CancellationToken cancellationToken)
+            async SlimTask<char> ReadCharSlowAsync()
             {
-                Debug.Assert(_chunkBytesRemaining == 0);
+                await bufferedStream.FillAsync(cancellationToken);
 
-                // Start of chunk, read chunk size
-                int chunkSize = 0;
-                char c = await _parser.ReadCharAsync(cancellationToken);
-                while (true)
+                if (bufferedStream.ReadLength == 0)
                 {
-                    // Get hex digit
-                    if (c >= '0' && c <= '9')
-                    {
-                        chunkSize = chunkSize * 16 + (c - '0');
-                    }
-                    else if (c >= 'a' && c <= 'f')
-                    {
-                        chunkSize = chunkSize * 16 + (c - 'a' + 10);
-                    }
-                    else if (c >= 'A' && c <= 'F')
-                    {
-                        chunkSize = chunkSize * 16 + (c - 'A' + 10);
-                    }
-                    else
-                    {
-                        throw new IOException("Invalid chunk size in response stream");
-                    }
-
-                    c = await _parser.ReadCharAsync(cancellationToken);
-                    if (c == '\r')
-                    {
-                        if (await _parser.ReadCharAsync(cancellationToken) != '\n')
-                        {
-                            throw new IOException("Saw CR without LF while parsing chunk size");
-                        }
-
-                        break;
-                    }
+                    // End of stream
+                    throw new IOException("unexpected end of stream");
                 }
 
-                _chunkBytesRemaining = chunkSize;
-                if (chunkSize == 0)
-                {
-                    // Indicates end of response body
-
-                    // We expect final CRLF after this
-                    if (await _parser.ReadCharAsync(cancellationToken) != '\r' ||
-                        await _parser.ReadCharAsync(cancellationToken) != '\n')
-                    {
-                        throw new IOException("missing final CRLF for chunked encoding");
-                    }
-
-//                    _parser.PutparserInPool();
-                    _parser = null;
-                    return false;
-                }
-
-                return true;
+                return GetNextByte();
             }
 
-            private async Task ConsumeChunkBytes(int bytesConsumed, CancellationToken cancellationToken)
+            SlimTask<char> ReadCharAsync()
             {
-                Debug.Assert(bytesConsumed <= _chunkBytesRemaining);
-                _chunkBytesRemaining -= bytesConsumed;
-
-                if (_chunkBytesRemaining == 0)
+                if (bufferedStream.HasBufferedReadBytes)
                 {
-                    // Parse CRLF at end of chunk
-                    if (await _parser.ReadCharAsync(cancellationToken) != '\r' ||
-                        await _parser.ReadCharAsync(cancellationToken) != '\n')
-                    {
-                        throw new IOException("missing CRLF for end of chunk");
-                    }
+                    return new SlimTask<char>(GetNextByte());
                 }
+
+                return ReadCharSlowAsync();
             }
 
-            public override async Task<int> ReadAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken)
-            {
-                if (buffer == null)
-                {
-                    throw new ArgumentNullException(nameof(buffer));
-                }
-
-                if (offset < 0 || offset > buffer.Length)
-                {
-                    throw new ArgumentOutOfRangeException(nameof(offset));
-                }
-
-                if (count < 0 || count > buffer.Length - offset)
-                {
-                    throw new ArgumentOutOfRangeException(nameof(count));
-                }
-
-                if (_parser == null)
-                {
-                    // Response body fully consumed
-                    return 0;
-                }
-
-                if (_chunkBytesRemaining == 0)
-                {
-                    if (!await TryGetNextChunk(cancellationToken))
-                    {
-                        // End of response body
-                        return 0;
-                    }
-                }
-
-                count = Math.Min(count, _chunkBytesRemaining);
-
-                int bytesRead = await _parser.ReadAsync(buffer, offset, count, cancellationToken);
-
-                if (bytesRead == 0)
-                {
-                    // Unexpected end of response stream
-                    throw new IOException("Unexpected end of content stream while processing chunked response body");
-                }
-
-                await ConsumeChunkBytes(bytesRead, cancellationToken);
-
-                return bytesRead;
-            }
-
-            public override async Task CopyToAsync(Stream destination, int bufferSize, CancellationToken cancellationToken)
-            {
-                if (destination == null)
-                {
-                    throw new ArgumentNullException(nameof(destination));
-                }
-
-                if (_parser == null)
-                {
-                    // Response body fully consumed
-                    return;
-                }
-
-                if (_chunkBytesRemaining > 0)
-                {
-                    await _parser.CopyChunkToAsync(destination, _chunkBytesRemaining, cancellationToken);
-                    await ConsumeChunkBytes(_chunkBytesRemaining, cancellationToken);
-                }
-
-                while (await TryGetNextChunk(cancellationToken))
-                {
-                    await _parser.CopyChunkToAsync(destination, _chunkBytesRemaining, cancellationToken);
-                    await ConsumeChunkBytes(_chunkBytesRemaining, cancellationToken);
-                }
-            }
-        }
-
-        private sealed class ConnectionCloseReadStream : HttpContentReadStream
-        {
-            public ConnectionCloseReadStream(HttpParser parser)
-                : base(parser)
-            {
-            }
-
-            public override async Task<int> ReadAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken)
-            {
-                if (buffer == null)
-                {
-                    throw new ArgumentNullException(nameof(buffer));
-                }
-
-                if (offset < 0 || offset > buffer.Length)
-                {
-                    throw new ArgumentOutOfRangeException(nameof(offset));
-                }
-
-                if (count < 0 || count > buffer.Length - offset)
-                {
-                    throw new ArgumentOutOfRangeException(nameof(count));
-                }
-
-                if (_parser == null)
-                {
-                    // Response body fully consumed
-                    return 0;
-                }
-
-                int bytesRead = await _parser.ReadAsync(buffer, offset, count, cancellationToken);
-
-                if (bytesRead == 0)
-                {
-                    // We cannot reuse this parser, so close it.
-                    _parser.Dispose();
-                    _parser = null;
-                    return 0;
-                }
-
-                return bytesRead;
-            }
-
-            public override async Task CopyToAsync(Stream destination, int bufferSize, CancellationToken cancellationToken)
-            {
-                if (destination == null)
-                {
-                    throw new ArgumentNullException(nameof(destination));
-                }
-
-                if (_parser == null)
-                {
-                    // Response body fully consumed
-                    return;
-                }
-
-                await _parser.CopyToAsync(destination, cancellationToken);
-
-                // We cannot reuse this parser, so close it.
-                _parser.Dispose();
-                _parser = null;
-            }
-        }
-
-        public HttpParser(
-            IHttpParserHandler handler,
-            Stream stream, 
-            TransportContext transportContext, 
-            bool usingProxy)
-        {
-            _handler = handler;
-
-            _stream = stream;
-            _transportContext = transportContext;
-            _usingProxy = usingProxy;
-
-            _currentElement = HttpElementType.None;
-
-            _readBuffer = new byte[BufferSize];
-            _readLength = 0;
-            _readOffset = 0;
-        }
-
-        public void Dispose()
-        {
-            if (!_disposed)
-            {
-                _disposed = true;
-
-                _stream.Dispose();
-            }
-        }
-
-        private void SetCurrentElement(HttpElementType elementType)
-        {
-            Debug.Assert(elementType != HttpElementType.None);
-            Debug.Assert(_currentElement == HttpElementType.None);
-
-            _currentElement = elementType;
-
-            // Last byte read is considered the start of the element
-            _elementStartOffset = _readOffset - 1;
-            Debug.Assert(_elementStartOffset >= 0);
-        }
-
-        private void EmitElement()
-        {
-            Debug.Assert(_currentElement != HttpElementType.None);
-            Debug.Assert(_elementStartOffset < _readOffset);
-
-            // The last read byte is not part of the element to emit
-            int elementEndOffset = _readOffset - 1;
-            Debug.Assert(elementEndOffset >= _elementStartOffset);
-
-            _handler.OnHttpElement(_currentElement, new ArraySegment<byte>(_readBuffer, _elementStartOffset, elementEndOffset - _elementStartOffset), true);
-
-            _currentElement = HttpElementType.None;
-        }
-
-        private async Task ParseResponseHeaderAsync(CancellationToken cancellationToken)
-        {
             char c;
 
             // Read version
             // Must contain at least one character
-            c = await ReadCharAsync(cancellationToken);
+            c = await ReadCharAsync();
             if (c == ' ' || c == '\r' || c == '\n')
             {
                 throw new HttpRequestException("could not parse response line");
@@ -455,7 +141,7 @@ namespace System.Net.Http.Parser
 
             do
             {
-                await ReadCharAsync(cancellationToken);
+                await ReadCharAsync();
                 if (c == '\r' || c == '\n')
                 {
                     throw new HttpRequestException("could not parse response line");
@@ -466,7 +152,7 @@ namespace System.Net.Http.Parser
 
             // Read status code
             // Must contain exactly three chars character
-            c = await ReadCharAsync(cancellationToken);
+            c = await ReadCharAsync();
             if (c == ' ' || c == '\r' || c == '\n')
             {
                 throw new HttpRequestException("could not parse response line");
@@ -475,20 +161,20 @@ namespace System.Net.Http.Parser
             // This will include the byte we just read
             SetCurrentElement(HttpElementType.Status);
 
-            c = await ReadCharAsync(cancellationToken);
+            c = await ReadCharAsync();
             if (c == ' ' || c == '\r' || c == '\n')
             {
                 throw new HttpRequestException("could not parse response line");
             }
 
-            c = await ReadCharAsync(cancellationToken);
+            c = await ReadCharAsync();
             if (c == ' ' || c == '\r' || c == '\n')
             {
                 throw new HttpRequestException("could not parse response line");
             }
 
             // Read space separator
-            c = await ReadCharAsync(cancellationToken);
+            c = await ReadCharAsync();
             if (c != ' ')
             {
                 throw new HttpRequestException("could not parse response line");
@@ -497,20 +183,20 @@ namespace System.Net.Http.Parser
             EmitElement();
 
             // Read reason phrase, if present
-            c = await ReadCharAsync(cancellationToken);
+            c = await ReadCharAsync();
             if (c != '\r')
             {
                 SetCurrentElement(HttpElementType.ReasonPhrase);
 
                 do
                 {
-                    c = await ReadCharAsync(cancellationToken);
+                    c = await ReadCharAsync();
                 } while (c != '\r');
 
                 EmitElement();
             }
 
-            c = await ReadCharAsync(cancellationToken);
+            c = await ReadCharAsync();
             if (c != '\n')
             {
                 throw new HttpRequestException("could not parse response line");
@@ -519,10 +205,10 @@ namespace System.Net.Http.Parser
             // Parse headers
             while (true)
             {
-                c = await ReadCharAsync(cancellationToken);
+                c = await ReadCharAsync();
                 if (c == '\r')
                 {
-                    if (await ReadCharAsync(cancellationToken) != '\n')
+                    if (await ReadCharAsync() != '\n')
                     {
                         throw new HttpRequestException("Saw CR without LF while parsing headers");
                     }
@@ -540,7 +226,7 @@ namespace System.Net.Http.Parser
                 // Get header name
                 do
                 {
-                    c = await ReadCharAsync(cancellationToken);
+                    c = await ReadCharAsync();
                 } while (c != ':' && c != ' ');
 
                 EmitElement();
@@ -551,7 +237,7 @@ namespace System.Net.Http.Parser
                 {
                     do
                     {
-                        c = await ReadCharAsync(cancellationToken);
+                        c = await ReadCharAsync();
                     } while (c == ' ');
 
                     if (c != ':')
@@ -561,22 +247,22 @@ namespace System.Net.Http.Parser
                 }
 
                 // Get header value
-                c = await ReadCharAsync(cancellationToken);
+                c = await ReadCharAsync();
                 while (c == ' ')
                 {
-                    c = await ReadCharAsync(cancellationToken);
+                    c = await ReadCharAsync();
                 }
 
                 SetCurrentElement(HttpElementType.HeaderValue);
 
                 while (c != '\r')
                 {
-                    c = await ReadCharAsync(cancellationToken);
+                    c = await ReadCharAsync();
                 }
 
                 EmitElement();
 
-                if (await ReadCharAsync(cancellationToken) != '\n')
+                if (await ReadCharAsync() != '\n')
                 {
                     throw new HttpRequestException("Saw CR without LF while parsing headers");
                 }
@@ -633,6 +319,8 @@ namespace System.Net.Http.Parser
         // (1) Better building blocks for this, e.g. HeaderMatcher or StringMatcher etc
         // (2) Convert to pull and use await.
 
+        // TODO: This should check for known status codes that implicitly have no body -- 204, 304
+
         // Used by ParseResponseAndGetBody below
         private sealed class SimpleParserHandler : IHttpParserHandler
         {
@@ -653,6 +341,10 @@ namespace System.Net.Http.Parser
             private bool _chunkedEncoding = false;
             private long _contentLength = -1;
 
+            public bool ChunkedEncoding => _chunkedEncoding;
+            public long ContentLength => _contentLength;
+            public bool NoBody => false;        // See comment above
+
             public void OnHttpElement(HttpElementType elementType, ArraySegment<byte> bytes, bool complete)
             {
                 switch (_state)
@@ -664,7 +356,7 @@ namespace System.Net.Http.Parser
                         }
 
                         _compareOffset = 0;
-                        if (_contentLength == -1 && 
+                        if (_contentLength == -1 &&
                             CompareUtf8CaseInsenstive(s_contentLengthUtf8, ref _compareOffset, bytes, complete))
                         {
                             if (complete)
@@ -793,48 +485,32 @@ namespace System.Net.Http.Parser
             }
         }
 
-        public async Task<Stream> ParseResponseAndGetBodyAsync(CancellationToken cancellationToken, bool noContent = false)
+        public static async Task<Stream> ParseResponseAndGetBodyAsync(BufferedStream bufferedStream, IHttpParserHandler handler, CancellationToken cancellationToken, bool noContent = false)
         {
+            // TODO: SimpleParserHandler needs to accept an inner handler
             // TODO: Reuse SimpleParserHandler instance
+            var simpleHandler = new SimpleParserHandler();
 
-            // TODO: ParseResponseHeaderAsync doesn't take an IHttpParserHandler.  Should it?
-            // Probably; that's the model from Kestrel
-            return null;
-#if false
-            // Instantiate response stream
-            HttpContentReadStream responseStream;
+            await ParseResponseHeaderAsync(bufferedStream, simpleHandler, cancellationToken);
 
-            if (request.Method == HttpMethod.Head ||
-                status == 204 ||
-                status == 304)
+            if (noContent || simpleHandler.NoBody)
             {
-                // There is implicitly no response body
-                // TODO: I don't understand why there's any content here at all --
-                // i.e. why not just set response.Content = null?
-                // This is legal for request bodies (e.g. GET).
-                // However, setting response.Content = null causes a bunch of tests to fail.
-                responseStream = new ContentLengthReadStream(this, 0);
+                // There is implicitly no response body.
+                // TODO: Add something like EmptyStream
+                return new ContentLengthReadStream(bufferedStream, 0);
+            }
+            else if (simpleHandler.ChunkedEncoding)
+            {
+                return new ChunkedEncodingReadStream(bufferedStream);
+            }
+            else if (simpleHandler.ContentLength != -1)
+            {
+                return new ContentLengthReadStream(bufferedStream, simpleHandler.ContentLength);
             }
             else
-            { 
-                if (responseContent.Headers.ContentLength != null)
-                {
-                    responseStream = new ContentLengthReadStream(this, responseContent.Headers.ContentLength.Value);
-                }
-                else if (response.Headers.TransferEncodingChunked == true)
-                {
-                    responseStream = new ChunkedEncodingReadStream(this);
-                }
-                else
-                {
-                    responseStream = new ConnectionCloseReadStream(this);
-                }
+            {
+                return new ConnectionCloseReadStream(bufferedStream);
             }
-
-            responseContent.SetStream(responseStream);
-            response.Content = responseContent;
-            return response;
-#endif
         }
 
 #if false
@@ -843,7 +519,7 @@ namespace System.Net.Http.Parser
             HttpRequestMessage request = new HttpRequestMessage();
 
             // Read method
-            char c = await ReadCharAsync(cancellationToken);
+            char c = await ReadCharAsync();
             if (c == ' ')
             {
                 throw new HttpRequestException("could not read request method");
@@ -852,14 +528,14 @@ namespace System.Net.Http.Parser
             do
             {
                 _sb.Append(c);
-                c = await ReadCharAsync(cancellationToken);
+                c = await ReadCharAsync();
             } while (c != ' ');
 
             request.Method = new HttpMethod(_sb.ToString());
             _sb.Clear();
 
             // Read Uri
-            c = await ReadCharAsync(cancellationToken);
+            c = await ReadCharAsync();
             if (c == ' ')
             {
                 throw new HttpRequestException("could not read request uri");
@@ -868,27 +544,27 @@ namespace System.Net.Http.Parser
             do
             {
                 _sb.Append(c);
-                c = await ReadCharAsync(cancellationToken);
+                c = await ReadCharAsync();
             } while (c != ' ');
 
             string uri = _sb.ToString();
             _sb.Clear();
 
             // Read Http version
-            if (await ReadCharAsync(cancellationToken) != 'H' ||
-                await ReadCharAsync(cancellationToken) != 'T' ||
-                await ReadCharAsync(cancellationToken) != 'T' ||
-                await ReadCharAsync(cancellationToken) != 'P' ||
-                await ReadCharAsync(cancellationToken) != '/' ||
-                await ReadCharAsync(cancellationToken) != '1' ||
-                await ReadCharAsync(cancellationToken) != '.' ||
-                await ReadCharAsync(cancellationToken) != '1')
+            if (await ReadCharAsync() != 'H' ||
+                await ReadCharAsync() != 'T' ||
+                await ReadCharAsync() != 'T' ||
+                await ReadCharAsync() != 'P' ||
+                await ReadCharAsync() != '/' ||
+                await ReadCharAsync() != '1' ||
+                await ReadCharAsync() != '.' ||
+                await ReadCharAsync() != '1')
             {
                 throw new HttpRequestException("could not read response HTTP version");
             }
 
-            if (await ReadCharAsync(cancellationToken) != '\r' ||
-                await ReadCharAsync(cancellationToken) != '\n')
+            if (await ReadCharAsync() != '\r' ||
+                await ReadCharAsync() != '\n')
             {
                 throw new HttpRequestException("expected CRLF");
             }
@@ -899,12 +575,12 @@ namespace System.Net.Http.Parser
 
             // Parse headers
             // TODO: Share with response parsing path
-            c = await ReadCharAsync(cancellationToken);
+            c = await ReadCharAsync();
             while (true)
             {
                 if (c == '\r')
                 {
-                    if (await ReadCharAsync(cancellationToken) != '\n')
+                    if (await ReadCharAsync() != '\n')
                         throw new HttpRequestException("Saw CR without LF while parsing headers");
 
                     break;
@@ -914,7 +590,7 @@ namespace System.Net.Http.Parser
                 while (c != ':')
                 {
                     _sb.Append(c);
-                    c = await ReadCharAsync(cancellationToken);
+                    c = await ReadCharAsync();
                 }
 
                 //                string headerName = _sb.ToString();
@@ -925,19 +601,19 @@ namespace System.Net.Http.Parser
                 _sb.Clear();
 
                 // Get header value
-                c = await ReadCharAsync(cancellationToken);
+                c = await ReadCharAsync();
                 while (c == ' ')
                 {
-                    c = await ReadCharAsync(cancellationToken);
+                    c = await ReadCharAsync();
                 }
 
                 while (c != '\r')
                 {
                     _sb.Append(c);
-                    c = await ReadCharAsync(cancellationToken);
+                    c = await ReadCharAsync();
                 }
 
-                if (await ReadCharAsync(cancellationToken) != '\n')
+                if (await ReadCharAsync() != '\n')
                 {
                     throw new HttpRequestException("Saw CR without LF while parsing headers");
                 }
@@ -965,7 +641,7 @@ namespace System.Net.Http.Parser
                     hostHeader = headerValue;
                 }
 
-                c = await ReadCharAsync(cancellationToken);
+                c = await ReadCharAsync();
             }
 
             // Validate Host header and construct Uri
@@ -1009,179 +685,10 @@ namespace System.Net.Http.Parser
             return request;
         }
 #endif
-
-        private async SlimTask FillAsync(CancellationToken cancellationToken)
-        {
-            Debug.Assert(_readOffset == _readLength);
-
-            // Emit partial element, if any
-            if (_currentElement != HttpElementType.None)
-            {
-                _handler.OnHttpElement(_currentElement, new ArraySegment<byte>(_readBuffer, _elementStartOffset, _readLength - _elementStartOffset), false);
-            }
-
-            _readOffset = 0;
-            _readLength = await _stream.ReadAsync(_readBuffer, 0, BufferSize, cancellationToken);
-
-//            Console.WriteLine("Read bytes:");
-//            Console.WriteLine(System.Text.Encoding.UTF8.GetString(_readBuffer, 0, _readLength));
-        }
-
-        private async SlimTask<char> ReadCharSlowAsync(CancellationToken cancellationToken)
-        {
-            await FillAsync(cancellationToken);
-
-            if (_readLength == 0)
-            {
-                // End of stream
-                throw new IOException("unexpected end of stream");
-            }
-
-            byte b = _readBuffer[_readOffset++];
-            if ((b & 0x80) != 0)
-            {
-                throw new HttpRequestException("Invalid character read from stream");
-            }
-
-            return (char)b;
-        }
-
-        private SlimTask<char> ReadCharAsync(CancellationToken cancellationToken)
-        {
-            if (_readOffset < _readLength)
-            {
-                byte b = _readBuffer[_readOffset++];
-                if ((b & 0x80) != 0)
-                {
-                    throw new HttpRequestException("Invalid character read from stream");
-                }
-
-                return new SlimTask<char>((char)b);
-            }
-
-            return ReadCharSlowAsync(cancellationToken);
-        }
-
-        private void ReadFromBuffer(byte[] buffer, int offset, int count)
-        {
-            Debug.Assert(count <= _readLength - _readOffset);
-
-            Buffer.BlockCopy(_readBuffer, _readOffset, buffer, offset, count);
-            _readOffset += count;
-        }
-
-        private async SlimTask<int> ReadAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken)
-        {
-            // This is called when reading the response body
-
-            int remaining = _readLength - _readOffset;
-            if (remaining > 0)
-            {
-                // We have data in the read buffer.  Return it to the caller.
-                count = Math.Min(count, remaining);
-                ReadFromBuffer(buffer, offset, count);
-                return count;
-            }
-
-            // No data in read buffer. 
-            if (count < BufferSize / 2)
-            {
-                // Caller requested a small read size (less than half the read buffer size).
-                // Read into the buffer, so that we read as much as possible, hopefully.
-                await FillAsync(cancellationToken);
-
-                count = Math.Min(count, _readLength);
-                ReadFromBuffer(buffer, offset, count);
-                return count;
-            }
-
-            // Large read size, and no buffered data.
-            // Do an unbuffered read directly against the underlying stream.
-            count = await _stream.ReadAsync(buffer, offset, count, cancellationToken);
-            return count;
-        }
-
-        private async SlimTask CopyFromBuffer(Stream destination, int count, CancellationToken cancellationToken)
-        {
-            Debug.Assert(count <= _readLength - _readOffset);
-
-            await destination.WriteAsync(_readBuffer, _readOffset, count, cancellationToken);
-            _readOffset += count;
-        }
-
-        private async SlimTask CopyToAsync(Stream destination, CancellationToken cancellationToken)
-        {
-            Debug.Assert(destination != null);
-
-            int remaining = _readLength - _readOffset;
-            if (remaining > 0)
-            {
-                await CopyFromBuffer(destination, remaining, cancellationToken);
-            }
-
-            while (true)
-            {
-                await FillAsync(cancellationToken);
-                if (_readLength == 0)
-                {
-                    // End of stream
-                    break;
-                }
-
-                await CopyFromBuffer(destination, _readLength, cancellationToken);
-            }
-        }
-
-        // Copy *exactly* [length] bytes into destination; throws on end of stream.
-        private async SlimTask CopyChunkToAsync(Stream destination, long length, CancellationToken cancellationToken)
-        {
-            Debug.Assert(destination != null);
-            Debug.Assert(length > 0);
-
-            int remaining = _readLength - _readOffset;
-            if (remaining > 0)
-            {
-                remaining = (int)Math.Min(remaining, length);
-                await CopyFromBuffer(destination, remaining, cancellationToken);
-
-                length -= remaining;
-                if (length == 0)
-                {
-                    return;
-                }
-            }
-
-            while (true)
-            {
-                await FillAsync(cancellationToken);
-                if (_readLength == 0)
-                {
-                    throw new HttpRequestException("unexpected end of stream");
-                }
-
-                remaining = (int)Math.Min(_readLength, length);
-                await CopyFromBuffer(destination, remaining, cancellationToken);
-
-                length -= remaining;
-                if (length == 0)
-                {
-                    return;
-                }
-            }
-        }
-        internal bool HasBufferedReadBytes => (_readOffset < _readLength);
     }
-
 
     internal abstract class HttpContentReadStream : Stream
     {
-        protected HttpParser _parser;
-
-        public HttpContentReadStream(HttpParser parser)
-        {
-            _parser = parser;
-        }
-
         public override bool CanRead => true;
 
         public override bool CanSeek => false;
@@ -1231,18 +738,6 @@ namespace System.Net.Http.Parser
 
         public abstract override Task<int> ReadAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken);
         public abstract override Task CopyToAsync(Stream destination, int bufferSize, CancellationToken cancellationToken);
-
-        protected override void Dispose(bool disposing)
-        {
-            if (_parser != null)
-            {
-                // We haven't finished reading the body, so close the parser.
-                _parser.Dispose();
-                _parser = null;
-            }
-
-            base.Dispose(disposing);
-        }
     }
 
     internal static class Utf8Helpers
