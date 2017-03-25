@@ -276,41 +276,47 @@ namespace System.Net.Http.Parser
         private static readonly byte[] s_transferEncodingUtf8 = Encoding.UTF8.GetBytes("transfer-encoding");
         private static readonly byte[] s_chunkedUtf8 = Encoding.UTF8.GetBytes("chunked");
 
-        // This helper seems generally useful, so think about making it public.
-        private static bool CompareUtf8CaseInsenstive(byte[] compareTo, ref int offset, ArraySegment<byte> partialBytes, bool complete)
+        public struct Utf8StringMatcher
         {
-            // Note these can be equal, and partialBytes.Count can be 0 (when complete == true);
-            Debug.Assert(offset <= compareTo.Length);
-            Debug.Assert(partialBytes.Count > 0 || complete);
+            byte[] _matchString;
+            int _offset;
 
-            int end = offset + partialBytes.Count;
-
-            if (complete)
+            public Utf8StringMatcher(byte[] matchString)
             {
-                if (end != compareTo.Length)
+                _matchString = matchString;
+                _offset = 0;
+            }
+
+            public bool Match(ArraySegment<byte> partialString, bool complete)
+            {
+                // Note these can be equal, and partialBytes.Count can be 0 (when complete == true);
+                Debug.Assert(_offset <= _matchString.Length);
+                Debug.Assert(partialString.Count > 0 || complete);
+
+                int end = _offset + partialString.Count;
+
+                if (end > _matchString.Length ||
+                    (complete && end == _matchString.Length))
                 {
                     return false;
                 }
-            }
-            else
-            {
-                // If not complete, it's ok for end to be less than the full length
-                if (end > compareTo.Length)
+
+                for (int i = 0; i < partialString.Count; i++)
                 {
-                    return false;
+                    if (_matchString[_offset + i] != partialString.Array[partialString.Offset + i].ToLowerUtf8())
+                    {
+                        return false;
+                    }
                 }
+
+                _offset += partialString.Count;
+                return true;
             }
 
-            for (int i = 0; i < partialBytes.Count; i++)
+            public void Reset()
             {
-                if (compareTo[offset + i] != partialBytes.Array[partialBytes.Offset + i].ToLowerUtf8())
-                {
-                    return false;
-                }
+                _offset = 0;
             }
-
-            offset += partialBytes.Count;
-            return true;
         }
 
         // This state machine logic is super painful.
@@ -324,6 +330,19 @@ namespace System.Net.Http.Parser
         // Used by ParseResponseAndGetBody below
         private sealed class SimpleParserHandler : IHttpParserHandler
         {
+            IHttpParserHandler _innerHandler;
+
+            public SimpleParserHandler(IHttpParserHandler innerHandler)
+            {
+                _innerHandler = innerHandler;
+
+                _contentLengthMatcher = new Utf8StringMatcher(s_contentLengthUtf8);
+                _transferEncodingMatcher = new Utf8StringMatcher(s_transferEncodingUtf8);
+                _chunkedMatcher = new Utf8StringMatcher(s_chunkedUtf8);
+
+                _state = State.LookingForHeader;
+            }
+
             // This is why await is so useful.
             private enum State
             {
@@ -335,8 +354,10 @@ namespace System.Net.Http.Parser
                 ParsingTransferEncoding
             }
 
-            private State _state = State.LookingForHeader;
-            private int _compareOffset = 0;
+            private State _state;
+            private Utf8StringMatcher _contentLengthMatcher;
+            private Utf8StringMatcher _transferEncodingMatcher;
+            private Utf8StringMatcher _chunkedMatcher;
 
             private bool _chunkedEncoding = false;
             private long _contentLength = -1;
@@ -364,9 +385,10 @@ namespace System.Net.Http.Parser
                             break;
                         }
 
-                        _compareOffset = 0;
+                        _contentLengthMatcher.Reset();
+                        _transferEncodingMatcher.Reset();
                         if (_contentLength == -1 &&
-                            CompareUtf8CaseInsenstive(s_contentLengthUtf8, ref _compareOffset, bytes, complete))
+                            _contentLengthMatcher.Match(bytes, complete))
                         {
                             if (complete)
                             {
@@ -379,11 +401,11 @@ namespace System.Net.Http.Parser
                             }
                         }
                         else if (_chunkedEncoding == false &&
-                                 CompareUtf8CaseInsenstive(s_transferEncodingUtf8, ref _compareOffset, bytes, complete))
+                                 _transferEncodingMatcher.Match(bytes, complete))
                         {
                             if (complete)
                             {
-                                _compareOffset = 0;
+                                _chunkedMatcher.Reset();
                                 _state = State.ParsingTransferEncoding;
                             }
                             else
@@ -414,7 +436,7 @@ namespace System.Net.Http.Parser
                             throw new InvalidOperationException();
                         }
 
-                        if (CompareUtf8CaseInsenstive(s_contentLengthUtf8, ref _compareOffset, bytes, complete))
+                        if (_contentLengthMatcher.Match(bytes, complete))
                         {
                             if (complete)
                             {
@@ -436,11 +458,11 @@ namespace System.Net.Http.Parser
                             throw new InvalidOperationException();
                         }
 
-                        if (CompareUtf8CaseInsenstive(s_transferEncodingUtf8, ref _compareOffset, bytes, complete))
+                        if (_transferEncodingMatcher.Match(bytes, complete))
                         {
                             if (complete)
                             {
-                                _compareOffset = 0;
+                                _chunkedMatcher.Reset();
                                 _state = State.ParsingTransferEncoding;
                             }
                         }
@@ -460,7 +482,7 @@ namespace System.Net.Http.Parser
 
                         // TODO: If we see another transfer-encoding after chunked, this is an invalid request
 
-                        if (CompareUtf8CaseInsenstive(s_chunkedUtf8, ref _compareOffset, bytes, complete))
+                        if (_chunkedMatcher.Match(bytes, complete))
                         {
                             if (complete)
                             {
@@ -482,15 +504,16 @@ namespace System.Net.Http.Parser
                             throw new InvalidOperationException();
                         }
 
-                        // TODO
-
                         if (complete)
                         {
                             _state = State.LookingForHeader;
                         }
 
-                        break;
+                        // TODO
+                        throw new NotImplementedException();
                 }
+
+                _innerHandler.OnHttpElement(elementType, bytes, complete);
             }
         }
 
@@ -498,7 +521,7 @@ namespace System.Net.Http.Parser
         {
             // TODO: SimpleParserHandler needs to accept an inner handler
             // TODO: Reuse SimpleParserHandler instance
-            var simpleHandler = new SimpleParserHandler();
+            var simpleHandler = new SimpleParserHandler(handler);
 
             await ParseResponseHeaderAsync(bufferedStream, simpleHandler, cancellationToken);
 
