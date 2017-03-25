@@ -158,5 +158,24 @@ namespace System.Net.Http.Parser
                 await ConsumeChunkBytes(_chunkBytesRemaining, cancellationToken);
             }
         }
+
+        public async override Task DrainAsync(CancellationToken cancellationToken)
+        {
+            if (_bufferedStream == null)
+            {
+                // Response body fully consumed
+                return;
+            }
+
+            if (_chunkBytesRemaining > 0)
+            {
+                await ConsumeChunkBytes(_chunkBytesRemaining, cancellationToken);
+            }
+
+            while (await TryGetNextChunk(cancellationToken))
+            {
+                await ConsumeChunkBytes(_chunkBytesRemaining, cancellationToken);
+            }
+        }
     }
 }

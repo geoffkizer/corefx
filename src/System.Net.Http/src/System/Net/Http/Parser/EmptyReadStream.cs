@@ -44,6 +44,11 @@ namespace System.Net.Http.Parser
             return Task.CompletedTask;
         }
 
+        public override Task DrainAsync(CancellationToken cancellationToken)
+        {
+            return Task.CompletedTask;
+        }
+
         protected override void Dispose(bool disposing)
         {
         }

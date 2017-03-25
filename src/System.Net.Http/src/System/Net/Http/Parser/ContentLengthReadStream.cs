@@ -65,7 +65,6 @@ namespace System.Net.Http.Parser
             {
                 // End of response body
                 _bufferedStream = null;
-                _tcs.SetResult(true);
             }
 
             return bytesRead;
@@ -88,7 +87,35 @@ namespace System.Net.Http.Parser
 
             _contentBytesRemaining = 0;
             _bufferedStream = null;
-            _tcs.SetResult(true);
+        }
+
+        public async override Task DrainAsync(CancellationToken cancellationToken)
+        {
+            if (_bufferedStream == null)
+            {
+                // Response body fully consumed
+                return;
+            }
+
+            int remainder = (int)Math.Min(_bufferedStream.ReadLength - _bufferedStream.ReadOffset, _contentBytesRemaining);
+            _bufferedStream.ReadOffset += remainder;
+            _contentBytesRemaining -= remainder;
+
+            while (_contentBytesRemaining > 0)
+            {
+                await _bufferedStream.FillAsync(cancellationToken);
+                if (_bufferedStream.ReadLength == 0)
+                {
+                    // Unexpected end of response stream
+                    throw new IOException("Unexpected end of content stream");
+                }
+
+                remainder = (int)Math.Min(_bufferedStream.ReadLength, _contentBytesRemaining);
+                _bufferedStream.ReadOffset = remainder;
+                _contentBytesRemaining -= remainder;
+            }
+
+            _bufferedStream = null;
         }
     }
 }

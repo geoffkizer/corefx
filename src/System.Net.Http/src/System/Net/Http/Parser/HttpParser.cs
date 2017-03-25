@@ -494,7 +494,7 @@ namespace System.Net.Http.Parser
             }
         }
 
-        public static async Task<Stream> ParseResponseAndGetBodyAsync(BufferedStream bufferedStream, IHttpParserHandler handler, CancellationToken cancellationToken, bool noContent = false)
+        public static async Task<HttpContentReadStream> ParseResponseAndGetBodyAsync(BufferedStream bufferedStream, IHttpParserHandler handler, CancellationToken cancellationToken, bool noContent = false)
         {
             // TODO: SimpleParserHandler needs to accept an inner handler
             // TODO: Reuse SimpleParserHandler instance
@@ -518,10 +518,6 @@ namespace System.Net.Http.Parser
             {
                 return new ConnectionCloseReadStream(bufferedStream);
             }
-
-            // TODO:
-            // (2) completion Task
-            // (3) Drain logic?
         }
     }
 

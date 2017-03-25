@@ -8,17 +8,12 @@ using System.Threading.Tasks;
 
 namespace System.Net.Http.Parser
 {
-    // TODO: need something like Task ReadComplete
-    // TODO: complete the task on Dispose
-    // TODO: Drain on Dispose as well
-    // TODO: EmptyStream, single instance, task already completed
-    internal abstract class HttpContentReadStream : Stream
+    // TODO: End of stream handling/reuse
+    // For now, parser consumer owns BufferedStream and is responsible for Draining and reusing the connection
+    public abstract class HttpContentReadStream : Stream
     {
-        protected TaskCompletionSource<bool> _tcs;
-
-        protected HttpContentReadStream()
+        internal HttpContentReadStream()
         {
-            _tcs = new TaskCompletionSource<bool>();
         }
 
         public override bool CanRead => true;
@@ -70,11 +65,14 @@ namespace System.Net.Http.Parser
 
         public abstract override Task<int> ReadAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken);
         public abstract override Task CopyToAsync(Stream destination, int bufferSize, CancellationToken cancellationToken);
+        public abstract Task DrainAsync(CancellationToken cancellationToken);
 
+#if false   // TODO
         public Task WaitForCompletionAsync()
         {
             return _tcs.Task;
         }
+#endif
 
         protected override void Dispose(bool disposing)
         {
