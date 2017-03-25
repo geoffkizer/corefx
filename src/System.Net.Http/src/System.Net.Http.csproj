@@ -76,6 +76,11 @@
     <Compile Include="System\Net\Http\MultipartFormDataContent.cs" />
     <Compile Include="System\Net\Http\NetEventSource.Http.cs" />
     <Compile Include="System\Net\Http\Parser\BufferedStream.cs" />
+    <Compile Include="System\Net\Http\Parser\ChunkedEncodingReadStream.cs" />
+    <Compile Include="System\Net\Http\Parser\EmptyReadStream.cs" />
+    <Compile Include="System\Net\Http\Parser\ConnectionCloseReadStream.cs" />
+    <Compile Include="System\Net\Http\Parser\ContentLengthReadStream.cs" />
+    <Compile Include="System\Net\Http\Parser\HttpContentReadStream.cs" />
     <Compile Include="System\Net\Http\Parser\HttpParser.cs" />
     <Compile Include="System\Net\Http\StreamContent.cs" />
     <Compile Include="System\Net\Http\StreamToStreamCopy.cs" />

@@ -17,7 +17,7 @@ namespace System.Net.Http.Parser
 
     // CONSIDER: Should this actually derive from Stream?  Maybe...
 
-    internal sealed class BufferedStream : IDisposable
+    public sealed class BufferedStream : IDisposable
     {
         // CONSIDER: Make this configurable
         private const int BufferSize = 4096;
@@ -88,6 +88,29 @@ namespace System.Net.Http.Parser
                 _stream.Dispose();
             }
         }
+
+        public SlimTask<byte> ReadByteAsync(CancellationToken cancellationToken)
+        {
+            if (_readOffset < _readLength)
+            {
+                return new SlimTask<byte>(_readBuffer[_readOffset++]);
+            }
+
+            async SlimTask<byte> ReadByteSlowAsync()
+            {
+                await FillAsync(cancellationToken);
+                if (_readLength == 0)
+                {
+                    throw new IOException("Unexpected end of stream");
+                }
+
+                return _readBuffer[_readOffset++];
+            }
+
+            return ReadByteSlowAsync();
+        }
+
+        // TODO: Add WriteByteAsync
 
         public void CopyToBuffer(byte[] byteArray, int offset, int count)
         {

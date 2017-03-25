@@ -342,8 +342,17 @@ namespace System.Net.Http.Parser
             private long _contentLength = -1;
 
             public bool ChunkedEncoding => _chunkedEncoding;
-            public long ContentLength => _contentLength;
-            public bool NoBody => false;        // See comment above
+            public long ContentLength => (_chunkedEncoding ? -1 : _contentLength);
+
+            public bool NoBody
+            {
+                get
+                {
+                    // TODO: Check for known status codes that implicitly have no body -- 204, 304
+
+                    return ContentLength == 0;
+                }
+            }
 
             public void OnHttpElement(HttpElementType elementType, ArraySegment<byte> bytes, bool complete)
             {
@@ -495,9 +504,7 @@ namespace System.Net.Http.Parser
 
             if (noContent || simpleHandler.NoBody)
             {
-                // There is implicitly no response body.
-                // TODO: Add something like EmptyStream
-                return new ContentLengthReadStream(bufferedStream, 0);
+                return EmptyReadStream.Instance;
             }
             else if (simpleHandler.ChunkedEncoding)
             {
@@ -511,240 +518,49 @@ namespace System.Net.Http.Parser
             {
                 return new ConnectionCloseReadStream(bufferedStream);
             }
+
+            // TODO:
+            // (2) completion Task
+            // (3) Drain logic?
         }
-
-#if false
-        private async SlimTask<HttpRequestMessage> ParseRequestAsync(CancellationToken cancellationToken)
-        {
-            HttpRequestMessage request = new HttpRequestMessage();
-
-            // Read method
-            char c = await ReadCharAsync();
-            if (c == ' ')
-            {
-                throw new HttpRequestException("could not read request method");
-            }
-
-            do
-            {
-                _sb.Append(c);
-                c = await ReadCharAsync();
-            } while (c != ' ');
-
-            request.Method = new HttpMethod(_sb.ToString());
-            _sb.Clear();
-
-            // Read Uri
-            c = await ReadCharAsync();
-            if (c == ' ')
-            {
-                throw new HttpRequestException("could not read request uri");
-            }
-
-            do
-            {
-                _sb.Append(c);
-                c = await ReadCharAsync();
-            } while (c != ' ');
-
-            string uri = _sb.ToString();
-            _sb.Clear();
-
-            // Read Http version
-            if (await ReadCharAsync() != 'H' ||
-                await ReadCharAsync() != 'T' ||
-                await ReadCharAsync() != 'T' ||
-                await ReadCharAsync() != 'P' ||
-                await ReadCharAsync() != '/' ||
-                await ReadCharAsync() != '1' ||
-                await ReadCharAsync() != '.' ||
-                await ReadCharAsync() != '1')
-            {
-                throw new HttpRequestException("could not read response HTTP version");
-            }
-
-            if (await ReadCharAsync() != '\r' ||
-                await ReadCharAsync() != '\n')
-            {
-                throw new HttpRequestException("expected CRLF");
-            }
-
-            var requestContent = new HttpparserContent(CancellationToken.None);
-
-            string hostHeader = null;
-
-            // Parse headers
-            // TODO: Share with response parsing path
-            c = await ReadCharAsync();
-            while (true)
-            {
-                if (c == '\r')
-                {
-                    if (await ReadCharAsync() != '\n')
-                        throw new HttpRequestException("Saw CR without LF while parsing headers");
-
-                    break;
-                }
-
-                // Get header name
-                while (c != ':')
-                {
-                    _sb.Append(c);
-                    c = await ReadCharAsync();
-                }
-
-                //                string headerName = _sb.ToString();
-
-                // TODO: validate header name
-                HeaderInfo headerInfo = HeaderInfo.Get(_sb);
-
-                _sb.Clear();
-
-                // Get header value
-                c = await ReadCharAsync();
-                while (c == ' ')
-                {
-                    c = await ReadCharAsync();
-                }
-
-                while (c != '\r')
-                {
-                    _sb.Append(c);
-                    c = await ReadCharAsync();
-                }
-
-                if (await ReadCharAsync() != '\n')
-                {
-                    throw new HttpRequestException("Saw CR without LF while parsing headers");
-                }
-
-                string headerValue = _sb.ToString();
-                _sb.Clear();
-
-                // TryAddWithoutValidation will fail if the header name has trailing whitespace.
-                // So, trim it here.
-                // TODO: Not clear to me from the RFC that this is really correct; RFC seems to indicate this should be an error.
-//                headerName = headerName.TrimEnd();
-
-                if (headerInfo.HeaderType == HeaderInfo.HttpHeaderType.Content)
-                {
-                    requestContent.Headers.TryAddWithoutValidation(headerInfo, headerValue);
-                }
-                else
-                {
-                    request.Headers.TryAddWithoutValidation(headerInfo, headerValue);
-                }
-
-                // Capture Host header so we can use to construct the request Uri below
-                if (headerInfo == HeaderInfo.KnownHeaders.Host)
-                {
-                    hostHeader = headerValue;
-                }
-
-                c = await ReadCharAsync();
-            }
-
-            // Validate Host header and construct Uri
-            // TODO: this isn't quite right; it's expecting just a host name without port
-            // Do validation in a different way
-#if false
-            if (Uri.CheckHostName(hostHeader) == UriHostNameType.Unknown)
-            {
-                throw new HttpRequestException("invalid Host header");
-            }
-#endif
-
-            // TODO: https
-            request.RequestUri = new Uri("http://" + hostHeader + uri);
-
-            // Instantiate requestStream
-            HttpContentReadStream requestStream;
-
-            // TODO: Other cases where implicit no request body?
-            if (request.Method == HttpMethod.Get || 
-                request.Method == HttpMethod.Head)
-            {
-                // Implicitly no request body
-                requestStream = new ContentLengthReadStream(this, 0);
-            }
-            else if (request.Headers.TransferEncodingChunked == true)
-            {
-                requestStream = new ChunkedEncodingReadStream(this);
-            }
-            else if (request.Content.Headers.ContentLength != null)
-            {
-                requestStream = new ContentLengthReadStream(this, request.Content.Headers.ContentLength.Value);
-            }
-            else
-            {
-                throw new HttpRequestException("invalid request body");
-            }
-
-            requestContent.SetStream(requestStream);
-            request.Content = requestContent;
-            return request;
-        }
-#endif
-    }
-
-    internal abstract class HttpContentReadStream : Stream
-    {
-        public override bool CanRead => true;
-
-        public override bool CanSeek => false;
-
-        public override bool CanWrite => false;
-
-        public override long Length
-        {
-            get { throw new NotSupportedException(); }
-        }
-
-        public override long Position
-        {
-            get { throw new NotSupportedException(); }
-            set { throw new NotSupportedException(); }
-        }
-
-        public override void Flush()
-        {
-            throw new NotSupportedException();
-        }
-
-        public override long Seek(long offset, SeekOrigin origin)
-        {
-            throw new NotSupportedException();
-        }
-
-        public override void SetLength(long value)
-        {
-            throw new NotSupportedException();
-        }
-
-        public override void Write(byte[] buffer, int offset, int count)
-        {
-            throw new NotSupportedException();
-        }
-
-        public override int Read(byte[] buffer, int offset, int count)
-        {
-            return ReadAsync(buffer, offset, count, CancellationToken.None).Result;
-        }
-
-        public override void CopyTo(Stream destination, int bufferSize)
-        {
-            CopyToAsync(destination, bufferSize, CancellationToken.None).Wait();
-        }
-
-        public abstract override Task<int> ReadAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken);
-        public abstract override Task CopyToAsync(Stream destination, int bufferSize, CancellationToken cancellationToken);
     }
 
     internal static class Utf8Helpers
     {
+        internal const byte UTF8_CR = (byte)'\r';
+        internal const byte UTF8_LF = (byte)'\n';
+        internal const byte UTF8_A = (byte)'A';
+        internal const byte UTF8_a = (byte)'a';
+        internal const byte UTF8_F = (byte)'F';
+        internal const byte UTF8_f = (byte)'f';
+        internal const byte UTF8_Z = (byte)'Z';
+        internal const byte UTF8_z = (byte)'z';
+        internal const byte UTF8_0 = (byte)'0';
+        internal const byte UTF8_9 = (byte)'9';
+
         internal static byte ToLowerUtf8(this byte b)
         {
-            return (b >= 'A' && b <= 'Z') ? (byte)(b - 'A' + 'a') : b;
+            return (b >= UTF8_A && b <= UTF8_Z) ? (byte)(b - UTF8_A + UTF8_a) : b;
+        }
+
+        internal static (bool ok, int value) TryGetHexDigitValue(this byte b)
+        {
+            if (b >= UTF8_0 && b <= UTF8_9)
+            {
+                return (true, b - UTF8_0);
+            }
+            else if (b >= UTF8_a && b <= UTF8_f)
+            {
+                return (true, b - UTF8_a + 10);
+            }
+            else if (b >= UTF8_A && b <= UTF8_F)
+            {
+                return (true, b - UTF8_A + 10);
+            }
+            else
+            {
+                return (false, 0);
+            }
         }
     }
 }
