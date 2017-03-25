@@ -272,18 +272,20 @@ namespace System.Net.Http.Parser
         }
 
         // Intentionally lower case for comparison
-        private static readonly byte[] s_contentLengthUtf8 = Encoding.UTF8.GetBytes("content-length");
-        private static readonly byte[] s_transferEncodingUtf8 = Encoding.UTF8.GetBytes("transfer-encoding");
+        private static readonly byte[] s_contentLengthUtf8 = Encoding.UTF8.GetBytes("Content-Length");
+        private static readonly byte[] s_transferEncodingUtf8 = Encoding.UTF8.GetBytes("Transfer-Encoding");
         private static readonly byte[] s_chunkedUtf8 = Encoding.UTF8.GetBytes("chunked");
 
         public struct Utf8StringMatcher
         {
             byte[] _matchString;
+            IEqualityComparer<byte> _comparer;
             int _offset;
 
-            public Utf8StringMatcher(byte[] matchString)
+            public Utf8StringMatcher(byte[] matchString, IEqualityComparer<byte> comparer)
             {
                 _matchString = matchString;
+                _comparer = comparer;
                 _offset = 0;
             }
 
@@ -303,7 +305,7 @@ namespace System.Net.Http.Parser
 
                 for (int i = 0; i < partialString.Count; i++)
                 {
-                    if (_matchString[_offset + i] != partialString.Array[partialString.Offset + i].ToLowerUtf8())
+                    if (_comparer.Equals(_matchString[_offset + i], partialString.Array[partialString.Offset + i]))
                     {
                         return false;
                     }
@@ -336,9 +338,9 @@ namespace System.Net.Http.Parser
             {
                 _innerHandler = innerHandler;
 
-                _contentLengthMatcher = new Utf8StringMatcher(s_contentLengthUtf8);
-                _transferEncodingMatcher = new Utf8StringMatcher(s_transferEncodingUtf8);
-                _chunkedMatcher = new Utf8StringMatcher(s_chunkedUtf8);
+                _contentLengthMatcher = new Utf8StringMatcher(s_contentLengthUtf8, Utf8Helpers.CaseInsensitiveComparer);
+                _transferEncodingMatcher = new Utf8StringMatcher(s_transferEncodingUtf8, Utf8Helpers.CaseInsensitiveComparer);
+                _chunkedMatcher = new Utf8StringMatcher(s_chunkedUtf8, Utf8Helpers.CaseInsensitiveComparer);
 
                 _state = State.LookingForHeader;
             }
@@ -581,5 +583,34 @@ namespace System.Net.Http.Parser
                 return (false, 0);
             }
         }
+
+        private sealed class _CaseSensitiveComparer : IEqualityComparer<byte>
+        {
+            public bool Equals(byte x, byte y)
+            {
+                return (x == y);
+            }
+
+            public int GetHashCode(byte b)
+            {
+                return b;
+            }
+        }
+
+        private sealed class _CaseInsensitiveComparer : IEqualityComparer<byte>
+        {
+            public bool Equals(byte x, byte y)
+            {
+                return (x == y) || x.ToLowerUtf8() == y.ToLowerUtf8();
+            }
+
+            public int GetHashCode(byte b)
+            {
+                return b.ToLowerUtf8();
+            }
+        }
+
+        public static readonly IEqualityComparer<byte> CaseSensitiveComparer = new _CaseSensitiveComparer();
+        public static readonly IEqualityComparer<byte> CaseInsensitiveComparer = new _CaseInsensitiveComparer();
     }
 }
