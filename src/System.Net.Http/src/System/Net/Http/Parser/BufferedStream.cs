@@ -280,6 +280,27 @@ namespace System.Net.Http.Parser
             }
         }
 
+        public async SlimTask DrainAsync(long drainLength, CancellationToken cancellationToken)
+        {
+            int remainder = (int)Math.Min(_readLength - _readOffset, drainLength);
+            _readOffset += remainder;
+            drainLength -= remainder;
+
+            while (drainLength > 0)
+            {
+                await FillAsync(cancellationToken);
+                if (_readLength == 0)
+                {
+                    // Unexpected end of response stream
+                    throw new IOException("Unexpected end of content stream");
+                }
+
+                remainder = (int)Math.Min(_readLength, drainLength);
+                _readOffset = remainder;
+                drainLength -= remainder;
+            }
+        }
+
         public bool HasBufferedReadBytes => (_readOffset < _readLength);
     }
 }

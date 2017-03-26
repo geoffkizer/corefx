@@ -97,24 +97,9 @@ namespace System.Net.Http.Parser
                 return;
             }
 
-            int remainder = (int)Math.Min(_bufferedStream.ReadLength - _bufferedStream.ReadOffset, _contentBytesRemaining);
-            _bufferedStream.ReadOffset += remainder;
-            _contentBytesRemaining -= remainder;
+            await _bufferedStream.DrainAsync(_contentBytesRemaining, cancellationToken);
 
-            while (_contentBytesRemaining > 0)
-            {
-                await _bufferedStream.FillAsync(cancellationToken);
-                if (_bufferedStream.ReadLength == 0)
-                {
-                    // Unexpected end of response stream
-                    throw new IOException("Unexpected end of content stream");
-                }
-
-                remainder = (int)Math.Min(_bufferedStream.ReadLength, _contentBytesRemaining);
-                _bufferedStream.ReadOffset = remainder;
-                _contentBytesRemaining -= remainder;
-            }
-
+            _contentBytesRemaining = 0;
             _bufferedStream = null;
         }
     }

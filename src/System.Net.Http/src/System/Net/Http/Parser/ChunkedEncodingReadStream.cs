@@ -22,7 +22,7 @@ namespace System.Net.Http.Parser
             _chunkBytesRemaining = 0;
         }
 
-        private async Task<bool> TryGetNextChunk(CancellationToken cancellationToken)
+        private async SlimTask<bool> TryGetNextChunk(CancellationToken cancellationToken)
         {
             Debug.Assert(_chunkBytesRemaining == 0);
 
@@ -70,7 +70,7 @@ namespace System.Net.Http.Parser
             return true;
         }
 
-        private async Task ConsumeChunkBytes(int bytesConsumed, CancellationToken cancellationToken)
+        private async SlimTask ConsumeChunkBytes(int bytesConsumed, CancellationToken cancellationToken)
         {
             Debug.Assert(bytesConsumed <= _chunkBytesRemaining);
             _chunkBytesRemaining -= bytesConsumed;
@@ -169,11 +169,13 @@ namespace System.Net.Http.Parser
 
             if (_chunkBytesRemaining > 0)
             {
+                await _bufferedStream.DrainAsync(_chunkBytesRemaining, cancellationToken);
                 await ConsumeChunkBytes(_chunkBytesRemaining, cancellationToken);
             }
 
             while (await TryGetNextChunk(cancellationToken))
             {
+                await _bufferedStream.DrainAsync(_chunkBytesRemaining, cancellationToken);
                 await ConsumeChunkBytes(_chunkBytesRemaining, cancellationToken);
             }
         }

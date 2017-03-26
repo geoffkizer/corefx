@@ -71,21 +71,14 @@ namespace System.Net.Http.Parser
             _bufferedStream = null;
         }
 
-        public override async Task DrainAsync(CancellationToken cancellationToken)
+        public override Task DrainAsync(CancellationToken cancellationToken)
         {
-            if (_bufferedStream == null)
-            {
-                // Response body fully consumed
-                return;
-            }
-
-            do
-            {
-                _bufferedStream.ReadOffset = _bufferedStream.ReadLength;
-                await _bufferedStream.FillAsync(cancellationToken);
-            } while (_bufferedStream.ReadLength > 0);
+            // TODO: How to handle this?
+            // Close underlying stream?
 
             _bufferedStream = null;
+
+            return Task.CompletedTask;
         }
     }
 }
