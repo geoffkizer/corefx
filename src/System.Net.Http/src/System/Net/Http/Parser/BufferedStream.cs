@@ -89,6 +89,17 @@ namespace System.Net.Http.Parser
             }
         }
 
+        private async SlimTask<byte> ReadByteSlowAsync(CancellationToken cancellationToken)
+        {
+            await FillAsync(cancellationToken);
+            if (_readLength == 0)
+            {
+                throw new IOException("Unexpected end of stream");
+            }
+
+            return _readBuffer[_readOffset++];
+        }
+
         public SlimTask<byte> ReadByteAsync(CancellationToken cancellationToken)
         {
             if (_readOffset < _readLength)
@@ -96,18 +107,7 @@ namespace System.Net.Http.Parser
                 return new SlimTask<byte>(_readBuffer[_readOffset++]);
             }
 
-            async SlimTask<byte> ReadByteSlowAsync()
-            {
-                await FillAsync(cancellationToken);
-                if (_readLength == 0)
-                {
-                    throw new IOException("Unexpected end of stream");
-                }
-
-                return _readBuffer[_readOffset++];
-            }
-
-            return ReadByteSlowAsync();
+            return ReadByteSlowAsync(cancellationToken);
         }
 
         // TODO: Add WriteByteAsync

@@ -50,91 +50,94 @@ namespace System.Net.Http.Parser
     // May be a perf win
     // Also enables avoiding boxing for structs, if we care about this
 
-    // TODO: I've used static methods for now,
-    // but ideally I would put all parser state on a class and be able to reuse this.  Consider.
-
     // TODO: This operates on chars currently, but there's no reason not to operate directly on bytes.
 
-    public static class HttpParser
+    public sealed class HttpParser
     {
-        // TODO: SlimTask?
+        private BufferedStream _bufferedStream;
+        private IHttpParserHandler _handler;
+        private HttpElementType _currentElement;
+        private int _elementStartOffset;
 
-        private static async SlimTask ParseResponseHeaderAsync(BufferedStream bufferedStream, IHttpParserHandler handler, CancellationToken cancellationToken)
+        private void SetCurrentElement(HttpElementType elementType)
         {
-            HttpElementType currentElement = HttpElementType.None;
-            int elementStartOffset = 0;
+            Debug.Assert(elementType != HttpElementType.None);
+            Debug.Assert(_currentElement == HttpElementType.None);
 
-            void SetCurrentElement(HttpElementType elementType)
+            _currentElement = elementType;
+
+            // Last byte read is considered the start of the element
+            _elementStartOffset = _bufferedStream.ReadOffset - 1;
+            Debug.Assert(_elementStartOffset >= 0);
+        }
+
+        private void EmitElement()
+        {
+            Debug.Assert(_currentElement != HttpElementType.None);
+            Debug.Assert(_elementStartOffset < _bufferedStream.ReadOffset);
+
+            // The last read byte is not part of the element to emit
+            int elementEndOffset = _bufferedStream.ReadOffset - 1;
+            Debug.Assert(elementEndOffset >= _elementStartOffset);
+
+            _handler.OnHttpElement(_currentElement, new ArraySegment<byte>(_bufferedStream.ReadBuffer, _elementStartOffset, elementEndOffset - _elementStartOffset), true);
+
+            _currentElement = HttpElementType.None;
+        }
+
+        private char GetNextByte()
+        {
+            byte b = _bufferedStream.ReadBuffer[_bufferedStream.ReadOffset++];
+            if ((b & 0x80) != 0)
             {
-                Debug.Assert(elementType != HttpElementType.None);
-                Debug.Assert(currentElement == HttpElementType.None);
-
-                currentElement = elementType;
-
-                // Last byte read is considered the start of the element
-                elementStartOffset = bufferedStream.ReadOffset - 1;
-                Debug.Assert(elementStartOffset >= 0);
+                // Non-ASCII character received
+                throw new HttpRequestException("Invalid character read from stream");
             }
 
-            void EmitElement()
+            return (char)b;
+        }
+
+        private async SlimTask<char> ReadCharSlowAsync(CancellationToken cancellationToken)
+        {
+            if (_currentElement != HttpElementType.None)
             {
-                Debug.Assert(currentElement != HttpElementType.None);
-                Debug.Assert(elementStartOffset < bufferedStream.ReadOffset);
-
-                // The last read byte is not part of the element to emit
-                int elementEndOffset = bufferedStream.ReadOffset - 1;
-                Debug.Assert(elementEndOffset >= elementStartOffset);
-
-                handler.OnHttpElement(currentElement, new ArraySegment<byte>(bufferedStream.ReadBuffer, elementStartOffset, elementEndOffset - elementStartOffset), true);
-
-                currentElement = HttpElementType.None;
+                _handler.OnHttpElement(_currentElement, new ArraySegment<byte>(_bufferedStream.ReadBuffer, _elementStartOffset, _bufferedStream.ReadLength - _elementStartOffset), false);
             }
 
-            char GetNextByte()
-            {
-                byte b = bufferedStream.ReadBuffer[bufferedStream.ReadOffset++];
-                if ((b & 0x80) != 0)
-                {
-                    // Non-ASCII character received
-                    throw new HttpRequestException("Invalid character read from stream");
-                }
+            await _bufferedStream.FillAsync(cancellationToken);
 
-                return (char)b;
+            if (_bufferedStream.ReadLength == 0)
+            {
+                // End of stream
+                throw new IOException("unexpected end of stream");
             }
 
-            async SlimTask<char> ReadCharSlowAsync()
+            return GetNextByte();
+        }
+
+        private SlimTask<char> ReadCharAsync(CancellationToken cancellationToken)
+        {
+            if (_bufferedStream.HasBufferedReadBytes)
             {
-                if (currentElement != HttpElementType.None)
-                {
-                    handler.OnHttpElement(currentElement, new ArraySegment<byte>(bufferedStream.ReadBuffer, elementStartOffset, bufferedStream.ReadLength - elementStartOffset), false);
-                }
-
-                await bufferedStream.FillAsync(cancellationToken);
-
-                if (bufferedStream.ReadLength == 0)
-                {
-                    // End of stream
-                    throw new IOException("unexpected end of stream");
-                }
-
-                return GetNextByte();
+                return new SlimTask<char>(GetNextByte());
             }
 
-            SlimTask<char> ReadCharAsync()
-            {
-                if (bufferedStream.HasBufferedReadBytes)
-                {
-                    return new SlimTask<char>(GetNextByte());
-                }
+            return ReadCharSlowAsync(cancellationToken);
+        }
 
-                return ReadCharSlowAsync();
-            }
+
+        private async SlimTask ParseResponseHeaderAsync(BufferedStream bufferedStream, IHttpParserHandler handler, CancellationToken cancellationToken)
+        {
+            _bufferedStream = bufferedStream;
+            _handler = handler;
+            _currentElement = HttpElementType.None;
+            _elementStartOffset = 0;
 
             char c;
 
             // Read version
             // Must contain at least one character
-            c = await ReadCharAsync();
+            c = await ReadCharAsync(cancellationToken);
             if (c == ' ' || c == '\r' || c == '\n')
             {
                 throw new HttpRequestException("could not parse response line");
@@ -145,7 +148,7 @@ namespace System.Net.Http.Parser
 
             do
             {
-                c = await ReadCharAsync();
+                c = await ReadCharAsync(cancellationToken);
                 if (c == '\r' || c == '\n')
                 {
                     throw new HttpRequestException("could not parse response line");
@@ -156,7 +159,7 @@ namespace System.Net.Http.Parser
 
             // Read status code
             // Must contain exactly three chars character
-            c = await ReadCharAsync();
+            c = await ReadCharAsync(cancellationToken);
             if (c == ' ' || c == '\r' || c == '\n')
             {
                 throw new HttpRequestException("could not parse response line");
@@ -165,20 +168,20 @@ namespace System.Net.Http.Parser
             // This will include the byte we just read
             SetCurrentElement(HttpElementType.Status);
 
-            c = await ReadCharAsync();
+            c = await ReadCharAsync(cancellationToken);
             if (c == ' ' || c == '\r' || c == '\n')
             {
                 throw new HttpRequestException("could not parse response line");
             }
 
-            c = await ReadCharAsync();
+            c = await ReadCharAsync(cancellationToken);
             if (c == ' ' || c == '\r' || c == '\n')
             {
                 throw new HttpRequestException("could not parse response line");
             }
 
             // Read space separator
-            c = await ReadCharAsync();
+            c = await ReadCharAsync(cancellationToken);
             if (c != ' ')
             {
                 throw new HttpRequestException("could not parse response line");
@@ -187,20 +190,20 @@ namespace System.Net.Http.Parser
             EmitElement();
 
             // Read reason phrase, if present
-            c = await ReadCharAsync();
+            c = await ReadCharAsync(cancellationToken);
             if (c != '\r')
             {
                 SetCurrentElement(HttpElementType.ReasonPhrase);
 
                 do
                 {
-                    c = await ReadCharAsync();
+                    c = await ReadCharAsync(cancellationToken);
                 } while (c != '\r');
 
                 EmitElement();
             }
 
-            c = await ReadCharAsync();
+            c = await ReadCharAsync(cancellationToken);
             if (c != '\n')
             {
                 throw new HttpRequestException("could not parse response line");
@@ -209,10 +212,10 @@ namespace System.Net.Http.Parser
             // Parse headers
             while (true)
             {
-                c = await ReadCharAsync();
+                c = await ReadCharAsync(cancellationToken);
                 if (c == '\r')
                 {
-                    if (await ReadCharAsync() != '\n')
+                    if (await ReadCharAsync(cancellationToken) != '\n')
                     {
                         throw new HttpRequestException("Saw CR without LF while parsing headers");
                     }
@@ -230,7 +233,7 @@ namespace System.Net.Http.Parser
                 // Get header name
                 do
                 {
-                    c = await ReadCharAsync();
+                    c = await ReadCharAsync(cancellationToken);
                 } while (c != ':' && c != ' ');
 
                 EmitElement();
@@ -241,7 +244,7 @@ namespace System.Net.Http.Parser
                 {
                     do
                     {
-                        c = await ReadCharAsync();
+                        c = await ReadCharAsync(cancellationToken);
                     } while (c == ' ');
 
                     if (c != ':')
@@ -251,22 +254,22 @@ namespace System.Net.Http.Parser
                 }
 
                 // Get header value
-                c = await ReadCharAsync();
+                c = await ReadCharAsync(cancellationToken);
                 while (c == ' ')
                 {
-                    c = await ReadCharAsync();
+                    c = await ReadCharAsync(cancellationToken);
                 }
 
                 SetCurrentElement(HttpElementType.HeaderValue);
 
                 while (c != '\r')
                 {
-                    c = await ReadCharAsync();
+                    c = await ReadCharAsync(cancellationToken);
                 }
 
                 EmitElement();
 
-                if (await ReadCharAsync() != '\n')
+                if (await ReadCharAsync(cancellationToken) != '\n')
                 {
                     throw new HttpRequestException("Saw CR without LF while parsing headers");
                 }
@@ -526,7 +529,7 @@ namespace System.Net.Http.Parser
             }
         }
 
-        public static async SlimTask<HttpContentReadStream> ParseResponseAndGetBodyAsync(BufferedStream bufferedStream, IHttpParserHandler handler, CancellationToken cancellationToken, bool noContent = false)
+        public async SlimTask<HttpContentReadStream> ParseResponseAndGetBodyAsync(BufferedStream bufferedStream, IHttpParserHandler handler, CancellationToken cancellationToken, bool noContent = false)
         {
             // TODO: SimpleParserHandler needs to accept an inner handler
             // TODO: Reuse SimpleParserHandler instance
