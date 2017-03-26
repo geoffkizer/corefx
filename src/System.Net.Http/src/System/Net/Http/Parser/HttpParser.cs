@@ -63,7 +63,7 @@ namespace System.Net.Http.Parser
         private static async Task ParseResponseHeaderAsync(BufferedStream bufferedStream, IHttpParserHandler handler, CancellationToken cancellationToken)
         {
             HttpElementType currentElement = HttpElementType.None;
-            int elementStartOffset;
+            int elementStartOffset = 0;
 
             void SetCurrentElement(HttpElementType elementType)
             {
@@ -105,6 +105,11 @@ namespace System.Net.Http.Parser
 
             async SlimTask<char> ReadCharSlowAsync()
             {
+                if (currentElement != HttpElementType.None)
+                {
+                    handler.OnHttpElement(currentElement, new ArraySegment<byte>(bufferedStream.ReadBuffer, elementStartOffset, bufferedStream.ReadLength - elementStartOffset), false);
+                }
+
                 await bufferedStream.FillAsync(cancellationToken);
 
                 if (bufferedStream.ReadLength == 0)
@@ -298,14 +303,14 @@ namespace System.Net.Http.Parser
                 int end = _offset + partialString.Count;
 
                 if (end > _matchString.Length ||
-                    (complete && end == _matchString.Length))
+                    (complete && end < _matchString.Length))
                 {
                     return false;
                 }
 
                 for (int i = 0; i < partialString.Count; i++)
                 {
-                    if (_comparer.Equals(_matchString[_offset + i], partialString.Array[partialString.Offset + i]))
+                    if (!_comparer.Equals(_matchString[_offset + i], partialString.Array[partialString.Offset + i]))
                     {
                         return false;
                     }
