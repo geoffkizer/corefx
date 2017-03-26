@@ -5,7 +5,6 @@
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
-using System.Net.Http.Headers;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
@@ -60,7 +59,7 @@ namespace System.Net.Http.Parser
     {
         // TODO: SlimTask?
 
-        private static async Task ParseResponseHeaderAsync(BufferedStream bufferedStream, IHttpParserHandler handler, CancellationToken cancellationToken)
+        private static async SlimTask ParseResponseHeaderAsync(BufferedStream bufferedStream, IHttpParserHandler handler, CancellationToken cancellationToken)
         {
             HttpElementType currentElement = HttpElementType.None;
             int elementStartOffset = 0;
@@ -527,7 +526,7 @@ namespace System.Net.Http.Parser
             }
         }
 
-        public static async Task<HttpContentReadStream> ParseResponseAndGetBodyAsync(BufferedStream bufferedStream, IHttpParserHandler handler, CancellationToken cancellationToken, bool noContent = false)
+        public static async SlimTask<HttpContentReadStream> ParseResponseAndGetBodyAsync(BufferedStream bufferedStream, IHttpParserHandler handler, CancellationToken cancellationToken, bool noContent = false)
         {
             // TODO: SimpleParserHandler needs to accept an inner handler
             // TODO: Reuse SimpleParserHandler instance
