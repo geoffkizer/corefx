@@ -141,7 +141,7 @@ namespace System.Net.Http.Parser
 
             do
             {
-                await ReadCharAsync();
+                c = await ReadCharAsync();
                 if (c == '\r' || c == '\n')
                 {
                     throw new HttpRequestException("could not parse response line");
@@ -515,7 +515,10 @@ namespace System.Net.Http.Parser
                         throw new NotImplementedException();
                 }
 
-                _innerHandler.OnHttpElement(elementType, bytes, complete);
+                if (_innerHandler != null)
+                {
+                    _innerHandler.OnHttpElement(elementType, bytes, complete);
+                }
             }
         }
 
