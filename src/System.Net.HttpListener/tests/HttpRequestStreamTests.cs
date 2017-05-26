@@ -543,5 +543,99 @@ namespace System.Net.Tests
                 Assert.Throws<HttpListenerException>(() => context.Response.Close());
             }
         }
+
+        [Theory]
+        [InlineData("", 0, 0)]
+        [InlineData("1", 0, 0)]
+        [InlineData("23", 0, 0)]
+        [InlineData("Hello world!", 0, 0)]
+        [InlineData("The quick brown fox jumps over the lazy dog", 0, 0)]
+        public async Task DribbleWrite_Chunked_Success(string content, int startpad, int trailpad)
+        { 
+            Task<HttpListenerContext> contextTask = _listener.GetContextAsync();
+
+            Console.WriteLine($"About to connect to {_factory.Hostname}:{_factory.Port}");
+
+            using (TcpClient client = new TcpClient(_factory.Hostname, _factory.Port))
+            {
+                Console.WriteLine($"Connected, endpoint = {client.Client.RemoteEndPoint}");
+
+                client.NoDelay = true;
+                NetworkStream stream = client.GetStream();
+                byte[] buffer;
+
+                string requestHeader = $"POST /{_factory.Path}/ HTTP/1.1\r\nHost: {_factory.Hostname}\r\nTransfer-Encoding: chunked\r\n\r\n";
+                Console.WriteLine($"Request:\n{requestHeader}");
+
+                buffer = Encoding.UTF8.GetBytes(requestHeader);
+                stream.Write(buffer, 0, buffer.Length);
+
+                Console.WriteLine("header write complete");
+
+                HttpListenerContext listenerContext = await contextTask;
+                Assert.Equal(-1, listenerContext.Request.ContentLength64);
+                Assert.Equal("chunked", listenerContext.Request.Headers["Transfer-Encoding"]);
+
+                Console.WriteLine("context accepted");
+
+                // Write each byte of the content in a single byte chunk, one byte at a time
+                // Delay a bit between each write to try to ensure that the server has time to receive each individually
+                for (int i = 0; i < content.Length; i++)
+                {
+                    byte b = (byte)content[i];
+
+                    stream.WriteByte((byte)'1');
+                    await Task.Delay(2);
+
+                    stream.WriteByte((byte)'\r');
+                    await Task.Delay(2);
+
+                    stream.WriteByte((byte)'\n');
+                    await Task.Delay(2);
+
+                    stream.WriteByte(b);
+                    await Task.Delay(2);
+
+                    stream.WriteByte((byte)'\r');
+                    await Task.Delay(2);
+
+                    stream.WriteByte((byte)'\n');
+                    await Task.Delay(2);
+                }
+
+                // Send chunked encoding termination
+                stream.WriteByte((byte)'0');
+                await Task.Delay(2);
+
+                stream.WriteByte((byte)'\r');
+                await Task.Delay(2);
+
+                stream.WriteByte((byte)'\n');
+                await Task.Delay(2);
+
+                stream.WriteByte((byte)'\r');
+                await Task.Delay(2);
+
+                stream.WriteByte((byte)'\n');
+                await Task.Delay(2);
+
+                // Ensure we always have at least a single byte buffer, otherwise the read will always complete immediately.
+                int bufferSize = Math.Max(content.Length + trailpad, 1);
+                var readBuffer = new byte[startpad + bufferSize];
+
+                int bytesRead = await listenerContext.Request.InputStream.ReadAsync(readBuffer, startpad, bufferSize);
+
+                Console.WriteLine("Read complete");
+
+                Assert.Equal(content.Length, bytesRead);
+                Assert.Equal(Encoding.UTF8.GetBytes(content), readBuffer.Skip(startpad).Take(bytesRead));
+
+                // Final read should return 0 bytes
+                bytesRead = await listenerContext.Request.InputStream.ReadAsync(readBuffer, startpad, 1);
+                Assert.Equal(0, bytesRead);
+
+                listenerContext.Response.Close();
+            }
+        }
     }
 }
