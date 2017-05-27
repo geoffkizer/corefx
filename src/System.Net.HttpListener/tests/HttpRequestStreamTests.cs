@@ -91,7 +91,12 @@ namespace System.Net.Tests
                 client.DefaultRequestHeaders.TransferEncodingChunked = transferEncodingChunked;
                 Task<HttpResponseMessage> clientTask = client.PostAsync(_factory.ListeningUrl, new StringContent(text));
 
+                Console.WriteLine("About to await contextTask");
+
                 HttpListenerContext context = await contextTask;
+
+                Console.WriteLine("Done awaiting contextTask");
+
                 if (transferEncodingChunked)
                 {
                     Assert.Equal(-1, context.Request.ContentLength64);
@@ -105,20 +110,31 @@ namespace System.Net.Tests
 
                 const int pad = 128;
 
+                Console.WriteLine("About to await first read");
+
                 // Add padding at beginning and end to test for correct offset/size handling
                 byte[] buffer = new byte[pad + expected.Length + pad];
                 int bytesRead = await context.Request.InputStream.ReadAsync(buffer, pad, expected.Length);
                 Assert.Equal(expected.Length, bytesRead);
                 Assert.Equal(expected, buffer.Skip(pad).Take(bytesRead));
 
+                Console.WriteLine("About to await second read");
+
                 // Subsequent reads don't do anything.
                 Assert.Equal(0, await context.Request.InputStream.ReadAsync(buffer, pad, 1));
 
+                Console.WriteLine("Done awaiting second read");
+
                 context.Response.Close();
+
+                Console.WriteLine("Close complete");
+
                 using (HttpResponseMessage response = await clientTask)
                 {
                     Assert.Equal(200, (int)response.StatusCode);
                 }
+
+                Console.WriteLine("All done");
             }
         }
 
@@ -586,7 +602,7 @@ namespace System.Net.Tests
         [InlineData("The quick brown fox jumps over the lazy dog.", 99, 0)]
         [InlineData("The quick brown fox jumps over the lazy dog.", 99, 99)]
         public async Task DribbleWrite_Chunked_Success(string content, int startpad, int trailpad)
-        { 
+        {
             Task<HttpListenerContext> contextTask = _listener.GetContextAsync();
 
             Console.WriteLine($"About to connect to {_factory.Hostname}:{_factory.Port}");
@@ -658,7 +674,106 @@ namespace System.Net.Tests
                 int bufferSize = Math.Max(content.Length + trailpad, 1);
                 var readBuffer = new byte[startpad + bufferSize];
 
-                int bytesRead = await listenerContext.Request.InputStream.ReadAsync(readBuffer, startpad, bufferSize);
+                int bytesRead = await listenerContext.Request.InputStream.ReadAsync(readBuffer, startpad, content.Length);
+
+                Console.WriteLine("Read complete");
+
+                Assert.Equal(content.Length, bytesRead);
+                Assert.Equal(Encoding.UTF8.GetBytes(content), readBuffer.Skip(startpad).Take(bytesRead));
+
+                // Final read should return 0 bytes
+                bytesRead = await listenerContext.Request.InputStream.ReadAsync(readBuffer, startpad, 1);
+                Assert.Equal(0, bytesRead);
+
+                listenerContext.Response.Close();
+            }
+        }
+
+        [Theory]
+        [InlineData("", 0, 0)]
+        [InlineData("", 0, 1)]
+        [InlineData("", 1, 0)]
+        [InlineData("", 1, 1)]
+        [InlineData("", 0, 0)]
+        [InlineData("", 0, 99)]
+        [InlineData("", 99, 0)]
+        [InlineData("", 99, 99)]
+        [InlineData("1", 0, 0)]
+        [InlineData("1", 0, 1)]
+        [InlineData("1", 1, 0)]
+        [InlineData("1", 1, 1)]
+        [InlineData("1", 0, 0)]
+        [InlineData("1", 0, 99)]
+        [InlineData("1", 99, 0)]
+        [InlineData("1", 99, 99)]
+        [InlineData("23", 0, 0)]
+        [InlineData("23", 0, 1)]
+        [InlineData("23", 1, 0)]
+        [InlineData("23", 1, 1)]
+        [InlineData("23", 0, 0)]
+        [InlineData("23", 0, 99)]
+        [InlineData("23", 99, 0)]
+        [InlineData("23", 99, 99)]
+        [InlineData("Hello world!", 0, 0)]
+        [InlineData("Hello world!", 0, 1)]
+        [InlineData("Hello world!", 1, 0)]
+        [InlineData("Hello world!", 1, 1)]
+        [InlineData("Hello world!", 0, 0)]
+        [InlineData("Hello world!", 0, 99)]
+        [InlineData("Hello world!", 99, 0)]
+        [InlineData("Hello world!", 99, 99)]
+        [InlineData("The quick brown fox jumps over the lazy dog.", 0, 0)]
+        [InlineData("The quick brown fox jumps over the lazy dog.", 0, 1)]
+        [InlineData("The quick brown fox jumps over the lazy dog.", 1, 0)]
+        [InlineData("The quick brown fox jumps over the lazy dog.", 1, 1)]
+        [InlineData("The quick brown fox jumps over the lazy dog.", 0, 0)]
+        [InlineData("The quick brown fox jumps over the lazy dog.", 0, 99)]
+        [InlineData("The quick brown fox jumps over the lazy dog.", 99, 0)]
+        [InlineData("The quick brown fox jumps over the lazy dog.", 99, 99)]
+        public async Task SingleWrite_MultiChunk_Success(string content, int startpad, int trailpad)
+        {
+            Task<HttpListenerContext> contextTask = _listener.GetContextAsync();
+
+            Console.WriteLine($"About to connect to {_factory.Hostname}:{_factory.Port}");
+
+            using (TcpClient client = new TcpClient(_factory.Hostname, _factory.Port))
+            {
+                Console.WriteLine($"Connected, endpoint = {client.Client.RemoteEndPoint}");
+
+                client.NoDelay = true;
+                NetworkStream stream = client.GetStream();
+                byte[] buffer;
+
+                string requestHeader = $"POST /{_factory.Path}/ HTTP/1.1\r\nHost: {_factory.Hostname}\r\nTransfer-Encoding: chunked\r\n\r\n";
+                Console.WriteLine($"Request:\n{requestHeader}");
+
+                buffer = Encoding.UTF8.GetBytes(requestHeader);
+                stream.Write(buffer, 0, buffer.Length);
+
+                Console.WriteLine("header write complete");
+
+                HttpListenerContext listenerContext = await contextTask;
+                Assert.Equal(-1, listenerContext.Request.ContentLength64);
+                Assert.Equal("chunked", listenerContext.Request.Headers["Transfer-Encoding"]);
+
+                Console.WriteLine("context accepted");
+
+                // Compose and send a single buffer with single byte chunks.
+                string chunkedContent = "";
+                for (int i = 0; i < content.Length; i++)
+                {
+                    chunkedContent += $"1\r\n{content[i]}\r\n";
+                }
+                chunkedContent += "0\r\n\r\n";
+
+                buffer = Encoding.UTF8.GetBytes(chunkedContent);
+                stream.Write(buffer, 0, buffer.Length);
+
+                // Ensure we always have at least a single byte buffer, otherwise the read will always complete immediately.
+                int bufferSize = Math.Max(content.Length + trailpad, 1);
+                var readBuffer = new byte[startpad + bufferSize];
+
+                int bytesRead = await listenerContext.Request.InputStream.ReadAsync(readBuffer, startpad, content.Length);
 
                 Console.WriteLine("Read complete");
 
