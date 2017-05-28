@@ -254,6 +254,12 @@ namespace System.Net
             {
                 nread = _stream.EndRead(ares);
                 Console.WriteLine($"OnReadInternal: nread={nread}");
+                for (int i = 0; i < nread; i++)
+                {
+                    Console.Write((char)(_buffer[i]));
+                }
+                Console.WriteLine();
+
                 _memoryStream.Write(_buffer, 0, nread);
                 if (_memoryStream.Length > 32768)
                 {
