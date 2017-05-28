@@ -193,6 +193,8 @@ namespace System.Net
                 if (_reuses == 1)
                     _timeout = 15000;
                 _timer.Change(_timeout, Timeout.Infinite);
+
+                Console.WriteLine($"BeginReadRequest: issuing read, BufferSize={BufferSize}");
                 _stream.BeginRead(_buffer, 0, BufferSize, s_onreadCallback, this);
             }
             catch
@@ -251,6 +253,7 @@ namespace System.Net
             try
             {
                 nread = _stream.EndRead(ares);
+                Console.WriteLine($"OnReadInternal: nread={nread}");
                 _memoryStream.Write(_buffer, 0, nread);
                 if (_memoryStream.Length > 32768)
                 {
