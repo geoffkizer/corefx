@@ -80,7 +80,7 @@ namespace System.Net
                 _stream = new NetworkStream(sock, false);
             }
             else
-            {
+            { 
                 _sslStream = epl.Listener.CreateSslStream(new NetworkStream(sock, false), false, (t, c, ch, e) =>
                 {
                     if (c == null)

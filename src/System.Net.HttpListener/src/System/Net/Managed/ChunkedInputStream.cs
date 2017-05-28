@@ -82,6 +82,7 @@ namespace System.Net
             ares._state = state;
             if (_no_more_data || size == 0 || _closed)
             {
+                Console.WriteLine("BeginReadCore: early exit, nread = 0");
                 ares.Complete();
                 return ares;
             }
@@ -91,12 +92,14 @@ namespace System.Net
             if (size == 0)
             {
                 // got all we wanted, no need to bother the decoder yet
+                Console.WriteLine($"BeginReadCore: had decoder data, nread = {nread}");
                 ares._count = nread;
                 ares.Complete();
                 return ares;
             }
             if (!_decoder.WantMore)
             {
+                Console.WriteLine($"BeginReadCore: WantMore == false");
                 _no_more_data = nread == 0;
                 ares._count = nread;
                 ares.Complete();
@@ -120,11 +123,14 @@ namespace System.Net
                 int nread = base.EndRead(base_ares);
                 if (nread == 0)
                 {
+                    Console.WriteLine($"OnRead: no data");
                     _no_more_data = true;
                     ares._count = rb.InitialCount - rb.Count;
                     ares.Complete();
                     return;
                 }
+
+                Console.WriteLine($"OnRead: read {nread} bytes");
 
                 _decoder.Write(ares._buffer, ares._offset, nread);
                 nread = _decoder.Read(rb.Buffer, rb.Offset, rb.Count);
@@ -132,11 +138,13 @@ namespace System.Net
                 rb.Count -= nread;
                 if (rb.Count == 0 || !_decoder.WantMore)
                 {
+                    Console.WriteLine($"OnRead: returning {nread} bytes");
                     _no_more_data = !_decoder.WantMore && nread == 0;
                     ares._count = rb.InitialCount - rb.Count;
                     ares.Complete();
                     return;
                 }
+                Console.WriteLine($"OnRead: processed {nread} bytes, performing another read");
                 ares._offset = 0;
                 ares._count = Math.Min(8192, _decoder.ChunkLeft + 6);
                 base.BeginReadCore(ares._buffer, ares._offset, ares._count, OnRead, rb);
