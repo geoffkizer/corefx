@@ -77,6 +77,8 @@ namespace System.Net
 
         protected override IAsyncResult BeginReadCore(byte[] buffer, int offset, int size, AsyncCallback cback, object state)
         {
+            Console.WriteLine("Enter BeginReadCore");
+
             HttpStreamAsyncResult ares = new HttpStreamAsyncResult(this);
             ares._callback = cback;
             ares._state = state;
@@ -108,8 +110,11 @@ namespace System.Net
             ares._buffer = new byte[8192];
             ares._offset = 0;
             ares._count = 8192;
+
             ReadBufferState rb = new ReadBufferState(buffer, offset, size, ares);
             rb.InitialCount += nread;
+
+            Console.WriteLine($"BeginReadCore: issuing Read, _offset={ares._offset}, _count={ares._count}");
             base.BeginReadCore(ares._buffer, ares._offset, ares._count, OnRead, rb);
             return ares;
         }
