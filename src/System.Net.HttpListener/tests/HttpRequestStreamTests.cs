@@ -76,6 +76,48 @@ namespace System.Net.Tests
             }
         }
 
+        [Theory]
+        [InlineData(false)]
+        [InlineData(true)]
+        public async Task Send_ZeroLengthString(bool transferEncodingChunked)
+        {
+            TcpListener listener = new TcpListener(IPAddress.Loopback, 0);
+            listener.Start();
+            int port = ((IPEndPoint)listener.LocalEndpoint).Port;
+            try
+            {
+                var acceptTask = listener.AcceptTcpClientAsync();
+
+                using (HttpClient client = new HttpClient())
+                {
+                    client.DefaultRequestHeaders.TransferEncodingChunked = transferEncodingChunked;
+                    Task<HttpResponseMessage> clientTask = client.PostAsync($"http://localhost:{port}/", new StringContent(""));
+
+                    TcpClient server = await acceptTask;
+                    Stream serverStream = server.GetStream();
+                    int bytesRead = 0;
+                    byte[] buffer = new byte[4096];
+                    while (true)
+                    {
+                        bytesRead = serverStream.Read(buffer, 0, 4096);
+                        if (bytesRead == 0)
+                        {
+                            break;
+                        }
+
+                        Console.WriteLine(Encoding.UTF8.GetString(buffer, 0, bytesRead));
+                    }
+
+//                    await clientTask;
+                }
+            }
+            finally
+            {
+                listener.Stop();
+            }
+        }
+
+
         [ConditionalTheory(nameof(PlatformDetection) + "." + nameof(PlatformDetection.IsNotOneCoreUAP))]
         [InlineData(true, "")]
         [InlineData(false, "")]
