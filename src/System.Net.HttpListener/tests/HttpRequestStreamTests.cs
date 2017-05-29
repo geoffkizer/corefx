@@ -77,7 +77,7 @@ namespace System.Net.Tests
         }
 
         [Theory]
-        [InlineData(false)]
+//        [InlineData(false)]
         [InlineData(true)]
         public async Task Send_ZeroLengthString(bool transferEncodingChunked)
         {
