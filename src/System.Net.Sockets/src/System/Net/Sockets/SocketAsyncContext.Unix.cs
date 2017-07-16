@@ -124,6 +124,8 @@ namespace System.Net.Sockets
 
                 if (completed)
                 {
+                    Volatile.Write(ref _state, (int)State.Complete);
+
                     var @event = CallbackOrEvent as ManualResetEventSlim;
                     if (@event != null)
                     {
@@ -139,7 +141,6 @@ namespace System.Net.Sockets
                         ThreadPool.QueueUserWorkItem(o => ((AsyncOperation)o).InvokeCallback(), this);
                     }
 
-                    Volatile.Write(ref _state, (int)State.Complete);
                     return true;
                 }
 
