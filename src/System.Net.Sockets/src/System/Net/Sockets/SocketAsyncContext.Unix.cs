@@ -635,14 +635,13 @@ namespace System.Net.Sockets
 
         private ReceiveOperation GetOrCreateReceiveOperation()
         {
-            // We should always be under the queue lock here.
-            Debug.Assert(Monitor.IsEntered(_receiveQueue.QueueLock));
-
             if (_cachedReceiveOperation != null)
             {
-                var cached = _cachedReceiveOperation;
-                _cachedReceiveOperation = null;
-                return cached;
+                ReceiveOperation cached = Interlocked.Exchange(ref _cachedReceiveOperation, null);
+                if (cached != null)
+                {
+                    return cached;
+                }
             }
 
             return new ReceiveOperation(this);
@@ -650,9 +649,6 @@ namespace System.Net.Sockets
 
         private void ReleaseReceiveOperation(ReceiveOperation receiveOperation)
         {
-            // We should always be under the queue lock here.
-            Debug.Assert(Monitor.IsEntered(_receiveQueue.QueueLock));
-
             if (_cachedReceiveOperation == null)
             {
                 // Clear out some fields and reset state
@@ -662,7 +658,8 @@ namespace System.Net.Sockets
                 receiveOperation.Callback = null;
                 receiveOperation.SocketAddress = null;
 
-                _cachedReceiveOperation = receiveOperation;
+                // Note we may overwrite another cached operation here, but we don't care.
+                Volatile.Write(ref _cachedReceiveOperation, receiveOperation);
             }
         }
 
