@@ -72,6 +72,9 @@ namespace System.Net.Sockets
             {
                 _state = (int)State.Waiting;
                 Next = this;
+#if DEBUG
+                _callbackQueued = 0;
+#endif
             }
 
             public bool TryComplete(SocketAsyncContext context)
