@@ -61,7 +61,8 @@ namespace System.Net.Sockets
 #if DEBUG
             2;
 #else
-            Environment.ProcessorCount >= 6 ? Environment.ProcessorCount / 2 : 1;
+            //            Environment.ProcessorCount >= 6 ? Environment.ProcessorCount / 2 : 1;
+            2;
 #endif
         //
         // The current engines. We replace an engine when it runs out of "handle" values.
