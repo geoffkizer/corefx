@@ -462,46 +462,49 @@ namespace System.Net.Sockets
 
             public void Complete(SocketAsyncContext context)
             {
-                AsyncOperation op;
-
                 lock (_queueLock)
                 {
-                    if (IsStopped)
-                        return;
+                    AsyncOperation op;
 
-                    State = QueueState.Set;
-
-                    if (_tail == null)
+                    //                lock (_queueLock)
                     {
-                        // Nothing to process; just return
-                        return;
-                    }
+                        if (IsStopped)
+                            return;
 
-                    op = _tail.Next;   // head of list
-                }
+                        State = QueueState.Set;
 
-                while (true)
-                {
-                    if (!op.TryCompleteAsync(context))
-                    {
-                        // EAGAIN
-                        return;
-                    }
-
-                    // Operation succeeded.  Remove it from the list and continue processing.
-                    lock (_queueLock)
-                    {
-                        Debug.Assert(_tail.Next == op);
-
-                        if (_tail == op)
+                        if (_tail == null)
                         {
-                            // End of queue; clear and return
-                            _tail = null;
+                            // Nothing to process; just return
                             return;
                         }
 
-                        _tail.Next = op.Next;
-                        op = _tail.Next;
+                        op = _tail.Next;   // head of list
+                    }
+
+                    while (true)
+                    {
+                        if (!op.TryCompleteAsync(context))
+                        {
+                            // EAGAIN
+                            return;
+                        }
+
+                        // Operation succeeded.  Remove it from the queue and continue processing.
+                        //                    lock (_queueLock)
+                        {
+                            Debug.Assert(_tail.Next == op);
+
+                            if (_tail == op)
+                            {
+                                // End of queue; clear and return
+                                _tail = null;
+                                return;
+                            }
+
+                            _tail.Next = op.Next;
+                            op = _tail.Next;
+                        }
                     }
                 }
             }
