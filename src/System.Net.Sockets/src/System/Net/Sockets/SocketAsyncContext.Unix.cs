@@ -83,7 +83,7 @@ namespace System.Net.Sockets
                     return true;
                 }
 
-                Debug.Assert(oldState != (int)State.Waiting);
+                Debug.Assert(oldState == (int)State.Waiting);
 
                 bool completed = DoTryComplete(context);
 
