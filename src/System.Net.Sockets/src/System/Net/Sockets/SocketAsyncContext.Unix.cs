@@ -73,76 +73,57 @@ namespace System.Net.Sockets
 
             public bool TryCompleteAsync(SocketAsyncContext context)
             {
-                return TryCompleteOrAbortAsync(context, abort: false);
-            }
-
-            public void AbortAsync()
-            {
-                bool completed = TryCompleteOrAbortAsync(null, abort: true);
-                Debug.Assert(completed, $"Expected TryCompleteOrAbortAsync to return true");
-            }
-
-            private bool TryCompleteOrAbortAsync(SocketAsyncContext context, bool abort)
-            {
-                Debug.Assert(context != null || abort, $"Unexpected values: context={context}, abort={abort}");
+                Debug.Assert(context != null);
 
                 State oldState = (State)Interlocked.CompareExchange(ref _state, (int)State.Running, (int)State.Waiting);
                 if (oldState == State.Cancelled)
                 {
-                    // This operation has been cancelled. The canceller is responsible for
-                    // correctly updating any state that would have been handled by
-                    // AsyncOperation.Abort.
+                    // This operation has already been cancelled, and had its completion processed.
+                    // Simply return true to indicate no further processing is needed.
                     return true;
                 }
 
-                Debug.Assert(oldState != State.Complete && oldState != State.Running, $"Unexpected oldState: {oldState}");
+                Debug.Assert(oldState != (int)State.Waiting);
 
-                bool completed;
-                if (abort)
+                bool completed = DoTryComplete(context);
+
+                Debug.Assert(Volatile.Read(ref _state) == (int)State.Running);
+
+                if (!completed)
                 {
-                    Abort();
-                    ErrorCode = SocketError.OperationAborted;
-                    completed = true;
+                    // EAGAIN
+                    Volatile.Write(ref _state, (int)State.Waiting);
+                    return false;
+                }
+
+                // We've successfully completed this operation.  
+                // Set state and process completion.
+
+                Volatile.Write(ref _state, (int)State.Complete);
+
+                var @event = CallbackOrEvent as ManualResetEventSlim;
+                if (@event != null)
+                {
+                    @event.Set();
                 }
                 else
                 {
-                    completed = DoTryComplete(context);
-                }
-
-                if (completed)
-                {
-                    var @event = CallbackOrEvent as ManualResetEventSlim;
-                    if (@event != null)
-                    {
-                        @event.Set();
-                    }
-                    else
-                    {
-                        Debug.Assert(_state != (int)State.Cancelled, $"Unexpected _state: {_state}");
 #if DEBUG
-                        Debug.Assert(Interlocked.CompareExchange(ref _callbackQueued, 1, 0) == 0, $"Unexpected _callbackQueued: {_callbackQueued}");
+                    Debug.Assert(Interlocked.CompareExchange(ref _callbackQueued, 1, 0) == 0, $"Unexpected _callbackQueued: {_callbackQueued}");
 #endif
 
-                        ThreadPool.QueueUserWorkItem(o => ((AsyncOperation)o).InvokeCallback(), this);
-                    }
-
-                    Volatile.Write(ref _state, (int)State.Complete);
-                    return true;
+                    ThreadPool.QueueUserWorkItem(o => ((AsyncOperation)o).InvokeCallback(), this);
                 }
 
-                Volatile.Write(ref _state, (int)State.Waiting);
-                return false;
+                return true;
             }
 
-            public bool Wait(int timeout)
+            public bool TryCancel()
             {
-                if (Event.Wait(timeout))
-                {
-                    return true;
-                }
-
+                // Try to transition from Waiting to Cancelled
                 var spinWait = new SpinWait();
-                for (;;)
+                bool keepWaiting = true;
+                while (keepWaiting)
                 {
                     int state = Interlocked.CompareExchange(ref _state, (int)State.Cancelled, (int)State.Waiting);
                     switch ((State)state)
@@ -154,13 +135,63 @@ namespace System.Net.Sockets
 
                         case State.Complete:
                             // A completion attempt succeeded. Consider this operation as having completed within the timeout.
-                            return true;
+                            return false;
 
                         case State.Waiting:
                             // This operation was successfully cancelled.
-                            return false;
+                            // Break out of the loop to handle the cancellation
+                            keepWaiting = false;
+                            break;
+
+                        case State.Cancelled:
+                            // Someone else cancelled the operation.
+                            // Just return true to indicate the operation was cancelled.
+                            // The previous canceller will have fired the completion, etc.
+                            return true;
                     }
                 }
+
+                // The operation successfully cancelled.  
+                // It's our responsibility to set the error code and invoke the completion.
+                Abort();
+                ErrorCode = SocketError.OperationAborted;
+
+                var @event = CallbackOrEvent as ManualResetEventSlim;
+                if (@event != null)
+                {
+                    @event.Set();
+                }
+                else
+                {
+#if DEBUG
+                    Debug.Assert(Interlocked.CompareExchange(ref _callbackQueued, 1, 0) == 0, $"Unexpected _callbackQueued: {_callbackQueued}");
+#endif
+
+                    ThreadPool.QueueUserWorkItem(o => ((AsyncOperation)o).InvokeCallback(), this);
+                }
+
+                // Note, we leave the operation in the OperationQueue.
+                // When we get around to processing it, we'll see it's cancelled and skip it.
+                return true;
+            }
+
+            public bool Wait(int timeout)
+            {
+                if (Event.Wait(timeout))
+                {
+                    return true;
+                }
+
+                bool cancelled = TryCancel();
+
+                if (cancelled)
+                {
+                    Debug.Assert(_state == (int)State.Cancelled);
+                    return false;
+                }
+
+                Debug.Assert(_state == (int)State.Complete);
+                return true;
             }
 
             protected abstract void Abort();
@@ -476,10 +507,14 @@ namespace System.Net.Sockets
                 {
                     State = QueueState.Stopped;
 
-                    TOperation op;
-                    while (TryDequeue(out op))
+                    if (_tail != null)
                     {
-                        op.AbortAsync();
+                        AsyncOperation op = _tail;
+                        do
+                        {
+                            op.TryCancel();
+                            op = op.Next;
+                        } while (op != _tail);
                     }
                 }
             }
