@@ -417,6 +417,7 @@ namespace System.Net.Sockets
                 _tail = operation;
             }
 
+#if false
             private bool TryDequeue(out TOperation operation)
             {
                 if (_tail == null)
@@ -457,9 +458,12 @@ namespace System.Net.Sockets
                     _tail.Next = operation;
                 }
             }
+#endif
 
             public void Complete(SocketAsyncContext context)
             {
+                AsyncOperation op;
+
                 lock (_queueLock)
                 {
                     if (IsStopped)
@@ -467,14 +471,37 @@ namespace System.Net.Sockets
 
                     State = QueueState.Set;
 
-                    TOperation op;
-                    while (TryDequeue(out op))
+                    if (_tail == null)
                     {
-                        if (!op.TryCompleteAsync(context))
+                        // Nothing to process; just return
+                        return;
+                    }
+
+                    op = _tail.Next;   // head of list
+                }
+
+                while (true)
+                {
+                    if (!op.TryCompleteAsync(context))
+                    {
+                        // EAGAIN
+                        return;
+                    }
+
+                    // Operation succeeded.  Remove it from the list and continue processing.
+                    lock (_queueLock)
+                    {
+                        Debug.Assert(_tail.Next == op);
+
+                        if (_tail == op)
                         {
-                            Requeue(op);
+                            // End of queue; clear and return
+                            _tail = null;
                             return;
                         }
+
+                        _tail.Next = op.Next;
+                        op = _tail.Next;
                     }
                 }
             }
