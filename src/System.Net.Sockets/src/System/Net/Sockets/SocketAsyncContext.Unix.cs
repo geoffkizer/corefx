@@ -462,20 +462,20 @@ namespace System.Net.Sockets
 
             public void Complete(SocketAsyncContext context)
             {
-                lock (_queueLock)
+//                lock (_queueLock)
                 {
                     AsyncOperation op;
 
-                    //                lock (_queueLock)
+                    lock (_queueLock)
                     {
                         if (IsStopped)
                             return;
 
-                        State = QueueState.Set;
 
                         if (_tail == null)
                         {
                             // Nothing to process; just return
+                            State = QueueState.Set;
                             return;
                         }
 
@@ -491,7 +491,7 @@ namespace System.Net.Sockets
                         }
 
                         // Operation succeeded.  Remove it from the queue and continue processing.
-                        //                    lock (_queueLock)
+                        lock (_queueLock)
                         {
                             Debug.Assert(_tail.Next == op);
 
@@ -499,6 +499,7 @@ namespace System.Net.Sockets
                             {
                                 // End of queue; clear and return
                                 _tail = null;
+                                State = QueueState.Set;
                                 return;
                             }
 
