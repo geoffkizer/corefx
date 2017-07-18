@@ -510,8 +510,8 @@ namespace System.Net.Sockets
                             {
                                 if (_head.Next == null)
                                 {
-                                    if (IsStopped)
-                                        return;
+//                                    if (IsStopped)
+//                                        return;
                                     Debug.Assert(_tail == _head);
                                     _tail = null;
                                     _head = null;
