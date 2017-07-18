@@ -2,6 +2,9 @@
 // The .NET Foundation licenses this file to you under the MIT license.
 // See the LICENSE file in the project root for more information.
 
+// Enable this to turn on async queue tracing
+#define TRACE
+
 using Microsoft.Win32.SafeHandles;
 using System;
 using System.Collections.Generic;
@@ -70,7 +73,13 @@ namespace System.Net.Sockets
             {
                 Debug.Assert(_state == (int)State.Waiting, $"Unexpected _state: {_state}");
 
-                return DoTryComplete(context);
+                bool result = DoTryComplete(context);
+
+#if TRACE
+                Trace($"{IdOf(this)}: TryComplete, context={IdOf(context)}");
+#endif
+
+                return result;
             }
 
             public bool TryCompleteAsync(SocketAsyncContext context)
@@ -82,6 +91,10 @@ namespace System.Net.Sockets
                 {
                     // This operation has already been cancelled, and had its completion processed.
                     // Simply return true to indicate no further processing is needed.
+#if TRACE
+                    Trace($"{IdOf(this)}: TryCompleteAsync: already cancelled, context={IdOf(context)}");
+#endif
+
                     return true;
                 }
 
@@ -103,6 +116,10 @@ namespace System.Net.Sockets
 
                 Volatile.Write(ref _state, (int)State.Complete);
 
+#if TRACE
+                Trace($"{IdOf(this)}: TryCompleteAsync: processing completion, context={IdOf(context)}");
+#endif
+
                 var @event = CallbackOrEvent as ManualResetEventSlim;
                 if (@event != null)
                 {
@@ -122,6 +139,10 @@ namespace System.Net.Sockets
 
             public bool TryCancel()
             {
+#if TRACE
+                Trace($"{IdOf(this)}: Enter TryCancel");
+#endif
+
                 // Try to transition from Waiting to Cancelled
                 var spinWait = new SpinWait();
                 bool keepWaiting = true;
@@ -132,16 +153,25 @@ namespace System.Net.Sockets
                     {
                         case State.Running:
                             // A completion attempt is in progress. Keep busy-waiting.
+#if TRACE
+                            Trace($"{IdOf(this)}: TryCancel busy wait");
+#endif
                             spinWait.SpinOnce();
                             break;
 
                         case State.Complete:
                             // A completion attempt succeeded. Consider this operation as having completed within the timeout.
+#if TRACE
+                            Trace($"{IdOf(this)}: TryCancel: already completed");
+#endif
                             return false;
 
                         case State.Waiting:
                             // This operation was successfully cancelled.
                             // Break out of the loop to handle the cancellation
+#if TRACE
+                            Trace($"{IdOf(this)}: TryCancel: processing cancellation");
+#endif
                             keepWaiting = false;
                             break;
 
@@ -149,6 +179,9 @@ namespace System.Net.Sockets
                             // Someone else cancelled the operation.
                             // Just return true to indicate the operation was cancelled.
                             // The previous canceller will have fired the completion, etc.
+#if TRACE
+                            Trace($"{IdOf(this)}: TryCancel: already cancelled");
+#endif
                             return true;
                     }
                 }
@@ -183,6 +216,10 @@ namespace System.Net.Sockets
                 {
                     return true;
                 }
+
+#if TRACE
+                Trace($"{IdOf(this)}: Wait: timed out");
+#endif
 
                 bool cancelled = TryCancel();
 
@@ -460,6 +497,10 @@ namespace System.Net.Sockets
 
             public void Complete(SocketAsyncContext context)
             {
+#if TRACE
+                Trace($"{IdOf(this)}: Enter Complete, State={this.State}, IsEmpty={this.IsEmpty}");
+#endif
+
                 lock (_queueLock)
                 {
                     if (IsStopped)
@@ -473,10 +514,14 @@ namespace System.Net.Sockets
                         if (!op.TryCompleteAsync(context))
                         {
                             Requeue(op);
-                            return;
+                            break;
                         }
                     }
                 }
+
+#if TRACE
+                Trace($"{IdOf(this)}: Leave Complete, State={this.State}, IsEmpty={this.IsEmpty}");
+#endif
             }
 
             public void StopAndAbort()
@@ -587,6 +632,10 @@ namespace System.Net.Sockets
             // Exactly one of the two queue locks must be held by the caller
             Debug.Assert(Monitor.IsEntered(_sendQueue.QueueLock) ^ Monitor.IsEntered(_receiveQueue.QueueLock));
 
+#if TRACE
+            Trace($"{IdOf(this)}: Enter TryBeginOperation for {IdOf(operation)}, State={queue.State}, IsEmpty={queue.IsEmpty}, maintainOrder={maintainOrder}");
+#endif
+
             switch (queue.State)
             {
                 case QueueState.Stopped:
@@ -612,6 +661,11 @@ namespace System.Net.Sockets
             }
 
             queue.Enqueue(operation);
+
+#if TRACE
+            Trace($"{IdOf(this)}: Enqueue {IdOf(operation)}, State={queue.State}, IsEmpty={queue.IsEmpty}");
+#endif
+
             isStopped = false;
             return true;
         }
@@ -1563,5 +1617,14 @@ namespace System.Net.Sockets
                 _sendQueue.Complete(this);
             }
         }
+
+#if TRACE
+        public static void Trace(string s)
+        {
+            Console.WriteLine(s);
+        }
+
+        public static string IdOf(object o) => $"{o.GetType().Name}#{o.GetHashCode()}";
+#endif
     }
 }
