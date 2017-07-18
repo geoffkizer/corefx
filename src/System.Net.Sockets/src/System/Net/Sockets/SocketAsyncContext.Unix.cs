@@ -500,14 +500,19 @@ namespace System.Net.Sockets
 
             public void Complete(SocketAsyncContext context)
             {
-#if TRACE
-                Trace($"{IdOf(this)}: Enter Complete, State={this.State}, IsEmpty={this.IsEmpty}");
-#endif
-
                 lock (_queueLock)
                 {
+#if TRACE
+                    Trace($"{IdOf(context)}: Enter Complete, State={this.State}, IsEmpty={this.IsEmpty}");
+#endif
+
                     if (IsStopped)
+                    {
+#if TRACE
+                        Trace($"{IdOf(context)}: Leave Complete, State={this.State}, IsEmpty={this.IsEmpty}");
+#endif
                         return;
+                    }
 
                     State = QueueState.Set;
 
@@ -520,17 +525,21 @@ namespace System.Net.Sockets
                             break;
                         }
                     }
-                }
 
 #if TRACE
-                Trace($"{IdOf(this)}: Leave Complete, State={this.State}, IsEmpty={this.IsEmpty}");
+                    Trace($"{IdOf(context)}: Leave Complete, State={this.State}, IsEmpty={this.IsEmpty}");
 #endif
+                }
             }
 
-            public void StopAndAbort()
+            public void StopAndAbort(SocketAsyncContext context)
             {
                 lock (_queueLock)
                 {
+#if TRACE
+                    Trace($"{IdOf(context)}: Enter Complete, State={this.State}, IsEmpty={this.IsEmpty}");
+#endif
+
                     State = QueueState.Stopped;
 
                     if (_tail != null)
@@ -542,6 +551,10 @@ namespace System.Net.Sockets
                             op = op.Next;
                         } while (op != _tail);
                     }
+
+#if TRACE
+                    Trace($"{IdOf(context)}: Leave Complete, State={this.State}, IsEmpty={this.IsEmpty}");
+#endif
                 }
             }
         }
@@ -596,8 +609,8 @@ namespace System.Net.Sockets
         public void Close()
         {
             // Drain queues
-            _sendQueue.StopAndAbort();
-            _receiveQueue.StopAndAbort();
+            _sendQueue.StopAndAbort(this);
+            _receiveQueue.StopAndAbort(this);
 
             lock (_registerLock)
             { 
