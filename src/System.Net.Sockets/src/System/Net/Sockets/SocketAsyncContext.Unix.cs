@@ -480,6 +480,9 @@ namespace System.Net.Sockets
 
                         if (_head == null)
                         {
+                            if (IsStopped)
+                                return;
+
                             // Nothing to process; just return
                             State = QueueState.Set;
                             return;
