@@ -108,6 +108,9 @@ namespace System.Net.Sockets
                 {
                     // EAGAIN
                     Volatile.Write(ref _state, (int)State.Waiting);
+#if TRACE
+                    Trace($"{IdOf(this)}: TryCompleteAsync: failed to complete, context={IdOf(context)}");
+#endif
                     return false;
                 }
 
@@ -1624,7 +1627,7 @@ namespace System.Net.Sockets
             Console.WriteLine(s);
         }
 
-        public static string IdOf(object o) => $"{o.GetType().Name}#{o.GetHashCode()}";
+        public static string IdOf(object o) => $"{o.GetType().Name}#{o.GetHashCode():X2}";
 #endif
     }
 }
