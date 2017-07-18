@@ -474,14 +474,14 @@ namespace System.Net.Sockets
 
                     lock (_queueLock)
                     {
-//                        if (IsStopped)
-//                            return;
+                        if (IsStopped)
+                            return;
 
 
                         if (_head == null)
                         {
-                            if (IsStopped)
-                                return;
+//                            if (IsStopped)
+//                                return;
 
                             // Nothing to process; just return
                             State = QueueState.Set;
@@ -491,8 +491,8 @@ namespace System.Net.Sockets
 //                        op = _head;   // head of list
                     }
 
-                    // Note, we can read and write _head without locking here, because once the 
-                    // queue is non-empty, this is the only code that manipulates it.
+                    // Note, we can read _head without locking here, because once the 
+                    // queue is non-empty, this is the only code that updates it.
                     while (true)
                     {
                         if (!_head.TryCompleteAsync(context))
