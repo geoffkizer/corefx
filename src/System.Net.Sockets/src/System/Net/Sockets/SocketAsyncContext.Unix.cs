@@ -474,8 +474,8 @@ namespace System.Net.Sockets
 
                     lock (_queueLock)
                     {
-                        if (IsStopped)
-                            return;
+//                        if (IsStopped)
+//                            return;
 
 
                         if (_head == null)
