@@ -503,13 +503,13 @@ namespace System.Net.Sockets
                 lock (_queueLock)
                 {
 #if TRACE
-                    Trace($"{IdOf(context)}: Enter Complete, State={this.State}, IsEmpty={this.IsEmpty}");
+                    Trace($"{QueueId(context)}: Enter Complete, State={this.State}, IsEmpty={this.IsEmpty}");
 #endif
 
                     if (IsStopped)
                     {
 #if TRACE
-                        Trace($"{IdOf(context)}: Leave Complete, State={this.State}, IsEmpty={this.IsEmpty}");
+                        Trace($"{QueueId(context)}: Leave Complete, State={this.State}, IsEmpty={this.IsEmpty}");
 #endif
                         return;
                     }
@@ -527,7 +527,7 @@ namespace System.Net.Sockets
                     }
 
 #if TRACE
-                    Trace($"{IdOf(context)}: Leave Complete, State={this.State}, IsEmpty={this.IsEmpty}");
+                    Trace($"{QueueId(context)}: Leave Complete, State={this.State}, IsEmpty={this.IsEmpty}");
 #endif
                 }
             }
@@ -537,7 +537,7 @@ namespace System.Net.Sockets
                 lock (_queueLock)
                 {
 #if TRACE
-                    Trace($"{IdOf(context)}: Enter StopAndAbort, State={this.State}, IsEmpty={this.IsEmpty}");
+                    Trace($"{QueueId(context)}: Enter StopAndAbort, State={this.State}, IsEmpty={this.IsEmpty}");
 #endif
 
                     State = QueueState.Stopped;
@@ -553,10 +553,19 @@ namespace System.Net.Sockets
                     }
 
 #if TRACE
-                    Trace($"{IdOf(context)}: Leave StopAndAbort, State={this.State}, IsEmpty={this.IsEmpty}");
+                    Trace($"{QueueId(context)}: Leave StopAndAbort, State={this.State}, IsEmpty={this.IsEmpty}");
 #endif
                 }
             }
+
+#if TRACE
+            public string QueueType =>
+                typeof(TOperation) == typeof(ReadOperation) ? "recv" :
+                typeof(TOperation) == typeof(WriteOperation) ? "send" :
+                "";
+
+            public string QueueId(SocketAsyncContext context) => $"{IdOf(context)}-{QueueType}";
+#endif
         }
 
         private readonly SafeCloseSocket _socket;
