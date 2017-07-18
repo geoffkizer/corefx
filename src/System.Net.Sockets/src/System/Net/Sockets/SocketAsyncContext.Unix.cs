@@ -63,7 +63,7 @@ namespace System.Net.Sockets
             public AsyncOperation()
             {
                 _state = (int)State.Waiting;
-                Next = this;
+//                Next = this;
             }
 
             public bool TryComplete(SocketAsyncContext context)
@@ -391,6 +391,7 @@ namespace System.Net.Sockets
         {
             private object _queueLock;
             private AsyncOperation _tail;
+            private AsyncOperation _head;
 
             public QueueState State { get; set; }
             public bool IsStopped { get { return State == QueueState.Stopped; } }
@@ -405,12 +406,17 @@ namespace System.Net.Sockets
 
             public void Enqueue(TOperation operation)
             {
+                Debug.Assert(Monitor.IsEntered(_queueLock));
                 Debug.Assert(!IsStopped, "Expected !IsStopped");
-                Debug.Assert(operation.Next == operation, "Expected operation.Next == operation");
+                Debug.Assert(operation.Next == null, "Expected operation.Next == null");
 
-                if (!IsEmpty)
+                if (_head == null)
                 {
-                    operation.Next = _tail.Next;
+                    Debug.Assert(_tail == null);
+                    _head = operation;
+                }
+                else
+                {
                     _tail.Next = operation;
                 }
 
@@ -464,7 +470,7 @@ namespace System.Net.Sockets
             {
 //                lock (_queueLock)
                 {
-                    AsyncOperation op;
+//                    AsyncOperation op;
 
                     lock (_queueLock)
                     {
@@ -472,40 +478,48 @@ namespace System.Net.Sockets
                             return;
 
 
-                        if (_tail == null)
+                        if (_head == null)
                         {
                             // Nothing to process; just return
                             State = QueueState.Set;
                             return;
                         }
 
-                        op = _tail.Next;   // head of list
+//                        op = _head;   // head of list
                     }
 
+                    // Note, we can read and write _head without locking here, because once the 
+                    // queue is non-empty, this is the only code that manipulates it.
                     while (true)
                     {
-                        if (!op.TryCompleteAsync(context))
+                        if (!_head.TryCompleteAsync(context))
                         {
                             // EAGAIN
                             return;
                         }
 
                         // Operation succeeded.  Remove it from the queue and continue processing.
-                        lock (_queueLock)
+
+                        if (_head.Next == null)
                         {
-                            Debug.Assert(_tail.Next == op);
-
-                            if (_tail == op)
+                            // Queue is going empty.  Lock to coordinate.
+                            lock (_queueLock)
                             {
-                                // End of queue; clear and return
-                                _tail = null;
-                                State = QueueState.Set;
-                                return;
-                            }
+                                if (_head.Next == null)
+                                {
+                                    Debug.Assert(_tail == _head);
+                                    _tail = null;
+                                    _head = null;
+                                    State = QueueState.Set;
+                                    return;
+                                }
 
-                            _tail.Next = op.Next;
-                            op = _tail.Next;
+                                // Otherwise, we must have had another op added, so keep processing
+                            }
                         }
+
+                        _head = _head.Next;
+                        Debug.Assert(_head != null);
                     }
                 }
             }
@@ -516,14 +530,9 @@ namespace System.Net.Sockets
                 {
                     State = QueueState.Stopped;
 
-                    if (_tail != null)
+                    for (AsyncOperation op = _head; op != null; op = op.Next)
                     {
-                        AsyncOperation op = _tail;
-                        do
-                        {
-                            op.TryCancel();
-                            op = op.Next;
-                        } while (op != _tail);
+                        op.TryCancel();
                     }
                 }
             }
