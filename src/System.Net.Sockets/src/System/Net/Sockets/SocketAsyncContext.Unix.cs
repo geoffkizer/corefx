@@ -549,7 +549,7 @@ namespace System.Net.Sockets
                     }
 
 #if TRACE
-                    Trace($"{IdOf(context)}: Leave Complete, State={this.State}, IsEmpty={this.IsEmpty}");
+                    Trace($"{IdOf(context)}: Leave StopAndAbort, State={this.State}, IsEmpty={this.IsEmpty}");
 #endif
                 }
             }
@@ -559,7 +559,7 @@ namespace System.Net.Sockets
                 lock (_queueLock)
                 {
 #if TRACE
-                    Trace($"{IdOf(context)}: Enter Complete, State={this.State}, IsEmpty={this.IsEmpty}");
+                    Trace($"{IdOf(context)}: Enter StopAndAbort, State={this.State}, IsEmpty={this.IsEmpty}");
 #endif
 
                     State = QueueState.Stopped;
