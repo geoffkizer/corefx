@@ -722,7 +722,9 @@ namespace System.Net.Sockets
             where TOperation : AsyncOperation
         {
             // Exactly one of the two queue locks must be held by the caller
-            Debug.Assert(Monitor.IsEntered(_sendQueue.QueueLock) ^ Monitor.IsEntered(_receiveQueue.QueueLock));
+            // Disable for now, as this confounds the reentrancy check
+            // I will revisit later...
+//            Debug.Assert(Monitor.IsEntered(_sendQueue.QueueLock) ^ Monitor.IsEntered(_receiveQueue.QueueLock));
 
 #if TRACE
             Trace($"{queue.QueueId(this)}: Enter TryBeginOperation for {IdOf(operation)}, State={queue.State}, IsEmpty={queue.IsEmpty}, maintainOrder={maintainOrder}");
