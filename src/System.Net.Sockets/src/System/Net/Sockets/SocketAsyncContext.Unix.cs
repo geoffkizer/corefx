@@ -552,6 +552,8 @@ namespace System.Net.Sockets
 
             public void StopAndAbort(SocketAsyncContext context)
             {
+                Debug.Assert(!Monitor.IsEntered(_queueLock));
+
                 lock (_queueLock)
                 {
 #if TRACE
