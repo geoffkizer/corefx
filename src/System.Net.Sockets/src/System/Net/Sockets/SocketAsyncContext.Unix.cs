@@ -450,6 +450,8 @@ namespace System.Net.Sockets
 
             public void StopAndAbort()
             {
+                Debug.Assert(!Monitor.IsEntered(_queueLock));
+
                 lock (_queueLock)
                 {
                     State = QueueState.Stopped;
