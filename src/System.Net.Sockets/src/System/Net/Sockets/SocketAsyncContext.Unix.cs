@@ -504,37 +504,44 @@ namespace System.Net.Sockets
             {
                 lock (_queueLock)
                 {
-#if TRACE
-                    Trace($"{QueueId(context)}: Enter Complete, State={this.State}, IsEmpty={this.IsEmpty}");
-#endif
-
-                    if (IsStopped)
+                    try
                     {
 #if TRACE
-                        Trace($"{QueueId(context)}: Leave Complete, State={this.State}, IsEmpty={this.IsEmpty}");
+                        Trace($"{QueueId(context)}: Enter Complete, State={this.State}, IsEmpty={this.IsEmpty}");
 #endif
-                        return;
+
+                        if (IsStopped)
+                        {
+#if TRACE
+                            Trace($"{QueueId(context)}: Leave Complete, State={this.State}, IsEmpty={this.IsEmpty}");
+#endif
+                            return;
+                        }
+
+                        State = QueueState.Set;
+
+                        while (_tail != null)
+                        {
+                            AsyncOperation op = _tail.Next;      // head of list
+                            if (!op.TryCompleteAsync(context))
+                            {
+                                break;
+                            }
+
+                            if (op == _tail)
+                            {
+                                // Finished all; we'll break out of loop above
+                                _tail = null;
+                            }
+                            else
+                            {
+                                _tail.Next = op.Next;
+                            }
+                        }
                     }
-
-                    State = QueueState.Set;
-
-                    while (_tail != null)
+                    catch (Exception e)
                     {
-                        AsyncOperation op = _tail.Next;      // head of list
-                        if (!op.TryCompleteAsync(context))
-                        {
-                            break;
-                        }
-
-                        if (op == _tail)
-                        {
-                            // Finished all; we'll break out of loop above
-                            _tail = null;
-                        }
-                        else
-                        {
-                            _tail.Next = op.Next;
-                        }
+                       Trace($"Unexpected exception in queue Complete: {e}");
                     }
 
 #if TRACE
