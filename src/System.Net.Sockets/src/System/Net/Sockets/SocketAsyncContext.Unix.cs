@@ -1664,7 +1664,7 @@ namespace System.Net.Sockets
 #if TRACE
         public static void Trace(string s)
         {
-            Console.WriteLine(s);
+            Console.WriteLine($"{System.Threading.Thread.CurrentThread.ManagedThreadId:X}: {s}");
         }
 
         public static string IdOf(object o) => $"{o.GetType().Name}#{o.GetHashCode():X2}";
