@@ -16,14 +16,20 @@ namespace System.Net.Sockets
         //
         // Encapsulates a particular SocketAsyncContext object's access to a SocketAsyncEngine.  
         //
+
+            // TODO: Refactor this.
+            // I don't really need a notion of "token" any more.
+
         public struct Token
         {
             private readonly SocketAsyncEngine _engine;
-            private readonly IntPtr _handle;
+            private readonly GCHandle _gcHandle;
 
             public Token(SocketAsyncContext context)
             {
-                AllocateToken(context, out _engine, out _handle);
+                // TODO: Rename to GetEngine or similar
+                AllocateToken(context, out _engine);
+                _gcHandle = GCHandle.Alloc(context, GCHandleType.Normal);
             }
 
             public bool WasAllocated
@@ -33,16 +39,21 @@ namespace System.Net.Sockets
 
             public void Free()
             {
+                // For now, just never free these things.
+#if false
                 if (WasAllocated)
                 {
-                    _engine.FreeHandle(_handle);
+                    // TODO: Fix timing issue
+                    Debug.Assert(_gcHandle.IsAllocated);
+                    _gcHandle.Free();
                 }
+#endif
             }
 
             public bool TryRegister(SafeCloseSocket socket, Interop.Sys.SocketEvents current, Interop.Sys.SocketEvents events, out Interop.Error error)
             {
                 Debug.Assert(WasAllocated, "Expected WasAllocated to be true");
-                return _engine.TryRegister(socket, current, events, _handle, out error);
+                return _engine.TryRegister(socket, current, events, GCHandle.ToIntPtr(_gcHandle), out error);
             }
         }
 
@@ -54,6 +65,8 @@ namespace System.Net.Sockets
 #endif
 
         private static readonly object s_lock = new object();
+
+        // TODO: Remove this DEBUG logic
 
         // In debug builds, force there to be 2 engines. In release builds, use half the number of processors when
         // there are at least 6. The lower bound is to avoid using multiple engines on systems which aren't servers.
@@ -80,6 +93,7 @@ namespace System.Net.Sockets
         private readonly int _shutdownReadPipe;
         private readonly int _shutdownWritePipe;
 
+#if false
         //
         // Each SocketAsyncContext is associated with a particular "handle" value, used to identify that 
         // SocketAsyncContext when events are raised.  These handle values are never reused, because we do not have
@@ -104,11 +118,17 @@ namespace System.Net.Sockets
 #endif
         private static readonly IntPtr MinHandlesForAdditionalEngine = EngineCount == 1 ? MaxHandles : (IntPtr)32;
 
+#endif
+
+
         //
         // Sentinel handle value to identify events from the "shutdown pipe," used to signal an event loop to stop
         // processing events.
         //
         private static readonly IntPtr ShutdownHandle = (IntPtr)(-1);
+
+#if false
+        // TODO: Some of these need to be removed
 
         //
         // The next handle value to be allocated for this event port.
@@ -121,12 +141,6 @@ namespace System.Net.Sockets
         // Must be accessed under s_lock.
         // 
         private IntPtr _outstandingHandles;
-
-        //
-        // Maps handle values to SocketAsyncContext instances.
-        // Must be accessed under s_lock.
-        //
-        private readonly Dictionary<IntPtr, SocketAsyncContext> _handleToContextMap = new Dictionary<IntPtr, SocketAsyncContext>();
 
         //
         // True if we've reached the handle value limit for this event port, and thus must allocate a new event port
@@ -144,49 +158,27 @@ namespace System.Net.Sockets
             }
         }
 
+#endif
+        
         //
         // Allocates a new {SocketAsyncEngine, handle} pair.
         //
-        private static void AllocateToken(SocketAsyncContext context, out SocketAsyncEngine engine, out IntPtr handle)
+        private static void AllocateToken(SocketAsyncContext context, out SocketAsyncEngine engine)
         {
             lock (s_lock)
             {
                 engine = s_currentEngines[s_allocateFromEngine];
                 if (engine == null)
                 {
-                    // We minimize the number of engines on applications that have a low number of concurrent sockets.
-                    for (int i = 0; i < s_allocateFromEngine; i++)
-                    {
-                        var previousEngine = s_currentEngines[i];
-                        if (previousEngine == null || previousEngine.HasLowNumberOfSockets)
-                        {
-                            s_allocateFromEngine = i;
-                            engine = previousEngine;
-                            break;
-                        }
-                    }
-                    if (engine == null)
-                    {
-                        s_currentEngines[s_allocateFromEngine] = engine = new SocketAsyncEngine();
-                    }
+                    s_currentEngines[s_allocateFromEngine] = engine = new SocketAsyncEngine();
                 }
 
-                handle = engine.AllocateHandle(context);
-
-                if (engine.IsFull)
-                {
-                    // We'll need to create a new event port for the next handle.
-                    s_currentEngines[s_allocateFromEngine] = null;
-                }
-
-                // Round-robin to the next engine once we have sufficient sockets on this one.
-                if (!engine.HasLowNumberOfSockets)
-                {
-                    s_allocateFromEngine = (s_allocateFromEngine + 1) % EngineCount;
-                }
+                // Round-robin to the next engine 
+                s_allocateFromEngine = (s_allocateFromEngine + 1) % EngineCount;
             }
         }
 
+#if false
         private IntPtr AllocateHandle(SocketAsyncContext context)
         {
             Debug.Assert(Monitor.IsEntered(s_lock), "Expected s_lock to be held");
@@ -246,6 +238,7 @@ namespace System.Net.Sockets
                 return context;
             }
         }
+#endif
 
         private SocketAsyncEngine()
         {
@@ -325,13 +318,15 @@ namespace System.Net.Sockets
                         }
                         else
                         {
-                            SocketAsyncContext context = GetContextFromHandle(handle);
-                            if (context != null)
-                            {
-                                context.HandleEvents(_buffer[i].Events);
-                            }
+                            var gcHandle = GCHandle.FromIntPtr(handle);
+                            Debug.Assert(gcHandle.IsAllocated);
+                            SocketAsyncContext context = (SocketAsyncContext)gcHandle.Target;
+                            context.HandleEvents(_buffer[i].Events);
                         }
                     }
+
+                    // Process any sockets that have been closed
+                    // TODO
                 }
 
                 FreeNativeResources();
