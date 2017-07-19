@@ -479,6 +479,7 @@ namespace System.Net.Sockets
                 _tail = operation;
             }
 
+#if false
             private bool TryDequeue(out TOperation operation)
             {
                 if (_tail == null)
@@ -519,6 +520,7 @@ namespace System.Net.Sockets
                     _tail.Next = operation;
                 }
             }
+#endif
 
             public void Complete(SocketAsyncContext context)
             {
@@ -538,13 +540,22 @@ namespace System.Net.Sockets
 
                     State = QueueState.Set;
 
-                    TOperation op;
-                    while (TryDequeue(out op))
+                    while (_tail != null)
                     {
+                        AsyncOperation op = _tail.Next;      // head of list
                         if (!op.TryCompleteAsync(context))
                         {
-                            Requeue(op);
                             break;
+                        }
+
+                        if (op == _tail)
+                        {
+                            // Finished all; we'll break out of loop above
+                            _tail = null;
+                        }
+                        else
+                        {
+                            _tail.Next = op.Next;
                         }
                     }
 
