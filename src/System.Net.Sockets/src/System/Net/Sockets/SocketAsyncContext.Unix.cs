@@ -607,6 +607,12 @@ namespace System.Net.Sockets
                     Trace($"{QueueId(context)}: Enter StopAndAbort, State={this.State}, IsEmpty={this.IsEmpty}");
 #endif
 
+                    if (State == QueueState.Stopped)
+                    {
+                        // Already stopped, don''t need to do it again
+                        return;
+                    }
+
                     State = QueueState.Stopped;
 
                     if (_tail != null)
