@@ -538,7 +538,7 @@ namespace System.Net.Sockets
                         return;
                     }
 
-                    State = QueueState.Set;
+//                    State = QueueState.Set;
 
                     while (_tail != null)
                     {
@@ -551,6 +551,8 @@ namespace System.Net.Sockets
                         if (op == _tail)
                         {
                             // Finished all; we'll break out of loop above
+                            // Change state to Set so that callers can try to perform sync ops
+                            State = QueueState.Set;
                             _tail = null;
                         }
                         else
