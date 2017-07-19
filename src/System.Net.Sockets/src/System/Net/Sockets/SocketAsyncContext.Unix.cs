@@ -524,6 +524,7 @@ namespace System.Net.Sockets
 
             public void Complete(SocketAsyncContext context)
             {
+                AsyncOperation op;
                 lock (_queueLock)
                 {
 #if TRACE
@@ -538,33 +539,56 @@ namespace System.Net.Sockets
                         return;
                     }
 
-//                    State = QueueState.Set;
-
-                    while (_tail != null)
+                    if (_tail == null)
                     {
-                        AsyncOperation op = _tail.Next;      // head of list
-                        if (!op.TryCompleteAsync(context))
+                        // Queue is empty
+                        // Set state to QueueState.Set to allow callers to try to perform I/O immediately
+                        State = QueueState.Set;
+
+#if TRACE
+                        Trace($"{QueueId(context)}: Leave Complete, State={this.State}, IsEmpty={this.IsEmpty}");
+#endif
+                        return;
+                    }
+
+                    op = _tail.Next;        // head of queue
+                }
+
+                while (op.TryCompleteAsync(context))
+                {
+                    lock (_queueLock)
+                    {
+                        if (IsStopped)
                         {
-                            break;
+#if TRACE
+                            Trace($"{QueueId(context)}: Leave Complete, State={this.State}, IsEmpty={this.IsEmpty}");
+#endif
+                            return;
                         }
 
                         if (op == _tail)
                         {
-                            // Finished all; we'll break out of loop above
-                            // Change state to Set so that callers can try to perform sync ops
-                            State = QueueState.Set;
+                            // No more operations to process
                             _tail = null;
+
+                            // Set state to QueueState.Set to allow callers to try to perform I/O immediately
+                            State = QueueState.Set;
+#if TRACE
+                            Trace($"{QueueId(context)}: Leave Complete, State={this.State}, IsEmpty={this.IsEmpty}");
+#endif
+                            return;
                         }
                         else
                         {
-                            _tail.Next = op.Next;
+                            // Pop current operation and advance to next
+                            op = _tail.Next = op.Next;
                         }
                     }
+                }
 
 #if TRACE
-                    Trace($"{IdOf(context)}: Leave StopAndAbort, State={this.State}, IsEmpty={this.IsEmpty}");
+                Trace($"{QueueId(context)}: Leave Complete, State={this.State}, IsEmpty={this.IsEmpty}");
 #endif
-                }
             }
 
             public void StopAndAbort(SocketAsyncContext context)
