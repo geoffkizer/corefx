@@ -87,11 +87,10 @@ namespace System.Net.Sockets
         private readonly Interop.Sys.SocketEvent* _buffer;
 
         //
-        // The read and write ends of a native pipe, used to signal that this instance's event loop should stop 
-        // processing events.
+        // The read and write ends of a native pipe, used to signal that we need to cleanup resources for a closed socket.
         // 
-        private readonly int _shutdownReadPipe;
-        private readonly int _shutdownWritePipe;
+        private readonly int _cleanupReadPipe;
+        private readonly int _cleanupWritePipe;
 
 #if false
         //
@@ -125,7 +124,8 @@ namespace System.Net.Sockets
         // Sentinel handle value to identify events from the "shutdown pipe," used to signal an event loop to stop
         // processing events.
         //
-        private static readonly IntPtr ShutdownHandle = (IntPtr)(-1);
+        // TODO: Is this valid?  Doesn't seem like it....
+        private static readonly IntPtr CleanupHandle = (IntPtr)0;
 
 #if false
         // TODO: Some of these need to be removed
@@ -243,8 +243,8 @@ namespace System.Net.Sockets
         private SocketAsyncEngine()
         {
             _port = (IntPtr)(-1);
-            _shutdownReadPipe = -1;
-            _shutdownWritePipe = -1;
+            _cleanupReadPipe = -1;
+            _cleanupWritePipe = -1;
             try
             {
                 //
@@ -268,10 +268,10 @@ namespace System.Net.Sockets
                 {
                     throw new InternalException();
                 }
-                _shutdownReadPipe = pipeFds[Interop.Sys.ReadEndOfPipe];
-                _shutdownWritePipe = pipeFds[Interop.Sys.WriteEndOfPipe];
+                _cleanupReadPipe = pipeFds[Interop.Sys.ReadEndOfPipe];
+                _cleanupWritePipe = pipeFds[Interop.Sys.WriteEndOfPipe];
 
-                if (Interop.Sys.TryChangeSocketEventRegistration(_port, (IntPtr)_shutdownReadPipe, Interop.Sys.SocketEvents.None, Interop.Sys.SocketEvents.Read, ShutdownHandle) != Interop.Error.SUCCESS)
+                if (Interop.Sys.TryChangeSocketEventRegistration(_port, (IntPtr)_cleanupReadPipe, Interop.Sys.SocketEvents.None, Interop.Sys.SocketEvents.Read, CleanupHandle) != Interop.Error.SUCCESS)
                 {
                     throw new InternalException();
                 }
@@ -285,10 +285,9 @@ namespace System.Net.Sockets
                     TaskCreationOptions.LongRunning,
                     TaskScheduler.Default);
             }
-            catch
+            catch (Exception e)
             {
-                FreeNativeResources();
-                throw;
+                Environment.FailFast("Exception thrown from SocketAsyncEngine constructor: " + e.ToString(), e);
             }
         }
 
@@ -296,8 +295,7 @@ namespace System.Net.Sockets
         {
             try
             {
-                bool shutdown = false;
-                while (!shutdown)
+                while (true)
                 {
                     int numEvents = EventBufferCount;
                     Interop.Error err = Interop.Sys.WaitForSocketEvents(_port, _buffer, &numEvents);
@@ -309,12 +307,13 @@ namespace System.Net.Sockets
                     // The native shim is responsible for ensuring this condition.
                     Debug.Assert(numEvents > 0, $"Unexpected numEvents: {numEvents}");
 
+                    bool cleanup = false;
                     for (int i = 0; i < numEvents; i++)
                     {
                         IntPtr handle = _buffer[i].Data;
-                        if (handle == ShutdownHandle)
+                        if (handle == CleanupHandle)
                         {
-                            shutdown = true;
+                            cleanup = true;
                         }
                         else
                         {
@@ -326,10 +325,11 @@ namespace System.Net.Sockets
                     }
 
                     // Process any sockets that have been closed
-                    // TODO
+                    if (cleanup)
+                    {
+                        // TODO
+                    }
                 }
-
-                FreeNativeResources();
             }
             catch (Exception e)
             {
@@ -337,6 +337,7 @@ namespace System.Net.Sockets
             }
         }
 
+#if false
         private void RequestEventLoopShutdown()
         {
             //
@@ -349,16 +350,18 @@ namespace System.Net.Sockets
                 throw new InternalException();
             }
         }
+#endif
 
+#if false
         private void FreeNativeResources()
         {
-            if (_shutdownReadPipe != -1)
+            if (_cleanupReadPipe != -1)
             {
-                Interop.Sys.Close((IntPtr)_shutdownReadPipe);
+                Interop.Sys.Close((IntPtr)_cleanupReadPipe);
             }
-            if (_shutdownWritePipe != -1)
+            if (_cleanupWritePipe != -1)
             {
-                Interop.Sys.Close((IntPtr)_shutdownWritePipe);
+                Interop.Sys.Close((IntPtr)_cleanupWritePipe);
             }
             if (_buffer != null)
             {
@@ -369,6 +372,7 @@ namespace System.Net.Sockets
                 Interop.Sys.CloseSocketEventPort(_port);
             }
         }
+#endif
 
         private bool TryRegister(SafeCloseSocket socket, Interop.Sys.SocketEvents current, Interop.Sys.SocketEvents events, IntPtr handle, out Interop.Error error)
         {
