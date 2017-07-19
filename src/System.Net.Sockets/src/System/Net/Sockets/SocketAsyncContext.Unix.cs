@@ -457,7 +457,15 @@ namespace System.Net.Sockets
             public QueueState State { get; set; }
             public bool IsStopped { get { return State == QueueState.Stopped; } }
             public bool IsEmpty { get { return _tail == null; } }
-            public object QueueLock { get { return _queueLock; } }
+            public object QueueLock
+            {
+                get
+                {
+                    // Make sure we don't have unexpected reentrancy
+                    Debug.Assert(!Monitor.IsEntered(_queueLock));
+                    return _queueLock;
+                }
+            }
 
             public void Init()
             {
@@ -525,7 +533,7 @@ namespace System.Net.Sockets
             public void Complete(SocketAsyncContext context)
             {
                 AsyncOperation op;
-                lock (_queueLock)
+                lock (QueueLock)
                 {
 #if TRACE
                     Trace($"{QueueId(context)}: Enter Complete, State={this.State}, IsEmpty={this.IsEmpty}");
@@ -556,7 +564,7 @@ namespace System.Net.Sockets
 
                 while (op.TryCompleteAsync(context))
                 {
-                    lock (_queueLock)
+                    lock (QueueLock)
                     {
                         if (IsStopped)
                         {
@@ -593,7 +601,7 @@ namespace System.Net.Sockets
 
             public void StopAndAbort(SocketAsyncContext context)
             {
-                lock (_queueLock)
+                lock (QueueLock)
                 {
 #if TRACE
                     Trace($"{QueueId(context)}: Enter StopAndAbort, State={this.State}, IsEmpty={this.IsEmpty}");
