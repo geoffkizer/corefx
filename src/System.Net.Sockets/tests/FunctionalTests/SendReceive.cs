@@ -576,6 +576,57 @@ namespace System.Net.Sockets.Tests
         [OuterLoop] // TODO: Issue #11345
         [Theory]
         [MemberData(nameof(LoopbacksAndBuffers))]
+        public async Task SendRecv_Stream_TCP_SyncAndAsync(IPAddress listenAt, bool useMultipleBuffers)
+        {
+            using (var server = new Socket(listenAt.AddressFamily, SocketType.Stream, ProtocolType.Tcp))
+            {
+                byte[] sendData = new byte[1];
+                new Random(42).NextBytes(sendData);
+
+                server.BindToAnonymousPort(listenAt);
+                server.Listen(1);
+
+                EndPoint clientEndpoint = server.LocalEndPoint;
+                using (var client = new Socket(clientEndpoint.AddressFamily, SocketType.Stream, ProtocolType.Tcp))
+                {
+                    Task clientConnect = ConnectAsync(client, clientEndpoint);
+                    using (Socket remote = await AcceptAsync(server))
+                    {
+                        await clientConnect;
+
+                        var receiveBuffer = new byte[1];
+                        for (int i = 0; i < 10; i++)
+                        {
+                            // Spawn a delayed sync receive
+                            Task t = Task.Run(async () =>
+                            {
+                                await Task.Delay(5);
+                                int bytesReceived = remote.Receive(receiveBuffer);
+                                Assert.Equal(1, bytesReceived);
+                            });
+
+                            client.Send(sendData);
+                            await t;
+
+                            // Spawn a delayed sync receive
+                            Task t2 = Task.Run(async () =>
+                            {
+                                await Task.Delay(5);
+                                int bytesReceived = await remote.ReceiveAsync(new ArraySegment<byte>(receiveBuffer), SocketFlags.None);
+                                Assert.Equal(1, bytesReceived);
+                            });
+
+                            client.Send(sendData);
+                            await t;
+                        }
+                    }
+                }
+            }
+        }
+
+        [OuterLoop] // TODO: Issue #11345
+        [Theory]
+        [MemberData(nameof(LoopbacksAndBuffers))]
         public void SendRecvPollSync_TcpListener_Socket(IPAddress listenAt, bool pollBeforeOperation)
         {
             const int BytesToSend = 123456;
