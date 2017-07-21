@@ -386,7 +386,7 @@ namespace System.Net.Sockets
         private bool TryRegisterForEvents(SafeCloseSocket socket, IntPtr handle)
         {
             Interop.Error error = Interop.Sys.TryChangeSocketEventRegistration(_port, socket, Interop.Sys.SocketEvents.None, 
-                Interop.Sys.SocketEvents.Read | Interop.Sys.SocketEvents.Read, handle);
+                Interop.Sys.SocketEvents.Read | Interop.Sys.SocketEvents.Write, handle);
 
             return error == Interop.Error.SUCCESS;
         }
