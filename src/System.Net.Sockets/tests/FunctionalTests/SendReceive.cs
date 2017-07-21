@@ -617,7 +617,7 @@ namespace System.Net.Sockets.Tests
                             });
 
                             client.Send(sendData);
-                            await t;
+                            await t2;
                         }
                     }
                 }
