@@ -21,9 +21,9 @@ namespace System.Net.Sockets
             private readonly SocketAsyncEngine _engine;
             private readonly IntPtr _handle;
 
-            public Token(SocketAsyncContext context)
+            public Token(SocketAsyncContext context, SafeCloseSocket socket)
             {
-                AllocateToken(context, out _engine, out _handle);
+                AllocateToken(context, socket, out _engine, out _handle);
             }
 
             public bool WasAllocated
@@ -39,11 +39,13 @@ namespace System.Net.Sockets
                 }
             }
 
+#if false
             public bool TryRegister(SafeCloseSocket socket, Interop.Sys.SocketEvents current, Interop.Sys.SocketEvents events, out Interop.Error error)
             {
                 Debug.Assert(WasAllocated, "Expected WasAllocated to be true");
                 return _engine.TryRegister(socket, current, events, _handle, out error);
             }
+#endif
         }
 
         private const int EventBufferCount =
@@ -147,7 +149,7 @@ namespace System.Net.Sockets
         //
         // Allocates a new {SocketAsyncEngine, handle} pair.
         //
-        private static void AllocateToken(SocketAsyncContext context, out SocketAsyncEngine engine, out IntPtr handle)
+        private static void AllocateToken(SocketAsyncContext context, SafeCloseSocket socket, out SocketAsyncEngine engine, out IntPtr handle)
         {
             lock (s_lock)
             {
@@ -184,6 +186,12 @@ namespace System.Net.Sockets
                 {
                     s_allocateFromEngine = (s_allocateFromEngine + 1) % EngineCount;
                 }
+            }
+
+            if (!engine.TryRegisterForEvents(socket, handle))
+            {
+                engine.FreeHandle(handle);
+                throw new InternalException();
             }
         }
 
@@ -375,15 +383,11 @@ namespace System.Net.Sockets
             }
         }
 
-        private bool TryRegister(SafeCloseSocket socket, Interop.Sys.SocketEvents current, Interop.Sys.SocketEvents events, IntPtr handle, out Interop.Error error)
+        private bool TryRegisterForEvents(SafeCloseSocket socket, IntPtr handle)
         {
-            if (current == events)
-            {
-                error = Interop.Error.SUCCESS;
-                return true;
-            }
+            Interop.Error error = Interop.Sys.TryChangeSocketEventRegistration(_port, socket, Interop.Sys.SocketEvents.None, 
+                Interop.Sys.SocketEvents.Read | Interop.Sys.SocketEvents.Read, handle);
 
-            error = Interop.Sys.TryChangeSocketEventRegistration(_port, socket, current, events, handle);
             return error == Interop.Error.SUCCESS;
         }
     }

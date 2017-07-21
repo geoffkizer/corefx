@@ -644,11 +644,12 @@ namespace System.Net.Sockets
 
                 if (!_asyncEngineToken.WasAllocated)
                 {
-                    _asyncEngineToken = new SocketAsyncEngine.Token(this);
+                    _asyncEngineToken = new SocketAsyncEngine.Token(this, _socket);
                 }
 
                 events |= _registeredEvents;
 
+#if false
                 Interop.Error errorCode;
                 if (!_asyncEngineToken.TryRegister(_socket, _registeredEvents, events, out errorCode))
                 {
@@ -661,6 +662,7 @@ namespace System.Net.Sockets
                         throw new InternalException();                        
                     }
                 }
+#endif
 
                 _registeredEvents = events;
             }
