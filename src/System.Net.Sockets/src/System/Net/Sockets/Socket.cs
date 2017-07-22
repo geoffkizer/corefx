@@ -30,10 +30,10 @@ namespace System.Net.Sockets
         private bool _isConnected;
         private bool _isDisconnected;
 
-        // When the socket is created it will be in blocking mode. We'll only be able to Accept or Connect,
-        // so we need to handle one of these cases at a time.
+        // When the socket is created it will be in blocking mode. 
         private bool _willBlock = true; // Desired state of the socket from the user.
-        private bool _willBlockInternal = true; // Actual win32 state of the socket.
+                                        // Depending on the platform, this may or may not be the same as the
+                                        // underlying socket's nonblocking state.
         private bool _isListening = false;
 
         // Our internal state doesn't automatically get updated after a non-blocking connect
@@ -309,20 +309,16 @@ namespace System.Net.Sockets
                     throw new ObjectDisposedException(this.GetType().FullName);
                 }
 
-                if (NetEventSource.IsEnabled) NetEventSource.Info(this, $"value:{value} willBlock:{_willBlock} willBlockInternal:{_willBlockInternal}");
-
-                bool current;
-
-                SocketError errorCode = InternalSetBlocking(value, out current);
-
-                if (errorCode != SocketError.Success)
+                if (_willBlock != value)
                 {
-                    UpdateStatusAfterSocketErrorAndThrowException(errorCode);
-                }
+                    SocketError errorCode = InternalSetBlocking(value);
+                    if (errorCode != SocketError.Success)
+                    {
+                        UpdateStatusAfterSocketErrorAndThrowException(errorCode);
+                    }
 
-                // The native call succeeded, update the user's desired state.
-                Debug.Assert(current == value);
-                _willBlock = current;
+                    _willBlock = value;
+                }
             }
         }
 
@@ -3833,7 +3829,6 @@ namespace System.Net.Sockets
             }
 
             SetToDisconnected();
-            InternalSetBlocking(_willBlockInternal);
             if (NetEventSource.IsEnabled) NetEventSource.Exit(this);
         }
 
@@ -4596,7 +4591,7 @@ namespace System.Net.Sockets
                     SocketError errorCode;
 
                     // Go to blocking mode.
-                    if (!_willBlock || !_willBlockInternal)
+                    if (!_willBlock)
                     {
                         bool willBlock;
                         errorCode = SocketPal.SetBlocking(_handle, false, out willBlock);
@@ -4869,52 +4864,25 @@ namespace System.Net.Sockets
             return multicastOption;
         }
 
-        // This method will ignore failures, but returns the win32
-        // error code, and will update internal state on success.
-        private SocketError InternalSetBlocking(bool desired, out bool current)
+        private SocketError InternalSetBlocking(bool desired)
         {
-            if (NetEventSource.IsEnabled) NetEventSource.Enter(this, $"desired:{desired} willBlock:{_willBlock} willBlockInternal:{_willBlockInternal}");
-
             if (CleanedUp)
             {
                 if (NetEventSource.IsEnabled) NetEventSource.Exit(this, "ObjectDisposed");
-                current = _willBlock;
                 return SocketError.Success;
             }
 
-            // Can we avoid this call if willBlockInternal is already correct?
-            bool willBlock = false;
             SocketError errorCode;
             try
             {
-                errorCode = SocketPal.SetBlocking(_handle, desired, out willBlock);
+                errorCode = SocketPal.SetBlocking(_handle, desired, out bool willBlock);
             }
             catch (ObjectDisposedException)
             {
                 errorCode = SocketError.NotSocket;
             }
 
-            if (NetEventSource.IsEnabled) NetEventSource.Info(this, $"Interop.Winsock.ioctlsocket returns errorCode:{errorCode}");
-
-            // We will update only internal state but only on successfull win32 call
-            // so if the native call fails, the state will remain the same.
-            if (errorCode == SocketError.Success)
-            {
-                Debug.Assert(desired == willBlock);
-                _willBlockInternal = willBlock;
-            }
-
-            if (NetEventSource.IsEnabled) NetEventSource.Info(this, $"errorCode:{errorCode} willBlock:{_willBlock} willBlockInternal:{_willBlockInternal}");
-
-            current = _willBlockInternal;
             return errorCode;
-        }
-
-        // This method ignores all failures.
-        internal void InternalSetBlocking(bool desired)
-        {
-            bool current;
-            InternalSetBlocking(desired, out current);
         }
 
         // Implements ConnectEx - this provides completion port IO and support for disconnect and reconnects.
@@ -5316,13 +5284,10 @@ namespace System.Net.Sockets
         // ValidateBlockingMode - called before synchronous calls to validate
         // the fact that we are in blocking mode (not in non-blocking mode) so the
         // call will actually be synchronous.
+
+            // TODO: Remove this call
         private void ValidateBlockingMode()
         {
-            if (_willBlock && !_willBlockInternal)
-            {
-                Debug.Assert(false);
-                throw new InvalidOperationException(SR.net_invasync);
-            }
         }
 
         // Validates that the Socket can be used to try another Connect call, in case
