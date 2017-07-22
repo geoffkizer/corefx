@@ -321,6 +321,7 @@ namespace System.Net.Sockets
                 }
 
                 // The native call succeeded, update the user's desired state.
+                Debug.Assert(current == value);
                 _willBlock = current;
             }
         }
@@ -5209,6 +5210,8 @@ namespace System.Net.Sockets
             // The socket is connected.
             socket.SetToConnected();
 
+            // TODO: This comment is bogus, remove it and the one below.
+
             // if the socket is returned by an End(), the socket might have
             // inherited the WSAEventSelect() call from the accepting socket.
             // we need to cancel this otherwise the socket will be in non-blocking
@@ -5317,6 +5320,7 @@ namespace System.Net.Sockets
         {
             if (_willBlock && !_willBlockInternal)
             {
+                Debug.Assert(false);
                 throw new InvalidOperationException(SR.net_invasync);
             }
         }
