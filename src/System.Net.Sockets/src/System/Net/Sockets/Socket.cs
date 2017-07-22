@@ -4599,6 +4599,7 @@ namespace System.Net.Sockets
                     {
                         bool willBlock;
                         errorCode = SocketPal.SetBlocking(_handle, false, out willBlock);
+                        Debug.Assert(errorCode != SocketError.Success || willBlock == false);
                         if (NetEventSource.IsEnabled) NetEventSource.Info(this, $"handle:{_handle} ioctlsocket(FIONBIO):{errorCode}");
                     }
 
@@ -4898,6 +4899,7 @@ namespace System.Net.Sockets
             // so if the native call fails, the state will remain the same.
             if (errorCode == SocketError.Success)
             {
+                Debug.Assert(desired == willBlock);
                 _willBlockInternal = willBlock;
             }
 

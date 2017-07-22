@@ -135,6 +135,26 @@ namespace System.Net.Sockets
             }
         }
 
+        // Note, this isn't quite right.
+        // What if the user sets Blocking = false, then changes it back to Blocking = true?
+#if false
+        // Once the underlying OS handle is non-blocking, we never set it back to blocking mode.
+        // If the user then performs a synchronous, blocking operation (i.e. Blocking = true),
+        // then we need to simluate a synchronous operation by going through the AsyncContext.
+        // Note that there is a timing issue here where another thread may be creating the AsyncContext
+        // at the same time we are checking for its existence, but we don't care who wins.
+        public bool MustUseAsyncContext =>
+            _nonBlocking &&             // This indicates the user expectation is for blocking semantics
+            _asyncContext != null;      // This means that the underlying socket is in non-blocking mode
+
+        {
+            get
+            {
+
+            }
+        }
+#endif
+
         public int ReceiveTimeout
         {
             get

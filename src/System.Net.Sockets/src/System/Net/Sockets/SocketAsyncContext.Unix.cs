@@ -795,7 +795,9 @@ namespace System.Net.Sockets
         public SocketError ReceiveFrom(byte[] buffer, int offset, int count, ref SocketFlags flags, byte[] socketAddress, ref int socketAddressLen, int timeout, out int bytesReceived)
         {
             // test
-            Debug.Assert(_nonBlockingSet);
+
+            // Disable for now, reenable later
+//            Debug.Assert(_nonBlockingSet);
 
             Debug.Assert(timeout == -1 || timeout > 0, $"Unexpected timeout: {timeout}");
 
