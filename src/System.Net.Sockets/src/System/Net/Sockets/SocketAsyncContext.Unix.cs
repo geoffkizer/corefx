@@ -863,7 +863,7 @@ namespace System.Net.Sockets
         public SocketError ReceiveFromAsync(byte[] buffer, int offset, int count, SocketFlags flags, byte[] socketAddress, ref int socketAddressLen, out int bytesReceived, out SocketFlags receivedFlags, Action<int, byte[], int, SocketFlags, SocketError> callback)
         {
             // test
-            Debug.Assert(_nonBlockingSet);
+//            Debug.Assert(_nonBlockingSet);
 
             SetNonBlocking();
 
