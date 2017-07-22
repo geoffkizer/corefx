@@ -794,6 +794,9 @@ namespace System.Net.Sockets
 
         public SocketError ReceiveFrom(byte[] buffer, int offset, int count, ref SocketFlags flags, byte[] socketAddress, ref int socketAddressLen, int timeout, out int bytesReceived)
         {
+            // test
+            Debug.Assert(_nonBlockingSet);
+
             Debug.Assert(timeout == -1 || timeout > 0, $"Unexpected timeout: {timeout}");
 
             ManualResetEventSlim @event = null;
@@ -859,6 +862,9 @@ namespace System.Net.Sockets
 
         public SocketError ReceiveFromAsync(byte[] buffer, int offset, int count, SocketFlags flags, byte[] socketAddress, ref int socketAddressLen, out int bytesReceived, out SocketFlags receivedFlags, Action<int, byte[], int, SocketFlags, SocketError> callback)
         {
+            // test
+            Debug.Assert(_nonBlockingSet);
+
             SetNonBlocking();
 
             lock (_receiveQueue.QueueLock)
