@@ -575,8 +575,8 @@ namespace System.Net.Sockets.Tests
 
         [OuterLoop] // TODO: Issue #11345
         [Theory]
-        [MemberData(nameof(LoopbacksAndBuffers))]
-        public async Task SendRecv_Stream_TCP_SyncAndAsync(IPAddress listenAt, bool useMultipleBuffers)
+        [MemberData(nameof(Loopbacks))]
+        public async Task SendRecv_Stream_TCP_SyncAndAsync(IPAddress listenAt)
         {
             using (var server = new Socket(listenAt.AddressFamily, SocketType.Stream, ProtocolType.Tcp))
             {
@@ -597,26 +597,26 @@ namespace System.Net.Sockets.Tests
                         var receiveBuffer = new byte[1];
                         for (int i = 0; i < 10; i++)
                         {
-                            // Spawn a delayed sync receive
-                            Task t = Task.Run(async () =>
+                            Task t1 = Task.Run(async () =>
                             {
                                 await Task.Delay(5);
-                                int bytesReceived = remote.Receive(receiveBuffer);
-                                Assert.Equal(1, bytesReceived);
+                                client.Send(sendData);
                             });
 
-                            client.Send(sendData);
-                            await t;
+                            int bytesReceived = remote.Receive(receiveBuffer);
+                            Assert.Equal(1, bytesReceived);
 
-                            // Spawn a delayed sync receive
+                            await t1;
+
                             Task t2 = Task.Run(async () =>
                             {
                                 await Task.Delay(5);
-                                int bytesReceived = await remote.ReceiveAsync(new ArraySegment<byte>(receiveBuffer), SocketFlags.None);
-                                Assert.Equal(1, bytesReceived);
+                                client.Send(sendData);
                             });
 
-                            client.Send(sendData);
+                            bytesReceived = await remote.ReceiveAsync(new ArraySegment<byte>(receiveBuffer), SocketFlags.None);
+                            Assert.Equal(1, bytesReceived);
+
                             await t2;
                         }
                     }
