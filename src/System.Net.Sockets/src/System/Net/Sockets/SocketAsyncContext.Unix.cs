@@ -645,7 +645,7 @@ namespace System.Net.Sockets
         private OperationQueue<ReadOperation> _receiveQueue;
         private OperationQueue<WriteOperation> _sendQueue;
         private SocketAsyncEngine.Token _asyncEngineToken;
-        private Interop.Sys.SocketEvents _registeredEvents;
+        private bool _registered;
         private bool _nonBlockingSet;
 
         private readonly object _registerLock = new object();
@@ -660,31 +660,30 @@ namespace System.Net.Sockets
 
         private void Register(Interop.Sys.SocketEvents events)
         {
+            Debug.Assert(_nonBlockingSet);
             lock (_registerLock)
             {
-                Debug.Assert((_registeredEvents & events) == Interop.Sys.SocketEvents.None, $"Unexpected values: _registeredEvents={_registeredEvents}, events={events}");
-
-                if (!_asyncEngineToken.WasAllocated)
+                if (!_registered)
                 {
-                    _asyncEngineToken = new SocketAsyncEngine.Token(this);
-                }
+                    Debug.Assert(!_asyncEngineToken.WasAllocated);
+                    var token = new SocketAsyncEngine.Token(this);
 
-                events |= _registeredEvents;
-
-                Interop.Error errorCode;
-                if (!_asyncEngineToken.TryRegister(_socket, _registeredEvents, events, out errorCode))
-                {
-                    if (errorCode == Interop.Error.ENOMEM || errorCode == Interop.Error.ENOSPC)
+                    if (!token.TryRegister(_socket, out errorCode))
                     {
-                        throw new OutOfMemoryException();
+                        token.Free();
+                        if (errorCode == Interop.Error.ENOMEM || errorCode == Interop.Error.ENOSPC)
+                        {
+                            throw new OutOfMemoryException();
+                        }
+                        else
+                        {
+                            throw new InternalException();
+                        }
                     }
-                    else
-                    {
-                        throw new InternalException();                        
-                    }
-                }
 
-                _registeredEvents = events;
+                    _asyncEngineToken = token;
+                    _registered = true;
+                }
             }
         }
 
@@ -727,6 +726,12 @@ namespace System.Net.Sockets
         private bool TryBeginOperation<TOperation>(ref OperationQueue<TOperation> queue, TOperation operation, Interop.Sys.SocketEvents events, bool maintainOrder, out bool isStopped)
             where TOperation : AsyncOperation
         {
+            // TODO: This should happen outside of queue lock.
+            if (!_registered)
+            {
+                Register();
+            }
+
             // Exactly one of the two queue locks must be held by the caller
             // Disable for now, as this confounds the reentrancy check
             // I will revisit later...
@@ -753,11 +758,6 @@ namespace System.Net.Sockets
                         return false;
                     }
                     break;
-            }
-
-            if ((_registeredEvents & events) == Interop.Sys.SocketEvents.None)
-            {
-                Register(events);
             }
 
             queue.Enqueue(operation);
