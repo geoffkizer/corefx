@@ -700,6 +700,8 @@ namespace System.Net.Sockets
                 return errorCode;
             }
 
+            Console.WriteLine("Sync Connect over async");
+
             using (var @event = new ManualResetEventSlim(false, 0))
             {
                 var operation = new ConnectOperation {
@@ -938,6 +940,8 @@ namespace System.Net.Sockets
                         flags = receivedFlags;
                         return errorCode;
                     }
+
+                    Console.WriteLine("Sync Receive over async");
 
                     @event = new ManualResetEventSlim(false, 0);
 
@@ -1193,6 +1197,8 @@ namespace System.Net.Sockets
                     {
                         return errorCode;
                     }
+
+                    Console.WriteLine("Sync Send over async");
 
                     @event = new ManualResetEventSlim(false, 0);
 
