@@ -482,7 +482,7 @@ namespace System.Net.Sockets
 
         private void Register()
         {
-            Debug.Assert(_nonBlockingSet);
+//            Debug.Assert(_nonBlockingSet);
             lock (_registerLock)
             {
                 if (!_registered)
@@ -1039,6 +1039,14 @@ namespace System.Net.Sockets
         {
             Debug.Assert(timeout == -1 || timeout > 0, $"Unexpected timeout: {timeout}");
 
+            bool blockingTimeout = false;
+            var start = DateTime.UtcNow; 
+            if (!_nonBlockingSet && timeout > 0)
+            {
+                blockingTimeout = true;
+                Console.WriteLine($"Enter ReceiveMessageFrom nonblocking with timeout={timeout}");
+            }
+
             ManualResetEventSlim @event = null;
             try
             {
@@ -1052,10 +1060,11 @@ namespace System.Net.Sockets
                         SocketPal.TryCompleteReceiveMessageFrom(_socket, buffer, buffers, offset, count, flags, socketAddress, ref socketAddressLen, isIPv4, isIPv6, out bytesReceived, out receivedFlags, out ipPacketInformation, out errorCode))
                     {
                         flags = receivedFlags;
+                        if (blockingTimeout) Console.WriteLine($"ReceiveMessageFrom completed synchronously, elapsed={DateTime.UtcNow - start}, errorCode={errorCode}");
                         return errorCode;
                     }
 
-                    Console.WriteLine($"TryCompleteReceiveMessageFrom returned EAGAIN. _nonBlockingSet={_nonBlockingSet}, timeout={timeout}");
+                    if (blockingTimeout) Console.WriteLine($"ReceiveMessageFrom did not complete synchronously, elapsed={DateTime.UtcNow - start}");
 
                     @event = new ManualResetEventSlim(false, 0);
 
@@ -1076,6 +1085,8 @@ namespace System.Net.Sockets
                     bool isStopped;
                     while (!TryBeginOperation(ref _receiveQueue, operation, Interop.Sys.SocketEvents.Read, maintainOrder: true, isStopped: out isStopped))
                     {
+                        if (blockingTimeout) Console.WriteLine($"ReceiveMessageFrom: TryBeginOperation failed, elapsed={DateTime.UtcNow - start}");
+
                         if (isStopped)
                         {
                             socketAddressLen = operation.SocketAddressLen;
@@ -1094,9 +1105,14 @@ namespace System.Net.Sockets
                             return operation.ErrorCode;
                         }
                     }
+
+                    if (blockingTimeout) Console.WriteLine($"ReceiveMessageFrom: TryBeginOperation succeeded, elapsed={DateTime.UtcNow - start}");
                 }
 
                 bool signaled = operation.Wait(timeout);
+
+                if (blockingTimeout) Console.WriteLine($"ReceiveMessageFrom: Wait complete, signaled={signaled}, elapsed={DateTime.UtcNow - start}");
+
                 socketAddressLen = operation.SocketAddressLen;
                 flags = operation.ReceivedFlags;
                 ipPacketInformation = operation.IPPacketInformation;
