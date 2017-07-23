@@ -1064,7 +1064,7 @@ namespace System.Net.Sockets
                         return errorCode;
                     }
 
-                    if (blockingTimeout) Console.WriteLine($"ReceiveMessageFrom did not complete synchronously, elapsed={DateTime.UtcNow - start}");
+                    if (blockingTimeout) Console.WriteLine($"ReceiveMessageFrom did not complete synchronously, IsEmpty={_receiveQueue.IsEmpty}, elapsed={DateTime.UtcNow - start}");
 
                     @event = new ManualResetEventSlim(false, 0);
 
