@@ -480,7 +480,7 @@ namespace System.Net.Sockets
             _sendQueue.Init();
         }
 
-        private void Register(Interop.Sys.SocketEvents events)
+        private void Register()
         {
             Debug.Assert(_nonBlockingSet);
             lock (_registerLock)
@@ -490,6 +490,7 @@ namespace System.Net.Sockets
                     Debug.Assert(!_asyncEngineToken.WasAllocated);
                     var token = new SocketAsyncEngine.Token(this);
 
+                    Interop.Error errorCode;
                     if (!token.TryRegister(_socket, out errorCode))
                     {
                         token.Free();
