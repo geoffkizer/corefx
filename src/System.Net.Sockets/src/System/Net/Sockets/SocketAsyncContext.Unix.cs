@@ -1055,6 +1055,8 @@ namespace System.Net.Sockets
                         return errorCode;
                     }
 
+                    Console.WriteLine($"TryCompleteReceiveMessageFrom returned EAGAIN. _nonBlockingSet={_nonBlockingSet}, timeout={timeout}");
+
                     @event = new ManualResetEventSlim(false, 0);
 
                     operation = new ReceiveMessageFromOperation
