@@ -44,6 +44,9 @@ namespace System.Net.Sockets.Tests
         // but also not so large that it takes too long to run.
         const int Timeout = 500;
 
+        // TODO: Succeeds with forceNonBlocking, fails without it
+        // Send timeout is 3x, receive is 2x
+
         [OuterLoop] // TODO: Issue #11345
         [Theory]
         [InlineData(true)]
@@ -88,7 +91,7 @@ namespace System.Net.Sockets.Tests
         [Theory]
         [InlineData(true)]
         [InlineData(false)]
-        public void SocketSendTimeout_Send_Success(bool forceNonBlocking)
+        public void SendTimesOut_Throws(bool forceNonBlocking)
         {
             using (Socket localSocket = new Socket(AddressFamily.InterNetworkV6, SocketType.Stream, ProtocolType.Tcp))
             using (Socket remoteSocket = new Socket(AddressFamily.InterNetworkV6, SocketType.Stream, ProtocolType.Tcp))
