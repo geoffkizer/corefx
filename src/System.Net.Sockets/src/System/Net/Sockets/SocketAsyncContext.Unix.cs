@@ -797,7 +797,7 @@ namespace System.Net.Sockets
         {
             Debug.Assert(timeout == -1 || timeout > 0, $"Unexpected timeout: {timeout}");
 
-            Console.WriteLine($"{Thread.CurrentThread.ManagedThreadId:X}: {this.GetHashCode():X}: Enter AsyncContext.Receive");
+            Console.WriteLine($"{Thread.CurrentThread.ManagedThreadId:X}: {this.GetHashCode():X}: Enter AsyncContext.Receive, nonblocking={_nonBlockingSet}");
 
             ManualResetEventSlim @event = null;
             try

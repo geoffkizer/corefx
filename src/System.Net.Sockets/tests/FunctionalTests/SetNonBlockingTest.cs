@@ -27,7 +27,7 @@ namespace System.Net.Sockets.Tests
                 EndPoint clientEndpoint = server.LocalEndPoint;
                 using (var client = new Socket(clientEndpoint.AddressFamily, SocketType.Stream, ProtocolType.Tcp))
                 {
-                    await client.ConnectAsync(clientEndpoint);
+                    client.Connect(clientEndpoint);
                     await serverTask;
 
                     DateTime start = DateTime.UtcNow;
@@ -76,7 +76,7 @@ namespace System.Net.Sockets.Tests
                 EndPoint clientEndpoint = server.LocalEndPoint;
                 using (var client = new Socket(clientEndpoint.AddressFamily, SocketType.Stream, ProtocolType.Tcp))
                 {
-                    await client.ConnectAsync(clientEndpoint);
+                    client.Connect(clientEndpoint);
                     await serverTask;
 
                     DateTime start = DateTime.UtcNow;
