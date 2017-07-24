@@ -84,7 +84,7 @@ namespace System.Net.Sockets.Tests
                     // Hang a blocking receive
                     Task receiveTask = Task.Run(() =>
                     {
-                        Console.WriteLine("About to sync Receive");
+                        Console.WriteLine($"{Thread.CurrentThread.ManagedThreadId:X}: About to sync Receive");
 
                         try
                         {
@@ -93,10 +93,10 @@ namespace System.Net.Sockets.Tests
 
                         catch (Exception e)
                         {
-                            Console.Write($"Caught exception, time={DateTime.UtcNow - start}, e={e}");
+                            Console.Write($"{Thread.CurrentThread.ManagedThreadId:X}: Caught exception, time={DateTime.UtcNow - start}, e={e}");
                         }
 
-                        Console.WriteLine("Receive completed");
+                        Console.WriteLine($"{Thread.CurrentThread.ManagedThreadId:X}: Receive completed");
                     });
 
                     // Wait a bit and then change to nonblocking
