@@ -25,6 +25,7 @@
     <Compile Include="ReceiveMessageFrom.cs" />
     <Compile Include="ReceiveMessageFromAsync.cs" />
     <Compile Include="SelectTest.cs" />
+    <Compile Include="SetNonBlockingTest.cs" />
     <Compile Include="SendPacketsAsync.cs" />
     <Compile Include="SendPacketsElementTest.cs" />
     <Compile Include="SendFile.cs" />
