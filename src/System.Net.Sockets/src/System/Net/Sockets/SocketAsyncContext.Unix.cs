@@ -797,7 +797,7 @@ namespace System.Net.Sockets
         {
             Debug.Assert(timeout == -1 || timeout > 0, $"Unexpected timeout: {timeout}");
 
-            Console.WriteLine($"{this.GetHashCode():X}: Enter AsyncContext.Receive");
+            Console.WriteLine($"{Thread.CurrentThread.ManagedThreadId:X}: {this.GetHashCode():X}: Enter AsyncContext.Receive");
 
             ManualResetEventSlim @event = null;
             try
@@ -812,11 +812,11 @@ namespace System.Net.Sockets
                         SocketPal.TryCompleteReceiveFrom(_socket, buffer, offset, count, flags, socketAddress, ref socketAddressLen, out bytesReceived, out receivedFlags, out errorCode))
                     {
                         flags = receivedFlags;
-                        Console.WriteLine($"{this.GetHashCode():X}: AsyncContext.Receive completed synchronously");
+                        Console.WriteLine($"{Thread.CurrentThread.ManagedThreadId:X}: {this.GetHashCode():X}: AsyncContext.Receive completed synchronously");
                         return errorCode;
                     }
 
-                    Console.WriteLine($"{this.GetHashCode():X}: AsyncContext.Receive received EAGAIN");
+                    Console.WriteLine($"{Thread.CurrentThread.ManagedThreadId:X}: {this.GetHashCode():X}: AsyncContext.Receive received EAGAIN");
 
                     @event = new ManualResetEventSlim(false, 0);
 
