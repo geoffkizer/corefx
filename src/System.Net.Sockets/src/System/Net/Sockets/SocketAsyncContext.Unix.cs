@@ -1197,6 +1197,8 @@ namespace System.Net.Sockets
         {
             Debug.Assert(timeout == -1 || timeout > 0, $"Unexpected timeout: {timeout}");
 
+            Console.WriteLine("Enter AsyncContext.Send");
+
             ManualResetEventSlim @event = null;
             try
             {
@@ -1210,8 +1212,11 @@ namespace System.Net.Sockets
                     if (_sendQueue.IsEmpty &&
                         SocketPal.TryCompleteSendTo(_socket, buffer, ref offset, ref count, flags, socketAddress, socketAddressLen, ref bytesSent, out errorCode))
                     {
+                        Console.WriteLine("AsyncContext.Send completed");
                         return errorCode;
                     }
+
+                    Console.WriteLine("AsyncContext.Send received EAGAIN");
 
                     @event = new ManualResetEventSlim(false, 0);
 
