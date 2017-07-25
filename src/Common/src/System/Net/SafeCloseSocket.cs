@@ -148,8 +148,15 @@ namespace System.Net.Sockets
             innerSocket?.LogRemainingOperations();
 #endif
 
+            Console.WriteLine("In ReleaseHandle, about to call InnerReleaseHandle");
+
             InnerReleaseHandle();
+
+            Console.WriteLine("In ReleaseHandle, InnerReleaseHandle returned, about to call DangerousRelease");
+
             innerSocket?.DangerousRelease();
+
+            Console.WriteLine("In ReleaseHandle, DangerousRelease returned");
 
             return true;
         }
