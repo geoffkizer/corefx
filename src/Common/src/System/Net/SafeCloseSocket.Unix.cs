@@ -201,6 +201,8 @@ namespace System.Net.Sockets
             {
                 int errorCode;
 
+                Console.WriteLine($"Enter InnerSafeCloseSocket::InnerReleaseHandle, _blockable={_blockable}");
+
                 // If _blockable was set in BlockingRelease, it's safe to block here, which means
                 // we can honor the linger options set on the socket.  It also means closesocket() might return WSAEWOULDBLOCK, in which
                 // case we need to do some recovery.
@@ -208,11 +210,15 @@ namespace System.Net.Sockets
                 {
                     if (NetEventSource.IsEnabled) NetEventSource.Info(this, $"handle:{handle} Following 'blockable' branch.");
 
+                    Console.WriteLine($"About to Close");
+
                     errorCode = Interop.Sys.Close(handle);
                     if (errorCode == -1)
                     {
                         errorCode = (int)Interop.Sys.GetLastError();
                     }
+
+                    Console.WriteLine($"Close returned, errorCode={errorCode}");
 
                     if (NetEventSource.IsEnabled) NetEventSource.Info(this, $"handle:{handle}, close()#1:{errorCode}");
 #if DEBUG

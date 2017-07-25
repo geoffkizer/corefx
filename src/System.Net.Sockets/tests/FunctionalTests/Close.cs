@@ -43,7 +43,7 @@ namespace System.Net.Sockets.Tests
         [Theory]
         [InlineData(true)]
         [InlineData(false)]
-        [ActiveIssue(22564, TestPlatforms.AnyUnix)]
+//        [ActiveIssue(22564, TestPlatforms.AnyUnix)]
         public async void Close_WithPendingSyncReceive(bool forceNonBlocking)
         {
             using (var server = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp))
@@ -76,7 +76,11 @@ namespace System.Net.Sockets.Tests
                     // Delay to try to ensure the Receive is pending before we close the socket
                     await Task.Delay(500);
 
+                    Console.WriteLine("About to Close");
+
                     client.Close();
+
+                    Console.WriteLine("Close returned, about to Wait");
 
                     bool completed = receiveTask.Wait(TestSettings.PassingTestTimeout);
                     Assert.True(completed);
