@@ -796,6 +796,8 @@ namespace System.Net.Sockets
         {
             Debug.Assert(timeout == -1 || timeout > 0, $"Unexpected timeout: {timeout}");
 
+            Console.WriteLine($"Synchronous AsyncContext.Receive called, _nonBlocking={_nonBlockingSet}");
+
             ManualResetEventSlim @event = null;
             try
             {
@@ -808,9 +810,13 @@ namespace System.Net.Sockets
                     if (_receiveQueue.IsEmpty &&
                         SocketPal.TryCompleteReceiveFrom(_socket, buffer, offset, count, flags, socketAddress, ref socketAddressLen, out bytesReceived, out receivedFlags, out errorCode))
                     {
+                        Console.WriteLine($"Synchronous AsyncContext.Receive completed synchronously, bytesReceived={bytesReceived}, errorCode={errorCode}");
+
                         flags = receivedFlags;
                         return errorCode;
                     }
+
+                    Console.WriteLine($"Synchronous AsyncContext.Receive returned EAGAIN");
 
                     @event = new ManualResetEventSlim(false, 0);
 
@@ -843,9 +849,14 @@ namespace System.Net.Sockets
                             return operation.ErrorCode;
                         }
                     }
+
+                    Console.WriteLine($"Synchronous AsyncContext.Receive enqueued");
                 }
 
                 bool signaled = operation.Wait(timeout);
+
+                Console.WriteLine($"Synchronous AsyncContext.Receive Wait returned, signaled={signaled}, ErrorCode={operation.ErrorCode}");
+
                 socketAddressLen = operation.SocketAddressLen;
                 flags = operation.ReceivedFlags;
                 bytesReceived = operation.BytesTransferred;
