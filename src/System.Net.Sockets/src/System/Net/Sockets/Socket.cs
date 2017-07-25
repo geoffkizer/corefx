@@ -4602,6 +4602,8 @@ namespace System.Net.Sockets
                 {
                     SocketError errorCode;
 
+                    Console.WriteLine("Go to blocking mode");
+
                     // Go to blocking mode.
                     if (!_willBlock || !_willBlockInternal)
                     {
@@ -4612,9 +4614,13 @@ namespace System.Net.Sockets
 
                     if (timeout < 0)
                     {
+                        Console.WriteLine("Calling _handle.CloseAsIs");
+
                         // Close with existing user-specified linger option.
                         if (NetEventSource.IsEnabled) NetEventSource.Info(this, "Calling _handle.CloseAsIs()");
                         _handle.CloseAsIs();
+
+                        Console.WriteLine("_handle.CloseAsIs returned");
                     }
                     else
                     {
