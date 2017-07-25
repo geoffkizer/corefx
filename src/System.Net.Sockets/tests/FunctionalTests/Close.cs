@@ -59,6 +59,8 @@ namespace System.Net.Sockets.Tests
                     client.Connect(clientEndpoint);
                     await serverTask;
 
+                    client.ForceNonBlocking(forceNonBlocking);
+
                     // Hang a blocking receive
                     Task receiveTask = Task.Run(() =>
                     {
