@@ -90,6 +90,66 @@ namespace System.Net.Sockets.Tests
             }
         }
 
+        // TODO later: add async send test
+
+        [Theory]
+        [InlineData(true)]
+        [InlineData(false)]
+        //        [ActiveIssue(22564, TestPlatforms.AnyUnix)]
+        public async void Close_WithPendingSyncSend(bool forceNonBlocking)
+        {
+            using (var server = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp))
+            {
+                server.BindToAnonymousPort(IPAddress.Loopback);
+                server.Listen(1);
+
+                Task serverTask = server.AcceptAsync();
+
+                EndPoint clientEndpoint = server.LocalEndPoint;
+                using (var client = new Socket(clientEndpoint.AddressFamily, SocketType.Stream, ProtocolType.Tcp))
+                {
+                    client.Connect(clientEndpoint);
+                    await serverTask;
+
+                    client.ForceNonBlocking(forceNonBlocking);
+
+                    // Hang a blocking send
+                    Task receiveTask = Task.Run(() =>
+                    {
+                        try
+                        {
+                            // Force Send to timeout by filling the kernel buffer.
+                            var sendBuffer = new byte[16 * 1024];
+                            while (true)
+                            {
+                                client.Send(sendBuffer);
+
+                            }
+                            // TODO: Not the right assert
+                            //Assert.True(false); // Should never reach this
+                        }
+                        catch (SocketException e)
+                        {
+                            Assert.Equal(SocketError.ConnectionAborted, e.SocketErrorCode);
+                        }
+                    });
+
+                    // Delay to try to ensure the Send is pending before we close the socket
+                    await Task.Delay(500);
+
+                    Console.WriteLine("About to Close");
+
+                    client.Close();
+
+                    Console.WriteLine("Close returned, about to Wait");
+
+                    bool completed = receiveTask.Wait(TestSettings.PassingTestTimeout);
+                    Assert.True(completed);
+                }
+            }
+        }
+
+
         [Fact]
         public async void Close_WithPendingAsyncReceive()
         {
