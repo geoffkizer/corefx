@@ -44,9 +44,6 @@ namespace System.Net.Sockets.Tests
         // but also not so large that it takes too long to run.
         const int Timeout = 500;
 
-        // TODO: Succeeds with forceNonBlocking, fails without it
-        // Send timeout is 3x, receive is 2x
-
         [OuterLoop] // TODO: Issue #11345
         [Theory]
         [InlineData(true)]
