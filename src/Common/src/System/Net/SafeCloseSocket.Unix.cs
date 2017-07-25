@@ -216,13 +216,9 @@ namespace System.Net.Sockets
 
                     Console.WriteLine($"InnerReleaseHandle: About to call Interop.Sys.Shutdown");
 
-                    errorCode = Interop.Sys.Shutdown(handle, SocketShutdown.Both);
-                    if (errorCode == -1)
-                    {
-                        errorCode = (int)Interop.Sys.GetLastError();
-                    }
+                    Interop.Error e = Interop.Sys.Shutdown(handle, SocketShutdown.Both);
 
-                    Console.WriteLine($"Shutdown returned, errorCode={errorCode}");
+                    Console.WriteLine($"Shutdown returned, e={e}");
 
                     Console.WriteLine($"InnerReleaseHandle: About to call Interop.Sys.Close");
 
