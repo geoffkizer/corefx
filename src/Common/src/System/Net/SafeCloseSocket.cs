@@ -165,9 +165,15 @@ namespace System.Net.Sockets
 #endif
                 InnerSafeCloseSocket innerSocket = _innerSocket == null ? null : Interlocked.Exchange<InnerSafeCloseSocket>(ref _innerSocket, null);
 
+                Console.WriteLine("CloseAsIs: About to call Dispose");
+
                 Dispose();
+                Console.WriteLine("CloseAsIs: Dispose returned");
+
                 if (innerSocket != null)
                 {
+                    Console.WriteLine("CloseAsIs: About to spin");
+
                     // Wait until it's safe.
                     SpinWait sw = new SpinWait();
                     while (!_released)
@@ -175,11 +181,19 @@ namespace System.Net.Sockets
                         sw.SpinOnce();
                     }
 
+                    Console.WriteLine("CloseAsIs: Done spinning, about to call BlockingRelease");
+
                     // Now free it with blocking.
                     innerSocket.BlockingRelease();
+
+                    Console.WriteLine("CloseAsIs: BlockingRelease returned");
                 }
 
+                Console.WriteLine("CloseAsIs: About to call InnerReleaseHandle");
+
                 InnerReleaseHandle();
+
+                Console.WriteLine("CloseAsIs: InnerReleaseHandle returned");
 #if DEBUG
             }
             catch (Exception exception) when (!ExceptionCheck.IsFatal(exception))
