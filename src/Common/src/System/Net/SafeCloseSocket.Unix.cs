@@ -214,11 +214,13 @@ namespace System.Net.Sockets
                 {
                     if (NetEventSource.IsEnabled) NetEventSource.Info(this, $"handle:{handle} Following 'blockable' branch.");
 
+#if false
                     Console.WriteLine($"InnerReleaseHandle: About to call Interop.Sys.Shutdown");
 
                     Interop.Error e = Interop.Sys.Shutdown(handle, SocketShutdown.Both);
 
                     Console.WriteLine($"Shutdown returned, e={e}");
+#endif
 
                     Console.WriteLine($"InnerReleaseHandle: About to call Interop.Sys.Close");
 
