@@ -923,7 +923,7 @@ namespace System.Net.Sockets
                     return SocketError.WouldBlock;
                 }
 
-                // We received EAGAIN from attempting a synchronous, blocking Send.  
+                // We received EAGAIN from attempting a synchronous, blocking operation.  
                 // We must have transitioned into nonblocking mode, for whatever reason.
                 // Fall through and try again via the AsyncContext.
             }
@@ -965,21 +965,27 @@ namespace System.Net.Sockets
 
         public static SocketError Receive(SafeCloseSocket handle, IList<ArraySegment<byte>> buffers, ref SocketFlags socketFlags, out int bytesTransferred)
         {
-            SocketError errorCode;
-            if (!handle.IsNonBlocking)
+            if (!handle.InAsyncContextMode)
             {
-                errorCode = handle.AsyncContext.Receive(buffers, ref socketFlags, handle.ReceiveTimeout, out bytesTransferred);
-            }
-            else
-            {
+                bool nonBlocking = handle.IsNonBlocking;
                 int socketAddressLen = 0;
-                if (!TryCompleteReceiveFrom(handle, buffers, socketFlags, null, ref socketAddressLen, out bytesTransferred, out socketFlags, out errorCode))
+                SocketError errorCode;
+                bool completed = TryCompleteReceiveFrom(handle, buffers, socketFlags, null, ref socketAddressLen, out bytesTransferred, out socketFlags, out errorCode);
+                if (completed)
                 {
-                    errorCode = SocketError.WouldBlock;
+                    return errorCode;
                 }
+                else if (nonBlocking)
+                {
+                    return SocketError.WouldBlock;
+                }
+
+                // We received EAGAIN from attempting a synchronous, blocking operation.  
+                // We must have transitioned into nonblocking mode, for whatever reason.
+                // Fall through and try again via the AsyncContext.
             }
 
-            return errorCode;
+            return handle.AsyncContext.Receive(buffers, ref socketFlags, handle.ReceiveTimeout, out bytesTransferred);
         }
 
         public static SocketError Receive(SafeCloseSocket handle, byte[] buffer, int offset, int count, SocketFlags socketFlags, out int bytesTransferred)
