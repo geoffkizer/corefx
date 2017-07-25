@@ -908,15 +908,27 @@ namespace System.Net.Sockets
 
         public static SocketError Send(SafeCloseSocket handle, byte[] buffer, int offset, int count, SocketFlags socketFlags, out int bytesTransferred)
         {
-            if (!handle.IsNonBlocking)
+            if (!handle.InAsyncContextMode)
             {
-                return handle.AsyncContext.Send(buffer, offset, count, socketFlags, handle.SendTimeout, out bytesTransferred);
+                bool nonBlocking = handle.IsNonBlocking;
+                bytesTransferred = 0;
+                SocketError errorCode;
+                bool completed = TryCompleteSendTo(handle, buffer, ref offset, ref count, socketFlags, null, 0, ref bytesTransferred, out errorCode);
+                if (completed)
+                {
+                    return errorCode;
+                }
+                else if (nonBlocking)
+                {
+                    return SocketError.WouldBlock;
+                }
+
+                // We received EAGAIN from attempting a synchronous, blocking Send.  
+                // We must have transitioned into nonblocking mode, for whatever reason.
+                // Fall through and try again via the AsyncContext.
             }
 
-            bytesTransferred = 0;
-            SocketError errorCode;
-            bool completed = TryCompleteSendTo(handle, buffer, ref offset, ref count, socketFlags, null, 0, ref bytesTransferred, out errorCode);
-            return completed ? errorCode : SocketError.WouldBlock;
+            return handle.AsyncContext.Send(buffer, offset, count, socketFlags, handle.SendTimeout, out bytesTransferred);
         }
 
         public static SocketError SendFile(SafeCloseSocket handle, FileStream fileStream)

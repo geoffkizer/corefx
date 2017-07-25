@@ -125,6 +125,11 @@ namespace System.Net.Sockets
             }
         }
 
+        // TODO: THis should be fixed to jus ttest for AsyncContext,
+        // once I make AsyncContext only created when necessary
+        public bool InAsyncContextMode => (!IsNonBlocking && _underlyingHandleNonBlocking);
+
+
         public bool IsNonBlocking
         {
             get
