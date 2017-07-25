@@ -210,7 +210,7 @@ namespace System.Net.Sockets
                 {
                     if (NetEventSource.IsEnabled) NetEventSource.Info(this, $"handle:{handle} Following 'blockable' branch.");
 
-                    Console.WriteLine($"About to Close");
+                    Console.WriteLine($"InnerReleaseHandle: About to call Interop.Sys.Close");
 
                     errorCode = Interop.Sys.Close(handle);
                     if (errorCode == -1)

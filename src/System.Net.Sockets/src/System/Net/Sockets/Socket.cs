@@ -4553,6 +4553,8 @@ namespace System.Net.Sockets
                 return;
             }
 
+            Console.WriteLine("Enter Socket.Dispose");
+
             if (NetEventSource.IsEnabled)
             {
                 try
@@ -4571,6 +4573,8 @@ namespace System.Net.Sockets
                 sw.SpinOnce();
             }
 
+            Console.WriteLine($"_intCleanedUp set, last={last}");
+
             if (last == 1)
             {
                 if (NetEventSource.IsEnabled) NetEventSource.Exit(this);
@@ -4578,6 +4582,8 @@ namespace System.Net.Sockets
             }
 
             SetToDisconnected();
+
+            Console.WriteLine($"SetToDisconnected called");
 
             // Close the handle in one of several ways depending on the timeout.
             // Ignore ObjectDisposedException just in case the handle somehow gets disposed elsewhere.
@@ -4588,7 +4594,9 @@ namespace System.Net.Sockets
                 {
                     // Abortive.
                     if (NetEventSource.IsEnabled) NetEventSource.Info(this, "Calling _handle.Dispose()");
+                    Console.WriteLine($"Calling _handle.Dispose");
                     _handle.Dispose();
+                    Console.WriteLine($"_handle.Dispose returned");
                 }
                 else
                 {
