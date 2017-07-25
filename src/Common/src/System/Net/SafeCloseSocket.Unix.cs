@@ -189,9 +189,13 @@ namespace System.Net.Sockets
 
         private void InnerReleaseHandle()
         {
+            Console.WriteLine("Enter InnerReleaseHandle");
+
             if (_asyncContext != null)
             {
+                Console.WriteLine("InnerReleaseHandle: about to call _asyncContext.Close");
                 _asyncContext.Close();
+                Console.WriteLine("InnerReleaseHandle: _asyncContext.Close returned");
             }
         }
 
