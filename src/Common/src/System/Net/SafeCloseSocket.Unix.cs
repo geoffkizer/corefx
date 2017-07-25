@@ -194,7 +194,7 @@ namespace System.Net.Sockets
             if (_asyncContext != null)
             {
                 Console.WriteLine("InnerReleaseHandle: about to call _asyncContext.Close");
-                _asyncContext.Close();
+//                _asyncContext.Close();
                 Console.WriteLine("InnerReleaseHandle: _asyncContext.Close returned");
             }
         }
