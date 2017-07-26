@@ -1545,6 +1545,8 @@ namespace System.Net.Sockets
 
         public unsafe void HandleEvents(Interop.Sys.SocketEvents events)
         {
+            Console.WriteLine($"{GetHashCode():X}: In HandleEvents for {events}");
+
             if ((events & Interop.Sys.SocketEvents.Error) != 0)
             {
                 // Set the Read and Write flags as well; the processing for these events
