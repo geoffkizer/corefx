@@ -14,7 +14,7 @@ namespace System.Net.Sockets.Tests
 {
     public class SetNonBlockingTest
     {
-//        [Fact]
+        //        [Fact]
         public async void SetNonBlocking()
         {
             using (var server = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp))
@@ -63,7 +63,7 @@ namespace System.Net.Sockets.Tests
             }
         }
 
-        [Fact]
+        //        [Fact]
         public async void SetTimeout()
         {
             using (var server = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp))
@@ -108,6 +108,76 @@ namespace System.Net.Sockets.Tests
 
                     bool completed = receiveTask.Wait(5000);
                     Console.WriteLine($"Wait complete, time={DateTime.UtcNow - start}, completed={completed}");
+                }
+            }
+        }
+
+        [Fact]
+        public async void TestShutdownEffects_Close()
+        {
+            using (var server = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp))
+            {
+                server.BindToAnonymousPort(IPAddress.Loopback);
+                server.Listen(1);
+
+                Task serverTask = server.AcceptAsync();
+
+                EndPoint clientEndpoint = server.LocalEndPoint;
+                using (var client = new Socket(clientEndpoint.AddressFamily, SocketType.Stream, ProtocolType.Tcp))
+                {
+                    client.Connect(clientEndpoint);
+                    await serverTask;
+
+                    // Hang an async receive
+                    Task<int> receiveTask = client.ReceiveAsync(new ArraySegment<byte>(new byte[1]), SocketFlags.None);
+
+                    // Wait a bit and then change to nonblocking
+                    Thread.Sleep(1000);
+
+                    Console.WriteLine("TestShutdownEffects: About to Close");
+
+                    client.Close();
+
+                    Console.WriteLine("TestShutdownEffects: Closed");
+
+                    int result = await receiveTask;
+
+                    Console.WriteLine($"TestShutdownEffects: bytesReceived={result}");
+                }
+            }
+        }
+
+        [Fact]
+        public async void TestShutdownEffects_Shutdown()
+        {
+            using (var server = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp))
+            {
+                server.BindToAnonymousPort(IPAddress.Loopback);
+                server.Listen(1);
+
+                Task serverTask = server.AcceptAsync();
+
+                EndPoint clientEndpoint = server.LocalEndPoint;
+                using (var client = new Socket(clientEndpoint.AddressFamily, SocketType.Stream, ProtocolType.Tcp))
+                {
+                    client.Connect(clientEndpoint);
+                    await serverTask;
+
+                    // Hang an async receive
+                    Task<int> receiveTask = client.ReceiveAsync(new ArraySegment<byte>(new byte[1]), SocketFlags.None);
+
+                    // Wait a bit and then change to nonblocking
+                    Thread.Sleep(1000);
+
+                    Console.WriteLine("TestShutdownEffects: About to Shutdown");
+
+                    client.Shutdown(SocketShutdown.Both);
+
+                    Console.WriteLine("TestShutdownEffects: Shutdown returned");
+
+                    int result = await receiveTask;
+
+                    Console.WriteLine($"TestShutdownEffects: bytesReceived={result}");
                 }
             }
         }
