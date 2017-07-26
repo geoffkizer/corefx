@@ -112,8 +112,16 @@ namespace System.Net.Sockets.Tests
             }
         }
 
-        [Fact]
-        public async void TestShutdownEffects_Close()
+        [Theory]
+        [InlineData(true, false, false)]
+        [InlineData(false, true, false)]
+        [InlineData(true, true, false)]
+        [InlineData(false, false, false)]
+        [InlineData(true, false, true)]
+        [InlineData(false, true, true)]
+        [InlineData(true, true, true)]
+        [InlineData(false, false, true)]
+        public async void TestShutdownEffects(bool doReceive, bool doSend, bool doShutdown)
         {
             using (var server = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp))
             {
@@ -128,26 +136,55 @@ namespace System.Net.Sockets.Tests
                     client.Connect(clientEndpoint);
                     await serverTask;
 
-                    // Hang an async receive
-                    Task<int> receiveTask = client.ReceiveAsync(new ArraySegment<byte>(new byte[1]), SocketFlags.None);
+                    // Hang async ops
+                    Task<int> receiveTask = (doReceive ? client.ReceiveAsync(new ArraySegment<byte>(new byte[1]), SocketFlags.None) : null);
+                    Task<int> sendTask = (doSend ? client.SendAsync(new ArraySegment<byte>(new byte[1]), SocketFlags.None) : null);
 
-                    // Wait a bit and then change to nonblocking
                     Thread.Sleep(1000);
 
-                    Console.WriteLine("TestShutdownEffects: About to Close");
+                    if (doShutdown)
+                    {
+                        Console.WriteLine("TestShutdownEffects: About to Shutdown");
+                        client.Shutdown(SocketShutdown.Both);
+                        Console.WriteLine("TestShutdownEffects: Closed");
+                    }
+                    else
+                    {
+                        Console.WriteLine("TestShutdownEffects: About to Close");
+                        client.Close();
+                        Console.WriteLine("TestShutdownEffects: Closed");
+                    }
 
-                    client.Close();
+                    if (doReceive)
+                    {
+                        try
+                        {
+                            int result = await receiveTask;
+                            Console.WriteLine($"TestShutdownEffects Receive: bytes={result}");
+                        }
+                        catch (SocketException e)
+                        {
+                            Console.WriteLine($"TestShutdownEffects Receive: errorCode={e.SocketErrorCode}");
+                        }
+                    }
 
-                    Console.WriteLine("TestShutdownEffects: Closed");
-
-                    int result = await receiveTask;
-
-                    Console.WriteLine($"TestShutdownEffects: bytesReceived={result}");
+                    if (doSend)
+                    {
+                        try
+                        {
+                            int result = await sendTask;
+                            Console.WriteLine($"TestShutdownEffects Send: bytes={result}");
+                        }
+                        catch (SocketException e)
+                        {
+                            Console.WriteLine($"TestShutdownEffects Send: errorCode={e.SocketErrorCode}");
+                        }
+                    }
                 }
             }
         }
 
-        [Fact]
+//        [Fact]
         public async void TestShutdownEffects_Shutdown()
         {
             using (var server = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp))
