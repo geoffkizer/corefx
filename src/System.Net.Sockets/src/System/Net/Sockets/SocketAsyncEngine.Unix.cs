@@ -378,7 +378,7 @@ namespace System.Net.Sockets
         private bool TryRegister(SafeCloseSocket socket, IntPtr handle, out Interop.Error error)
         {
             error = Interop.Sys.TryChangeSocketEventRegistration(_port, socket, Interop.Sys.SocketEvents.None, 
-                Interop.Sys.SocketEvents.Read | Interop.Sys.SocketEvents.Write, handle);
+                Interop.Sys.SocketEvents.Read | Interop.Sys.SocketEvents.Write | Interop.Sys.SocketEvents.ReadClose | Interop.Sys.SocketEvents.Close, handle);
             return error == Interop.Error.SUCCESS;
         }
     }
