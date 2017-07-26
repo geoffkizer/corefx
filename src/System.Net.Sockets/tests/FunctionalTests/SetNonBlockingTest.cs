@@ -137,8 +137,25 @@ namespace System.Net.Sockets.Tests
                     await serverTask;
 
                     // Hang async ops
-                    Task<int> receiveTask = (doReceive ? client.ReceiveAsync(new ArraySegment<byte>(new byte[1]), SocketFlags.None) : null);
-                    Task<int> sendTask = (doSend ? client.SendAsync(new ArraySegment<byte>(new byte[1]), SocketFlags.None) : null);
+                    Task<int> receiveTask = null;
+                    if (doReceive)
+                    {
+                        receiveTask = client.ReceiveAsync(new ArraySegment<byte>(new byte[1]), SocketFlags.None);
+                    }
+
+                    Task<int> sendTask = null;
+                    if (doSend)
+                    {
+                        while (true)
+                        {
+                            sendTask = client.SendAsync(new ArraySegment<byte>(new byte[1]), SocketFlags.None);
+                            if (!sendTask.IsCompleted)
+                            {
+                                break;
+                            }
+                            await sendTask;
+                        }
+                    }
 
                     Thread.Sleep(1000);
 
@@ -146,7 +163,7 @@ namespace System.Net.Sockets.Tests
                     {
                         Console.WriteLine("TestShutdownEffects: About to Shutdown");
                         client.Shutdown(SocketShutdown.Both);
-                        Console.WriteLine("TestShutdownEffects: Closed");
+                        Console.WriteLine("TestShutdownEffects: Shutdown complete");
                     }
                     else
                     {
