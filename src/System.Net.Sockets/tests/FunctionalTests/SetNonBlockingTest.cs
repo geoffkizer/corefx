@@ -117,11 +117,11 @@ namespace System.Net.Sockets.Tests
         [InlineData(false, true, false)]
         [InlineData(true, true, false)]
         [InlineData(false, false, false)]
-        [InlineData(true, false, true)]
-        [InlineData(false, true, true)]
-        [InlineData(true, true, true)]
-        [InlineData(false, false, true)]
-        public async void TestShutdownEffects(bool doReceive, bool doSend, bool doShutdown)
+//        [InlineData(true, false, true)]
+//        [InlineData(false, true, true)]
+//        [InlineData(true, true, true)]
+//        [InlineData(false, false, true)]
+        public async void TestShutdownEffects_Async(bool doReceive, bool doSend, bool doShutdown)
         {
             using (var server = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp))
             {
@@ -146,9 +146,10 @@ namespace System.Net.Sockets.Tests
                     Task<int> sendTask = null;
                     if (doSend)
                     {
+                        byte[] sendBuffer = new byte[16 * 1024];
                         while (true)
                         {
-                            sendTask = client.SendAsync(new ArraySegment<byte>(new byte[1]), SocketFlags.None);
+                            sendTask = client.SendAsync(new ArraySegment<byte>(sendBuffer), SocketFlags.None);
                             if (!sendTask.IsCompleted)
                             {
                                 break;
@@ -201,7 +202,99 @@ namespace System.Net.Sockets.Tests
             }
         }
 
-//        [Fact]
+        // I really want something like the following tests:
+        // (1) Shutdown with pending (recv, recv async, send, send async) + force nonblocking
+        // (2) Close with same
+
+        [Theory]
+        [InlineData(true, false, false)]
+        [InlineData(false, true, false)]
+        [InlineData(true, true, false)]
+        [InlineData(false, false, false)]
+//        [InlineData(true, false, true)]
+//        [InlineData(false, true, true)]
+//        [InlineData(true, true, true)]
+//        [InlineData(false, false, true)]
+        public async void TestShutdownEffects_Sync(bool doReceive, bool doSend, bool doShutdown)
+        {
+            using (var server = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp))
+            {
+                server.BindToAnonymousPort(IPAddress.Loopback);
+                server.Listen(1);
+
+                Task serverTask = server.AcceptAsync();
+
+                EndPoint clientEndpoint = server.LocalEndPoint;
+                using (var client = new Socket(clientEndpoint.AddressFamily, SocketType.Stream, ProtocolType.Tcp))
+                {
+                    client.Connect(clientEndpoint);
+                    await serverTask;
+
+                    // Hang sync ops
+                    Task<int> receiveTask = null;
+                    if (doReceive)
+                    {
+                        receiveTask = Task.Run(() => client.Receive(new byte[1]));
+                    }
+
+                    Task sendTask = null;
+                    if (doSend)
+                    {
+                        sendTask = Task.Run(() =>
+                        {
+                            byte[] sendBuffer = new byte[16 * 1024];
+                            while (true)
+                            {
+                                client.Send(sendBuffer);
+                            }
+                        });
+                    }
+
+                    Thread.Sleep(1000);
+
+                    if (doShutdown)
+                    {
+                        Console.WriteLine("TestShutdownEffects: About to Shutdown");
+                        client.Shutdown(SocketShutdown.Both);
+                        Console.WriteLine("TestShutdownEffects: Shutdown complete");
+                    }
+                    else
+                    {
+                        Console.WriteLine("TestShutdownEffects: About to Close");
+                        client.Close();
+                        Console.WriteLine("TestShutdownEffects: Closed");
+                    }
+
+                    if (doReceive)
+                    {
+                        try
+                        {
+                            int result = await receiveTask;
+                            Console.WriteLine($"TestShutdownEffects Receive: bytes={result}");
+                        }
+                        catch (SocketException e)
+                        {
+                            Console.WriteLine($"TestShutdownEffects Receive: errorCode={e.SocketErrorCode}");
+                        }
+                    }
+
+                    if (doSend)
+                    {
+                        try
+                        {
+                            await sendTask;
+                            Console.WriteLine($"TestShutdownEffects Send completed");
+                        }
+                        catch (SocketException e)
+                        {
+                            Console.WriteLine($"TestShutdownEffects Send: errorCode={e.SocketErrorCode}");
+                        }
+                    }
+                }
+            }
+        }
+
+        //        [Fact]
         public async void TestShutdownEffects_Shutdown()
         {
             using (var server = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp))

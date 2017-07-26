@@ -1336,15 +1336,20 @@ namespace System.Net.Sockets
 
                 if (socketError == SocketError.Success)
                 {
+                    Console.WriteLine($"Async completion succeeded, bytes={numBytes}");
+
                     FreeNativeOverlapped(nativeOverlapped);                        
                     FinishOperationAsyncSuccess((int)numBytes, SocketFlags.None);
                 }
                 else
                 {
+                    Console.WriteLine($"Async completion failed, error={socketError}, hex={((int)socketError):X}");
+
                     if (socketError != SocketError.OperationAborted)
                     {
                         if (_currentSocket.CleanedUp)
                         {
+                            Console.WriteLine($"Socket is CleanedUp, set error=OperationAborted");
                             socketError = SocketError.OperationAborted;
                         }
                         else
@@ -1360,6 +1365,9 @@ namespace System.Net.Sockets
                                     false,
                                     out socketFlags);
                                 socketError = SocketPal.GetLastSocketError();
+
+                                Console.WriteLine($"GetLastSocketError returned {socketError}");
+
                             }
                             catch
                             {
