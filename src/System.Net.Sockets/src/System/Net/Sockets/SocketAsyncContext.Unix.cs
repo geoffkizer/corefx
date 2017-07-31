@@ -453,7 +453,7 @@ namespace System.Net.Sockets
                 // For now, don't take the queue lock; I can fix this later if necessary
                 State = QueueState.Stopped;
 
-#if 
+#if false
                 lock (_queueLock)
                 {
                     State = QueueState.Stopped;
