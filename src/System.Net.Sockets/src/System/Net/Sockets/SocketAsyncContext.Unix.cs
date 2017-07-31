@@ -549,6 +549,7 @@ namespace System.Net.Sockets
         private bool TryBeginOperation<TOperation>(ref OperationQueue<TOperation> queue, TOperation operation, Interop.Sys.SocketEvents events, bool maintainOrder, out bool isStopped)
             where TOperation : AsyncOperation
         {
+            Debug.Assert(_nonBlockingSet);
             // TODO: This should happen outside of queue lock.
             if (!_registered)
             {

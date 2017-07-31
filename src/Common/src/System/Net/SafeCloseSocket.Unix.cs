@@ -230,6 +230,11 @@ namespace System.Net.Sockets
             {
                 int errorCode;
 
+                // Call shutdown on the socket before closing.
+                // If we have an AsyncContext, then this will cause epoll notifications to happen,
+                // which will allow us to deal with any outstanding I/O and clean up the AsyncContext.
+                Interop.Sys.Shutdown(handle, SocketShutdown.Both);
+
                 // If _blockable was set in BlockingRelease, it's safe to block here, which means
                 // we can honor the linger options set on the socket.  It also means closesocket() might return WSAEWOULDBLOCK, in which
                 // case we need to do some recovery.
