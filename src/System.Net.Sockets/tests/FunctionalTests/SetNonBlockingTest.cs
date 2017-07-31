@@ -382,6 +382,10 @@ namespace System.Net.Sockets.Tests
             {
                 Console.WriteLine($"{s}: errorCode={e.SocketErrorCode}");
             }
+            catch (Exception e)
+            {
+                Console.WriteLine($"{s}: {e.GetType().FullName}");
+            }
         }
 
         private async Task ShowResult(string s, Task t)
@@ -402,6 +406,52 @@ namespace System.Net.Sockets.Tests
             {
                 Console.WriteLine($"{s}: errorCode={e.SocketErrorCode}");
             }
+            catch (Exception e)
+            {
+                Console.WriteLine($"{s}: {e.GetType().FullName}");
+            }
+        }
+
+        private async Task InvokeAndShowResult(string s, Func<Task<int>> f)
+        {
+            Task<int> t;
+            try
+            {
+                t = f();
+            }
+            catch (SocketException e)
+            {
+                Console.WriteLine($"{s}: Synchronous SocketException, errorCode={e.SocketErrorCode}");
+                return;
+            }
+            catch (Exception e)
+            {
+                Console.WriteLine($"{s}: Synchronous {e.GetType().FullName}");
+                return;
+            }
+
+            await ShowResult(s, t);
+        }
+
+        private async Task InvokeAndShowResult(string s, Func<Task> f)
+        {
+            Task t;
+            try
+            {
+                t = f();
+            }
+            catch (SocketException e)
+            {
+                Console.WriteLine($"{s}: Synchronous SocketException, errorCode={e.SocketErrorCode}");
+                return;
+            }
+            catch (Exception e)
+            {
+                Console.WriteLine($"{s}: Synchronous {e.GetType().FullName}");
+                return;
+            }
+
+            await ShowResult(s, t);
         }
 
         [Fact]
@@ -497,8 +547,7 @@ namespace System.Net.Sockets.Tests
                     }
                     Console.WriteLine("ReceiveAfterClose: Closed");
 
-                    Task<int> t = ReceiveAsync(client, new ArraySegment<byte>(new byte[1]));
-                    await ShowResult("ReceiveAfterClose", t);
+                    await InvokeAndShowResult("ReceiveAfterClose", () => ReceiveAsync(client, new ArraySegment<byte>(new byte[1])));
                 }
             }
         }
@@ -532,8 +581,7 @@ namespace System.Net.Sockets.Tests
                     }
                     Console.WriteLine("SendAfterClose: Closed");
 
-                    Task t = SendAsync(client, new ArraySegment<byte>(new byte[1]));
-                    await ShowResult("SendAfterClose", t);
+                    await InvokeAndShowResult("SendAfterClose", () => SendAsync(client, new ArraySegment<byte>(new byte[1])));
                 }
             }
         }
@@ -613,8 +661,7 @@ namespace System.Net.Sockets.Tests
                     client.Shutdown(SocketShutdown.Receive);
                     Console.WriteLine("ReceiveAfterShutdown: Shutdown completed");
 
-                    Task<int> t = ReceiveAsync(client, new ArraySegment<byte>(new byte[1]));
-                    await ShowResult("ReceiveAfterShutdown", t);
+                    await InvokeAndShowResult("ReceiveAfterShutdown", () => ReceiveAsync(client, new ArraySegment<byte>(new byte[1])));
                 }
             }
         }
@@ -642,8 +689,7 @@ namespace System.Net.Sockets.Tests
                     client.Shutdown(SocketShutdown.Send);
                     Console.WriteLine("SendAfterShutdown: Shutdown completed");
 
-                    Task t = SendAsync(client, new ArraySegment<byte>(new byte[1]));
-                    await ShowResult("SendAfterClose", t);
+                    await InvokeAndShowResult("SendAfterClose", () => SendAsync(client, new ArraySegment<byte>(new byte[1])));
                 }
             }
         }
