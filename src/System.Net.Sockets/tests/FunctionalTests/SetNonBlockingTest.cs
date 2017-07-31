@@ -693,6 +693,70 @@ namespace System.Net.Sockets.Tests
                 }
             }
         }
+
+        [Fact]
+        public async Task ShutdownReceiveTwice()
+        {
+            using (var server = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp))
+            {
+                server.BindToAnonymousPort(IPAddress.Loopback);
+                server.Listen(1);
+
+                Task<Socket> serverTask = AcceptAsync(server);
+
+                using (var client = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp))
+                {
+                    await ConnectAsync(client, server.LocalEndPoint);
+                    Socket accepted = await serverTask;
+
+                    Task<int> receiveOne = ReceiveAsync(client, new ArraySegment<byte>(new byte[1]));
+                    await SendAsync(accepted, new ArraySegment<byte>(new byte[1]));
+                    Assert.Equal(1, await receiveOne);
+
+                    Console.WriteLine("ShutdownReceiveTwice: About to Shutdown");
+                    client.Shutdown(SocketShutdown.Receive);
+                    Console.WriteLine("ShutdownReceiveTwice: Shutdown completed");
+
+                    Thread.Sleep(1000);
+
+                    Console.WriteLine("ShutdownReceiveTwice: About to Shutdown again");
+                    client.Shutdown(SocketShutdown.Receive);
+                    Console.WriteLine("ShutdownReceiveTwice: Shutdown completed again");
+                }
+            }
+        }
+
+        [Fact]
+        public async Task ShutdownSendTwice()
+        {
+            using (var server = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp))
+            {
+                server.BindToAnonymousPort(IPAddress.Loopback);
+                server.Listen(1);
+
+                Task<Socket> serverTask = AcceptAsync(server);
+
+                using (var client = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp))
+                {
+                    await ConnectAsync(client, server.LocalEndPoint);
+                    Socket accepted = await serverTask;
+
+                    Task sendOne = SendAsync(client, new ArraySegment<byte>(new byte[1]));
+                    Assert.Equal(1, await ReceiveAsync(accepted, new ArraySegment<byte>(new byte[1])));
+                    await sendOne;
+
+                    Console.WriteLine("ShutdownSendTwice: About to Shutdown");
+                    client.Shutdown(SocketShutdown.Send);
+                    Console.WriteLine("ShutdownSendTwice: Shutdown completed");
+
+                    Thread.Sleep(1000);
+
+                    Console.WriteLine("ShutdownSendTwice: About to Shutdown again");
+                    client.Shutdown(SocketShutdown.Send);
+                    Console.WriteLine("ShutdownSendTwice: Shutdown completed again");
+                }
+            }
+        }
     }
 
     public sealed class ShutdownEffectsSync : ShutdownEffects<SocketHelperSync> { }
