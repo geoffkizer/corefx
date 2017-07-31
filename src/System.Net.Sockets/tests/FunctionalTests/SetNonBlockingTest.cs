@@ -380,7 +380,13 @@ namespace System.Net.Sockets.Tests
                     Thread.Sleep(1000);
 
                     Console.WriteLine("TestClose: About to Close");
-                    client.Close();
+
+                    bool closed = Task.Run(() => client.Close()).Wait(1000);
+                    if (!closed)
+                    {
+                        Console.WriteLine("TestClose: Close is hung");
+                        return;
+                    }
                     Console.WriteLine("TestClose: Closed");
 
                     if (doReceive)
