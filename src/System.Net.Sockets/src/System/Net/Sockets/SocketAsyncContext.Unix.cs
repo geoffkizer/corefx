@@ -453,12 +453,13 @@ namespace System.Net.Sockets
                 lock (_queueLock)
                 {
                     State = QueueState.Stopped;
-
+#if false
                     TOperation op;
                     while (TryDequeue(out op))
                     {
                         op.AbortAsync();
                     }
+#endif
                 }
             }
         }
@@ -510,17 +511,25 @@ namespace System.Net.Sockets
             }
         }
 
+        // TODO: Rename to Stop, I think
         public void Close()
         {
-            // Drain queues
+            // This is called as part of the Close process on the Socket, before we do Shutdown and Close.
+            // The subsequent Shutdown will cause epoll notifications that will process any queued I/O.
+
+            // TODO: rename
             _sendQueue.StopAndAbort();
             _receiveQueue.StopAndAbort();
+
+            // TODO: I don't want to unregister here, I want to allow event delivery
+            // Just disable unregistration for now
+            // Instead, we need to detect the Stopped state in HandleEvents and deregister there
 
             lock (_registerLock)
             { 
                 // Freeing the token will prevent any future event delivery.  This socket will be unregistered
                 // from the event port automatically by the OS when it's closed.
-                _asyncEngineToken.Free();
+//                _asyncEngineToken.Free();
             }
         }
 

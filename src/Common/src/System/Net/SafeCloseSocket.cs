@@ -140,6 +140,7 @@ namespace System.Net.Sockets
             if (NetEventSource.IsEnabled) NetEventSource.Info(this, $"_innerSocket={_innerSocket}");
 
             _released = true;
+
             InnerSafeCloseSocket innerSocket = _innerSocket == null ? null : Interlocked.Exchange<InnerSafeCloseSocket>(ref _innerSocket, null);
 
 #if DEBUG
@@ -179,6 +180,7 @@ namespace System.Net.Sockets
                     innerSocket.BlockingRelease();
                 }
 
+                // TODO: Pretty sure this is unnecessary, since it's called above.  Verify.
                 InnerReleaseHandle();
 #if DEBUG
             }
