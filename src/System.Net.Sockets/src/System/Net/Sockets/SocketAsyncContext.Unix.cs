@@ -450,6 +450,10 @@ namespace System.Net.Sockets
 
             public void StopAndAbort()
             {
+                // For now, don't take the queue lock; I can fix this later if necessary
+                State = QueueState.Stopped;
+
+#if 
                 lock (_queueLock)
                 {
                     State = QueueState.Stopped;
@@ -461,6 +465,7 @@ namespace System.Net.Sockets
                     }
 #endif
                 }
+#endif
             }
         }
 
