@@ -431,8 +431,12 @@ namespace System.Net.Sockets
             {
                 lock (_queueLock)
                 {
+                    // Don't check for IsStopped, just allow stuff to be processed
+                    // TODO: If this works, can I take queue lock down below?  Hopefull
+#if false
                     if (IsStopped)
                         return;
+#endif
 
                     State = QueueState.Set;
 
