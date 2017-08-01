@@ -482,11 +482,12 @@ namespace System.Net.Sockets
 
         private void Register()
         {
-            Debug.Assert(_nonBlockingSet);
             lock (_registerLock)
             {
                 if (!_registered)
                 {
+                    SetNonBlocking();
+
                     Debug.Assert(!_asyncEngineToken.WasAllocated);
                     var token = new SocketAsyncEngine.Token(this);
 
@@ -524,6 +525,8 @@ namespace System.Net.Sockets
             }
         }
 
+        // Note that this routine is also called from SafeCloseSocket.
+        // So while it's always called under the registerLock from this class, it isn't when called from SafeCloseSocket.
         public void SetNonBlocking()
         {
             //
@@ -546,14 +549,22 @@ namespace System.Net.Sockets
             }
         }
 
-        private bool TryBeginOperation<TOperation>(ref OperationQueue<TOperation> queue, TOperation operation, Interop.Sys.SocketEvents events, bool maintainOrder, out bool isStopped)
-            where TOperation : AsyncOperation
+        private void EnsureRegistered()
         {
-            // TODO: This should happen outside of queue lock.
             if (!_registered)
             {
                 Register();
             }
+
+            Debug.Assert(_nonBlockingSet);
+            Debug.Assert(_registered);
+        }
+
+        private bool TryBeginOperation<TOperation>(ref OperationQueue<TOperation> queue, TOperation operation, bool maintainOrder, out bool isStopped)
+            where TOperation : AsyncOperation
+        {
+            // By the time we get here, the caller should have assured that we are registered.
+            Debug.Assert(_registered);
 
             // Exactly one of the two queue locks must be held by the caller
             Debug.Assert(Monitor.IsEntered(_sendQueue.QueueLock) ^ Monitor.IsEntered(_receiveQueue.QueueLock));
@@ -608,7 +619,7 @@ namespace System.Net.Sockets
                 {
                     lock (_receiveQueue.QueueLock)
                     {
-                        if (TryBeginOperation(ref _receiveQueue, operation, Interop.Sys.SocketEvents.Read, maintainOrder: false, isStopped: out isStopped))
+                        if (TryBeginOperation(ref _receiveQueue, operation, maintainOrder: false, isStopped: out isStopped))
                         {
                             break;
                         }
@@ -646,7 +657,7 @@ namespace System.Net.Sockets
             Debug.Assert(socketAddressLen > 0, $"Unexpected socketAddressLen: {socketAddressLen}");
             Debug.Assert(callback != null, "Expected non-null callback");
 
-            SetNonBlocking();
+            EnsureRegistered();
 
             SocketError errorCode;
             if (SocketPal.TryCompleteAccept(_socket, socketAddress, ref socketAddressLen, out acceptedFd, out errorCode))
@@ -667,7 +678,7 @@ namespace System.Net.Sockets
             {
                 lock (_receiveQueue.QueueLock)
                 {
-                    if (TryBeginOperation(ref _receiveQueue, operation, Interop.Sys.SocketEvents.Read, maintainOrder: false, isStopped: out isStopped))
+                    if (TryBeginOperation(ref _receiveQueue, operation, maintainOrder: false, isStopped: out isStopped))
                     {
                         break;
                     }
@@ -714,7 +725,7 @@ namespace System.Net.Sockets
                 {
                     lock (_sendQueue.QueueLock)
                     {
-                        if (TryBeginOperation(ref _sendQueue, operation, Interop.Sys.SocketEvents.Write, maintainOrder: false, isStopped: out isStopped))
+                        if (TryBeginOperation(ref _sendQueue, operation, maintainOrder: false, isStopped: out isStopped))
                         {
                             break;
                         }
@@ -741,7 +752,7 @@ namespace System.Net.Sockets
             Debug.Assert(socketAddressLen > 0, $"Unexpected socketAddressLen: {socketAddressLen}");
             Debug.Assert(callback != null, "Expected non-null callback");
 
-            SetNonBlocking();
+            EnsureRegistered();
 
             SocketError errorCode;
             if (SocketPal.TryStartConnect(_socket, socketAddress, socketAddressLen, out errorCode))
@@ -762,7 +773,7 @@ namespace System.Net.Sockets
             {
                 lock (_sendQueue.QueueLock)
                 {
-                    if (TryBeginOperation(ref _sendQueue, operation, Interop.Sys.SocketEvents.Write, maintainOrder: false, isStopped: out isStopped))
+                    if (TryBeginOperation(ref _sendQueue, operation, maintainOrder: false, isStopped: out isStopped))
                     {
                         break;
                     }
@@ -827,7 +838,7 @@ namespace System.Net.Sockets
                     };
 
                     bool isStopped;
-                    while (!TryBeginOperation(ref _receiveQueue, operation, Interop.Sys.SocketEvents.Read, maintainOrder: true, isStopped: out isStopped))
+                    while (!TryBeginOperation(ref _receiveQueue, operation, maintainOrder: true, isStopped: out isStopped))
                     {
                         if (isStopped)
                         {
@@ -860,7 +871,7 @@ namespace System.Net.Sockets
 
         public SocketError ReceiveFromAsync(byte[] buffer, int offset, int count, SocketFlags flags, byte[] socketAddress, ref int socketAddressLen, out int bytesReceived, out SocketFlags receivedFlags, Action<int, byte[], int, SocketFlags, SocketError> callback)
         {
-            SetNonBlocking();
+            EnsureRegistered();
 
             lock (_receiveQueue.QueueLock)
             {
@@ -885,7 +896,7 @@ namespace System.Net.Sockets
                 };
 
                 bool isStopped;
-                while (!TryBeginOperation(ref _receiveQueue, operation, Interop.Sys.SocketEvents.Read, maintainOrder: true, isStopped: out isStopped))
+                while (!TryBeginOperation(ref _receiveQueue, operation, maintainOrder: true, isStopped: out isStopped))
                 {
                     if (isStopped)
                     {
@@ -952,7 +963,7 @@ namespace System.Net.Sockets
                     };
 
                     bool isStopped;
-                    while (!TryBeginOperation(ref _receiveQueue, operation, Interop.Sys.SocketEvents.Read, maintainOrder: true, isStopped: out isStopped))
+                    while (!TryBeginOperation(ref _receiveQueue, operation, maintainOrder: true, isStopped: out isStopped))
                     {
                         if (isStopped)
                         {
@@ -986,7 +997,7 @@ namespace System.Net.Sockets
 
         public SocketError ReceiveFromAsync(IList<ArraySegment<byte>> buffers, SocketFlags flags, byte[] socketAddress, ref int socketAddressLen, out int bytesReceived, out SocketFlags receivedFlags, Action<int, byte[], int, SocketFlags, SocketError> callback)
         {
-            SetNonBlocking();
+            EnsureRegistered();
 
             ReceiveOperation operation;
 
@@ -1010,7 +1021,7 @@ namespace System.Net.Sockets
                 };
 
                 bool isStopped;
-                while (!TryBeginOperation(ref _receiveQueue, operation, Interop.Sys.SocketEvents.Read, maintainOrder: true, isStopped: out isStopped))
+                while (!TryBeginOperation(ref _receiveQueue, operation, maintainOrder: true, isStopped: out isStopped))
                 {
                     if (isStopped)
                     {
@@ -1072,7 +1083,7 @@ namespace System.Net.Sockets
                     };
 
                     bool isStopped;
-                    while (!TryBeginOperation(ref _receiveQueue, operation, Interop.Sys.SocketEvents.Read, maintainOrder: true, isStopped: out isStopped))
+                    while (!TryBeginOperation(ref _receiveQueue, operation, maintainOrder: true, isStopped: out isStopped))
                     {
                         if (isStopped)
                         {
@@ -1109,7 +1120,7 @@ namespace System.Net.Sockets
 
         public SocketError ReceiveMessageFromAsync(byte[] buffer, IList<ArraySegment<byte>> buffers, int offset, int count, SocketFlags flags, byte[] socketAddress, ref int socketAddressLen, bool isIPv4, bool isIPv6, out int bytesReceived, out SocketFlags receivedFlags, out IPPacketInformation ipPacketInformation, Action<int, byte[], int, SocketFlags, IPPacketInformation, SocketError> callback)
         {
-            SetNonBlocking();
+            EnsureRegistered();
 
             lock (_receiveQueue.QueueLock)
             {
@@ -1137,7 +1148,7 @@ namespace System.Net.Sockets
                 };
 
                 bool isStopped;
-                while (!TryBeginOperation(ref _receiveQueue, operation, Interop.Sys.SocketEvents.Read, maintainOrder: true, isStopped: out isStopped))
+                while (!TryBeginOperation(ref _receiveQueue, operation, maintainOrder: true, isStopped: out isStopped))
                 {
                     if (isStopped)
                     {
@@ -1210,7 +1221,7 @@ namespace System.Net.Sockets
                     };
 
                     bool isStopped;
-                    while (!TryBeginOperation(ref _sendQueue, operation, Interop.Sys.SocketEvents.Write, maintainOrder: true, isStopped: out isStopped))
+                    while (!TryBeginOperation(ref _sendQueue, operation, maintainOrder: true, isStopped: out isStopped))
                     {
                         if (isStopped)
                         {
@@ -1238,7 +1249,7 @@ namespace System.Net.Sockets
 
         public SocketError SendToAsync(byte[] buffer, int offset, int count, SocketFlags flags, byte[] socketAddress, ref int socketAddressLen, out int bytesSent, Action<int, byte[], int, SocketFlags, SocketError> callback)
         {
-            SetNonBlocking();
+            EnsureRegistered();
 
             lock (_sendQueue.QueueLock)
             {
@@ -1265,7 +1276,7 @@ namespace System.Net.Sockets
                 };
 
                 bool isStopped;
-                while (!TryBeginOperation(ref _sendQueue, operation, Interop.Sys.SocketEvents.Write, maintainOrder: true, isStopped: out isStopped))
+                while (!TryBeginOperation(ref _sendQueue, operation, maintainOrder: true, isStopped: out isStopped))
                 {
                     if (isStopped)
                     {
@@ -1331,7 +1342,7 @@ namespace System.Net.Sockets
                     };
 
                     bool isStopped;
-                    while (!TryBeginOperation(ref _sendQueue, operation, Interop.Sys.SocketEvents.Write, maintainOrder: true, isStopped: out isStopped))
+                    while (!TryBeginOperation(ref _sendQueue, operation, maintainOrder: true, isStopped: out isStopped))
                     {
                         if (isStopped)
                         {
@@ -1361,7 +1372,7 @@ namespace System.Net.Sockets
 
         public SocketError SendToAsync(IList<ArraySegment<byte>> buffers, SocketFlags flags, byte[] socketAddress, ref int socketAddressLen, out int bytesSent, Action<int, byte[], int, SocketFlags, SocketError> callback)
         {
-            SetNonBlocking();
+            EnsureRegistered();
 
             lock (_sendQueue.QueueLock)
             {
@@ -1390,7 +1401,7 @@ namespace System.Net.Sockets
                 };
 
                 bool isStopped;
-                while (!TryBeginOperation(ref _sendQueue, operation, Interop.Sys.SocketEvents.Write, maintainOrder: true, isStopped: out isStopped))
+                while (!TryBeginOperation(ref _sendQueue, operation, maintainOrder: true, isStopped: out isStopped))
                 {
                     if (isStopped)
                     {
@@ -1440,7 +1451,7 @@ namespace System.Net.Sockets
                     };
 
                     bool isStopped;
-                    while (!TryBeginOperation(ref _sendQueue, operation, Interop.Sys.SocketEvents.Write, maintainOrder: true, isStopped: out isStopped))
+                    while (!TryBeginOperation(ref _sendQueue, operation, maintainOrder: true, isStopped: out isStopped))
                     {
                         if (isStopped)
                         {
@@ -1468,7 +1479,7 @@ namespace System.Net.Sockets
 
         public SocketError SendFileAsync(SafeFileHandle fileHandle, long offset, long count, out long bytesSent, Action<long, SocketError> callback)
         {
-            SetNonBlocking();
+            EnsureRegistered();
 
             lock (_sendQueue.QueueLock)
             {
@@ -1492,7 +1503,7 @@ namespace System.Net.Sockets
                 };
 
                 bool isStopped;
-                while (!TryBeginOperation(ref _sendQueue, operation, Interop.Sys.SocketEvents.Write, maintainOrder: true, isStopped: out isStopped))
+                while (!TryBeginOperation(ref _sendQueue, operation, maintainOrder: true, isStopped: out isStopped))
                 {
                     if (isStopped)
                     {
