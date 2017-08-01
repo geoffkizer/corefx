@@ -431,10 +431,15 @@ namespace System.Net.Sockets
             {
                 lock (_queueLock)
                 {
+#if false
                     if (IsStopped)
                         return;
 
                     State = QueueState.Set;
+#else
+                    if (!IsStopped)
+                        State = QueueState.Set;
+#endif
 
                     TOperation op;
                     while (TryDequeue(out op))
@@ -454,11 +459,13 @@ namespace System.Net.Sockets
                 {
                     State = QueueState.Stopped;
 
+#if false
                     TOperation op;
                     while (TryDequeue(out op))
                     {
                         op.AbortAsync();
                     }
+#endif
                 }
             }
         }
@@ -1537,6 +1544,12 @@ namespace System.Net.Sockets
             if ((events & Interop.Sys.SocketEvents.Write) != 0)
             {
                 _sendQueue.Complete(this);
+            }
+
+            if (Volatile.Read(ref _isStopped))
+            {
+                Debug.Assert(_receiveQueue.IsEmpty, "Context stopped but _receiveQueue is not empty");
+                Debug.Assert(_sendQueue.IsEmpty, "Context stopped but _sendQueue is not empty");
             }
         }
     }
