@@ -469,6 +469,7 @@ namespace System.Net.Sockets
         private SocketAsyncEngine.Token _asyncEngineToken;
         private bool _registered;
         private bool _nonBlockingSet;
+        private bool _isStopped;
 
         private readonly object _registerLock = new object();
 
@@ -512,6 +513,14 @@ namespace System.Net.Sockets
 
         public void Close()
         {
+            // Temp test
+            if (_isStopped)
+            {
+                throw new InvalidOperationException("AsyncContext is already stopped");
+            }
+
+            Volatile.Write(ref _isStopped, true);
+
             // Drain queues
             _sendQueue.StopAndAbort();
             _receiveQueue.StopAndAbort();
