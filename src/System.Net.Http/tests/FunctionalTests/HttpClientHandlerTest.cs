@@ -26,7 +26,7 @@ namespace System.Net.Http.Functional.Tests
 
     // Note:  Disposing the HttpClient object automatically disposes the handler within. So, it is not necessary
     // to separately Dispose (or have a 'using' statement) for the handler.
-    public class HttpClientHandlerTest
+    public class HttpClientHandlerTest : RemoteExecutorTestBase
     {
         readonly ITestOutputHelper _output;
         private const string ExpectedContent = "Test contest";
@@ -42,12 +42,14 @@ namespace System.Net.Http.Functional.Tests
         public static readonly object[][] CompressedServers = Configuration.Http.CompressedServers;
         public static readonly object[][] HeaderValueAndUris = {
             new object[] { "X-CustomHeader", "x-value", Configuration.Http.RemoteEchoServer },
-            new object[] { "X-Cust-Header-NoValue", "" , Configuration.Http.RemoteEchoServer },
             new object[] { "X-CustomHeader", "x-value", Configuration.Http.RedirectUriForDestinationUri(
                 secure:false,
                 statusCode:302,
                 destinationUri:Configuration.Http.RemoteEchoServer,
                 hops:1) },
+        };
+        public static readonly object[][] HeaderWithEmptyValueAndUris = {
+            new object[] { "X-Cust-Header-NoValue", "" , Configuration.Http.RemoteEchoServer },
             new object[] { "X-Cust-Header-NoValue", "" , Configuration.Http.RedirectUriForDestinationUri(
                 secure:false,
                 statusCode:302,
@@ -63,6 +65,28 @@ namespace System.Net.Http.Functional.Tests
             new object[] { 302 },
             new object[] { 303 },
             new object[] { 307 }
+        };
+
+        public static readonly object[][] RedirectStatusCodesOldMethodsNewMethods = {
+            new object[] { 300, "GET", "GET" },
+            new object[] { 300, "POST", "GET" },
+            new object[] { 300, "HEAD", "HEAD" },
+
+            new object[] { 301, "GET", "GET" },
+            new object[] { 301, "POST", "GET" },
+            new object[] { 301, "HEAD", "HEAD" },
+
+            new object[] { 302, "GET", "GET" },
+            new object[] { 302, "POST", "GET" },
+            new object[] { 302, "HEAD", "HEAD" },
+
+            new object[] { 303, "GET", "GET" },
+            new object[] { 303, "POST", "GET" },
+            new object[] { 303, "HEAD", "HEAD" },
+
+            new object[] { 307, "GET", "GET" },
+            new object[] { 307, "POST", "POST" },
+            new object[] { 307, "HEAD", "HEAD" },
         };
 
         // Standard HTTP methods defined in RFC7231: http://tools.ietf.org/html/rfc7231#section-4.3
@@ -112,6 +136,7 @@ namespace System.Net.Http.Functional.Tests
                 Assert.NotNull(cookies);
                 Assert.Equal(0, cookies.Count);
                 Assert.Null(handler.Credentials);
+                Assert.Equal(50, handler.MaxAutomaticRedirections);
                 Assert.NotNull(handler.Properties);
                 Assert.Equal(null, handler.Proxy);
                 Assert.True(handler.SupportsAutomaticDecompression);
@@ -128,7 +153,6 @@ namespace System.Net.Http.Functional.Tests
             using (var handler = new HttpClientHandler())
             {
                 // Same as .NET Framework (Desktop).
-                Assert.Equal(50, handler.MaxAutomaticRedirections);
                 Assert.Equal(64, handler.MaxResponseHeadersLength);
                 Assert.False(handler.PreAuthenticate);
                 Assert.True(handler.SupportsProxy);
@@ -150,7 +174,7 @@ namespace System.Net.Http.Functional.Tests
             using (var handler = new HttpClientHandler())
             {
                 Assert.True(handler.CheckCertificateRevocationList);
-                Assert.Equal(10, handler.MaxAutomaticRedirections);
+                Assert.Equal(0, handler.MaxRequestContentBufferSize);
                 Assert.Equal(-1, handler.MaxResponseHeadersLength);
                 Assert.True(handler.PreAuthenticate);
                 Assert.Equal(SslProtocols.None, handler.SslProtocols);
@@ -177,29 +201,29 @@ namespace System.Net.Http.Functional.Tests
             }
         }
 
-        [ActiveIssue(20010, TargetFrameworkMonikers.Uap)]
-        [SkipOnTargetFramework(TargetFrameworkMonikers.NetFramework, "MaxRequestContentBufferSize not used on .NET Core due to architecture differences")]
-        [Fact]
-        public void MaxRequestContentBufferSize_Get_ReturnsZero()
+        [Theory]
+        [InlineData(-1)]
+        [InlineData(0)]
+        public void MaxAutomaticRedirections_InvalidValue_Throws(int redirects)
         {
             using (var handler = new HttpClientHandler())
             {
-                Assert.Equal(0, handler.MaxRequestContentBufferSize);
+                Assert.Throws<ArgumentOutOfRangeException>(() => handler.MaxAutomaticRedirections = redirects);
             }
         }
 
-        [ActiveIssue(20010, TargetFrameworkMonikers.Uap)]
-        [SkipOnTargetFramework(TargetFrameworkMonikers.NetFramework, "MaxRequestContentBufferSize not used on .NET Core due to architecture differences")]
-        [Fact]
-        public void MaxRequestContentBufferSize_Set_ThrowsPlatformNotSupportedException()
+        [Theory]
+        [InlineData(-1)]
+        [InlineData((long)int.MaxValue + (long)1)]
+        public void MaxRequestContentBufferSize_SetInvalidValue_ThrowsArgumentOutOfRangeException(long value)
         {
             using (var handler = new HttpClientHandler())
             {
-                Assert.Throws<PlatformNotSupportedException>(() => handler.MaxRequestContentBufferSize = 1024);
+                Assert.Throws<ArgumentOutOfRangeException>(() => handler.MaxRequestContentBufferSize = value);
             }
         }
 
-        [ActiveIssue(20010, TargetFrameworkMonikers.Uap)]
+        [SkipOnTargetFramework(TargetFrameworkMonikers.Uap, "UAP will send default credentials based on other criteria.")]
         [Theory]
         [InlineData(false)]
         [InlineData(true)]
@@ -246,7 +270,6 @@ namespace System.Net.Http.Functional.Tests
             }
         }
 
-        [ActiveIssue(20010, TargetFrameworkMonikers.Uap)]
         [OuterLoop] // TODO: Issue #11345
         [Theory, MemberData(nameof(EchoServers))]
         public async Task SendAsync_SimpleGet_Success(Uri remoteServer)
@@ -264,7 +287,24 @@ namespace System.Net.Http.Functional.Tests
             }
         }
 
-        [ActiveIssue(20010, TargetFrameworkMonikers.Uap)]
+        [ActiveIssue(22158, TargetFrameworkMonikers.Uap)] 
+        [OuterLoop] // TODO: Issue #11345
+        [Fact]
+        public async Task GetAsync_IPv6LinkLocalAddressUri_Success()
+        {
+            using (var client = new HttpClient())
+            {
+                var options = new LoopbackServer.Options { Address = LoopbackServer.GetIPv6LinkLocalAddress() };
+                await LoopbackServer.CreateServerAsync(async (server, url) =>
+                {
+                    _output.WriteLine(url.ToString());
+                    await TestHelper.WhenAllCompletedOrAnyFailed(
+                        LoopbackServer.ReadRequestAndSendResponseAsync(server, options: options),
+                        client.GetAsync(url));
+                }, options);
+            }
+        }
+
         [OuterLoop] // TODO: Issue #11345
         [Theory]
         [MemberData(nameof(GetAsync_IPBasedUri_Success_MemberData))]
@@ -275,6 +315,7 @@ namespace System.Net.Http.Functional.Tests
                 var options = new LoopbackServer.Options { Address = address };
                 await LoopbackServer.CreateServerAsync(async (server, url) =>
                 {
+                    _output.WriteLine(url.ToString());
                     await TestHelper.WhenAllCompletedOrAnyFailed(
                         LoopbackServer.ReadRequestAndSendResponseAsync(server, options: options),
                         client.GetAsync(url));
@@ -284,7 +325,7 @@ namespace System.Net.Http.Functional.Tests
 
         public static IEnumerable<object[]> GetAsync_IPBasedUri_Success_MemberData()
         {
-            foreach (var addr in new[] { IPAddress.Loopback, IPAddress.IPv6Loopback, LoopbackServer.GetIPv6LinkLocalAddress() })
+            foreach (var addr in new[] { IPAddress.Loopback, IPAddress.IPv6Loopback })
             {
                 if (addr != null)
                 {
@@ -293,7 +334,6 @@ namespace System.Net.Http.Functional.Tests
             }
         }
 
-        [ActiveIssue(20010, TargetFrameworkMonikers.Uap)]
         [OuterLoop] // TODO: Issue #11345
         [Fact]
         public async Task SendAsync_MultipleRequestsReusingSameClient_Success()
@@ -310,7 +350,6 @@ namespace System.Net.Http.Functional.Tests
             }
         }
 
-        [ActiveIssue(20010, TargetFrameworkMonikers.Uap)]
         [OuterLoop] // TODO: Issue #11345
         [Fact]
         public async Task GetAsync_ResponseContentAfterClientAndHandlerDispose_Success()
@@ -326,7 +365,6 @@ namespace System.Net.Http.Functional.Tests
             }
         }
 
-        [ActiveIssue(20010, TargetFrameworkMonikers.Uap)]
         [OuterLoop] // TODO: Issue #11345
         [Fact]
         public async Task SendAsync_Cancel_CancellationTokenPropagates()
@@ -336,7 +374,7 @@ namespace System.Net.Http.Functional.Tests
             using (var client = new HttpClient())
             {
                 var request = new HttpRequestMessage(HttpMethod.Post, Configuration.Http.RemoteEchoServer);
-                TaskCanceledException ex = await Assert.ThrowsAsync<TaskCanceledException>(() =>
+                OperationCanceledException ex = await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
                     client.SendAsync(request, cts.Token));
                 Assert.True(cts.Token.IsCancellationRequested, "cts token IsCancellationRequested");
                 if (!PlatformDetection.IsFullFramework)
@@ -347,7 +385,6 @@ namespace System.Net.Http.Functional.Tests
             }
         }
 
-        [ActiveIssue(20010, TargetFrameworkMonikers.Uap)]
         [OuterLoop] // TODO: Issue #11345
         [Theory, MemberData(nameof(CompressedServers))]
         public async Task GetAsync_SetAutomaticDecompression_ContentDecompressed(Uri server)
@@ -370,7 +407,6 @@ namespace System.Net.Http.Functional.Tests
             }
         }
 
-        [ActiveIssue(20010, TargetFrameworkMonikers.Uap)]
         [OuterLoop] // TODO: Issue #11345
         [Theory, MemberData(nameof(CompressedServers))]
         public async Task GetAsync_SetAutomaticDecompression_HeadersRemoved(Uri server)
@@ -387,7 +423,6 @@ namespace System.Net.Http.Functional.Tests
             }
         }
 
-        [ActiveIssue(20010, TargetFrameworkMonikers.Uap)]
         [OuterLoop] // TODO: Issue #11345
         [Fact]
         public async Task GetAsync_ServerNeedsBasicAuthAndSetDefaultCredentials_StatusCodeUnauthorized()
@@ -404,7 +439,6 @@ namespace System.Net.Http.Functional.Tests
             }
         }
 
-        [ActiveIssue(20010, TargetFrameworkMonikers.Uap)]
         [OuterLoop] // TODO: Issue #11345
         [Fact]
         public async Task GetAsync_ServerNeedsAuthAndSetCredential_StatusCodeOK()
@@ -421,22 +455,28 @@ namespace System.Net.Http.Functional.Tests
             }
         }
 
-        [ActiveIssue(20010, TargetFrameworkMonikers.Uap)]
         [OuterLoop] // TODO: Issue #11345
         [Fact]
-        public async Task GetAsync_ServerNeedsAuthAndNoCredential_StatusCodeUnauthorized()
+        public void GetAsync_ServerNeedsAuthAndNoCredential_StatusCodeUnauthorized()
         {
-            using (var client = new HttpClient())
+            // UAP HTTP stack caches connections per-process. This causes interference when these tests run in
+            // the same process as the other tests. Each test needs to be isolated to its own process.
+            // See dicussion: https://github.com/dotnet/corefx/issues/21945
+            RemoteInvoke(async () =>
             {
-                Uri uri = Configuration.Http.BasicAuthUriForCreds(secure: false, userName: Username, password: Password);
-                using (HttpResponseMessage response = await client.GetAsync(uri))
+                using (var client = new HttpClient())
                 {
-                    Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+                    Uri uri = Configuration.Http.BasicAuthUriForCreds(secure: false, userName: Username, password: Password);
+                    using (HttpResponseMessage response = await client.GetAsync(uri))
+                    {
+                        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+                    }
+
+                    return SuccessExitCode;
                 }
-            }
+            }).Dispose();
         }
 
-        [ActiveIssue(20010, TargetFrameworkMonikers.Uap)]
         [OuterLoop] // TODO: Issue #11345
         [Theory]
         [InlineData("WWW-Authenticate: CustomAuth\r\n")]
@@ -464,7 +504,6 @@ namespace System.Net.Http.Functional.Tests
             });
         }
 
-        [ActiveIssue(20010, TargetFrameworkMonikers.Uap)]
         [OuterLoop] // TODO: Issue #11345
         [Theory, MemberData(nameof(RedirectStatusCodes))]
         public async Task GetAsync_AllowAutoRedirectFalse_RedirectFromHttpToHttp_StatusCodeRedirect(int statusCode)
@@ -487,7 +526,47 @@ namespace System.Net.Http.Functional.Tests
             }
         }
 
-        [ActiveIssue(20010, TargetFrameworkMonikers.Uap)]
+        [ActiveIssue(22707, TestPlatforms.AnyUnix)]
+        [OuterLoop] // TODO: Issue #11345
+        [Theory, MemberData(nameof(RedirectStatusCodesOldMethodsNewMethods))]
+        public async Task AllowAutoRedirect_True_ValidateNewMethodUsedOnRedirection(
+            int statusCode, string oldMethod, string newMethod)
+        {
+            if (ManagedHandlerTestHelpers.IsEnabled)
+            {
+                // TODO #22700: Managed handler not following RFC rules for method rewrites.
+                return;
+            }
+
+            var handler = new HttpClientHandler() { AllowAutoRedirect = true };
+            using (var client = new HttpClient(handler))
+            {
+                await LoopbackServer.CreateServerAsync(async (origServer, origUrl) =>
+                {
+                    var request = new HttpRequestMessage(new HttpMethod(oldMethod), origUrl);
+                    Task<HttpResponseMessage> getResponse = client.SendAsync(request);
+
+                    await LoopbackServer.ReadRequestAndSendResponseAsync(origServer,
+                            $"HTTP/1.1 {statusCode} OK\r\n" +
+                            $"Date: {DateTimeOffset.UtcNow:R}\r\n" +
+                            $"Location: {origUrl}\r\n" +
+                            "\r\n");
+
+                    List<string> receivedRequest = await LoopbackServer.ReadRequestAndSendResponseAsync(origServer,
+                            $"HTTP/1.1 200 OK\r\n" +
+                            $"Date: {DateTimeOffset.UtcNow:R}\r\n" +
+                            "\r\n");
+                    string[] statusLineParts = receivedRequest[0].Split(' ');
+
+                    using (HttpResponseMessage response = await getResponse)
+                    {
+                        Assert.Equal(200, (int)response.StatusCode);
+                        Assert.Equal(newMethod, statusLineParts[0]);
+                    }
+                });
+            }
+        }
+
         [OuterLoop] // TODO: Issue #11345
         [Theory, MemberData(nameof(RedirectStatusCodes))]
         public async Task GetAsync_AllowAutoRedirectTrue_RedirectFromHttpToHttp_StatusCodeOK(int statusCode)
@@ -510,7 +589,6 @@ namespace System.Net.Http.Functional.Tests
             }
         }
 
-        [ActiveIssue(20010, TargetFrameworkMonikers.Uap)]
         [OuterLoop] // TODO: Issue #11345
         [Fact]
         public async Task GetAsync_AllowAutoRedirectTrue_RedirectFromHttpToHttps_StatusCodeOK()
@@ -533,7 +611,6 @@ namespace System.Net.Http.Functional.Tests
             }
         }
 
-        [ActiveIssue(20010, TargetFrameworkMonikers.Uap)]
         [SkipOnTargetFramework(TargetFrameworkMonikers.NetFramework, ".NET Framework allows HTTPS to HTTP redirection")]
         [OuterLoop] // TODO: Issue #11345
         [Fact]
@@ -549,6 +626,7 @@ namespace System.Net.Http.Functional.Tests
                     destinationUri: Configuration.Http.RemoteEchoServer,
                     hops: 1);
                 _output.WriteLine("Uri: {0}", uri);
+
                 using (HttpResponseMessage response = await client.GetAsync(uri))
                 {
                     Assert.Equal(HttpStatusCode.Redirect, response.StatusCode);
@@ -557,7 +635,6 @@ namespace System.Net.Http.Functional.Tests
             }
         }
 
-        [ActiveIssue(20010, TargetFrameworkMonikers.Uap)]
         [OuterLoop] // TODO: Issue #11345
         [Fact]
         public async Task GetAsync_AllowAutoRedirectTrue_RedirectToUriWithParams_RequestMsgUriSet()
@@ -626,7 +703,6 @@ namespace System.Net.Http.Functional.Tests
             }
         }
 
-        [ActiveIssue(20010, TargetFrameworkMonikers.Uap)]
         [OuterLoop] // TODO: Issue #11345
         [Fact]
         public async Task GetAsync_AllowAutoRedirectTrue_RedirectWithRelativeLocation()
@@ -649,7 +725,6 @@ namespace System.Net.Http.Functional.Tests
             }
         }
 
-        [ActiveIssue(20010, TargetFrameworkMonikers.Uap)]
         [OuterLoop] // TODO: Issue #11345
         [Theory]
         [InlineData(200)]
@@ -685,7 +760,6 @@ namespace System.Net.Http.Functional.Tests
             }
         }
 
-        [ActiveIssue(20010, TargetFrameworkMonikers.Uap)]
         [OuterLoop] // TODO: Issue #11345
         [ConditionalTheory(nameof(IsNotWindows7))] // Skip test on Win7 since WinHTTP has bugs w/ fragments.
         [InlineData("#origFragment", "", "#origFragment", false)]
@@ -731,7 +805,6 @@ namespace System.Net.Http.Functional.Tests
             }
         }
 
-        [ActiveIssue(20010, TargetFrameworkMonikers.Uap)]
         [OuterLoop] // TODO: Issue #11345
         [Fact]
         public async Task GetAsync_CredentialIsNetworkCredentialUriRedirect_StatusCodeUnauthorized()
@@ -758,7 +831,6 @@ namespace System.Net.Http.Functional.Tests
             }
         }
 
-        [ActiveIssue(20010, TargetFrameworkMonikers.Uap)]
         [OuterLoop] // TODO: Issue #11345
         [Theory, MemberData(nameof(RedirectStatusCodes))]
         public async Task GetAsync_CredentialIsCredentialCacheUriRedirect_StatusCodeOK(int statusCode)
@@ -775,18 +847,25 @@ namespace System.Net.Http.Functional.Tests
             credentialCache.Add(uri, "Basic", _credential);
 
             var handler = new HttpClientHandler();
-            handler.Credentials = credentialCache;
-            using (var client = new HttpClient(handler))
+            if (PlatformDetection.IsUap)
             {
-                using (HttpResponseMessage response = await client.GetAsync(redirectUri))
+                // UAP does not support CredentialCache for Credentials.
+                Assert.Throws<PlatformNotSupportedException>(() => handler.Credentials = credentialCache);
+            }
+            else
+            {
+                handler.Credentials = credentialCache;
+                using (var client = new HttpClient(handler))
                 {
-                    Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-                    Assert.Equal(uri, response.RequestMessage.RequestUri);
+                    using (HttpResponseMessage response = await client.GetAsync(redirectUri))
+                    {
+                        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+                        Assert.Equal(uri, response.RequestMessage.RequestUri);
+                    }
                 }
             }
         }
 
-        [ActiveIssue(20010, TargetFrameworkMonikers.Uap)]
         [OuterLoop] // TODO: Issue #11345
         [Fact]
         public async Task GetAsync_DefaultCoookieContainer_NoCookieSent()
@@ -802,7 +881,6 @@ namespace System.Net.Http.Functional.Tests
             }
         }
 
-        [ActiveIssue(20010, TargetFrameworkMonikers.Uap)]
         [OuterLoop] // TODO: Issue #11345
         [Theory]
         [InlineData("cookieName1", "cookieValue1")]
@@ -824,7 +902,6 @@ namespace System.Net.Http.Functional.Tests
             }
         }
 
-        [ActiveIssue(20010, TargetFrameworkMonikers.Uap)]
         [OuterLoop] // TODO: Issue #11345
         [Theory]
         [InlineData("cookieName1", "cookieValue1")]
@@ -849,18 +926,38 @@ namespace System.Net.Http.Functional.Tests
             }
         }
 
-        [ActiveIssue(20010, TargetFrameworkMonikers.Uap)]
+        [ActiveIssue(22187, TargetFrameworkMonikers.Uap)]
+        [OuterLoop] // TODO: Issue #11345
+        [Theory, MemberData(nameof(HeaderWithEmptyValueAndUris))]
+        public async Task GetAsync_RequestHeadersAddCustomHeaders_HeaderAndEmptyValueSent(string name, string value, Uri uri)
+        {
+            using (var client = new HttpClient())
+            {
+                _output.WriteLine($"name={name}, value={value}");
+                client.DefaultRequestHeaders.Add(name, value);
+                using (HttpResponseMessage httpResponse = await client.GetAsync(uri))
+                {
+                    Assert.Equal(HttpStatusCode.OK, httpResponse.StatusCode);
+                    string responseText = await httpResponse.Content.ReadAsStringAsync();
+                    _output.WriteLine(responseText);
+                    Assert.True(TestHelper.JsonMessageContainsKeyValue(responseText, name, value));
+                }
+            }
+        }
+
         [OuterLoop] // TODO: Issue #11345
         [Theory, MemberData(nameof(HeaderValueAndUris))]
         public async Task GetAsync_RequestHeadersAddCustomHeaders_HeaderAndValueSent(string name, string value, Uri uri)
         {
             using (var client = new HttpClient())
             {
+                _output.WriteLine($"name={name}, value={value}");
                 client.DefaultRequestHeaders.Add(name, value);
                 using (HttpResponseMessage httpResponse = await client.GetAsync(uri))
                 {
                     Assert.Equal(HttpStatusCode.OK, httpResponse.StatusCode);
                     string responseText = await httpResponse.Content.ReadAsStringAsync();
+                    _output.WriteLine(responseText);
                     Assert.True(TestHelper.JsonMessageContainsKeyValue(responseText, name, value));
                 }
             }
@@ -912,7 +1009,6 @@ namespace System.Net.Http.Functional.Tests
             }
         };
 
-        [ActiveIssue(20010, TargetFrameworkMonikers.Uap)]
         [OuterLoop] // TODO: Issue #11345
         [Theory]
         [MemberData(nameof(CookieNameValues))]
@@ -950,7 +1046,6 @@ namespace System.Net.Http.Functional.Tests
             });
         }
 
-        [ActiveIssue(20010, TargetFrameworkMonikers.Uap)]
         [OuterLoop] // TODO: Issue #11345
         [ActiveIssue(17174, TestPlatforms.AnyUnix)] // https://github.com/curl/curl/issues/1354
         [Theory]
@@ -995,7 +1090,6 @@ namespace System.Net.Http.Functional.Tests
             });
         }
 
-        [ActiveIssue(20010, TargetFrameworkMonikers.Uap)]
         [OuterLoop] // TODO: Issue #11345
         [Fact]
         public async Task GetAsync_ResponseHeadersRead_ReadFromEachIterativelyDoesntDeadlock()
@@ -1021,7 +1115,6 @@ namespace System.Net.Http.Functional.Tests
             }
         }
 
-        [ActiveIssue(20010, TargetFrameworkMonikers.Uap)]
         [OuterLoop] // TODO: Issue #11345
         [Fact]
         public async Task SendAsync_HttpRequestMsgResponseHeadersRead_StatusCodeOK()
@@ -1042,7 +1135,6 @@ namespace System.Net.Http.Functional.Tests
             }
         }
 
-        [ActiveIssue(20010, TargetFrameworkMonikers.Uap)]
         [SkipOnTargetFramework(TargetFrameworkMonikers.NetFramework, "netfx's ConnectStream.ReadAsync tries to read beyond data already buffered, causing hangs #18864")]
         [OuterLoop] // TODO: Issue #11345
         [Fact]
@@ -1081,7 +1173,6 @@ namespace System.Net.Http.Functional.Tests
             });
         }
 
-        [ActiveIssue(20010, TargetFrameworkMonikers.Uap)]
         [OuterLoop] // TODO: Issue #11345
         [Fact]
         public async Task Dispose_DisposingHandlerCancelsActiveOperationsWithoutResponses()
@@ -1155,7 +1246,6 @@ namespace System.Net.Http.Functional.Tests
             });
         }
 
-        [ActiveIssue(20010, TargetFrameworkMonikers.Uap)]
         [OuterLoop] // TODO: Issue #11345
         [Theory]
         [InlineData(200)]
@@ -1182,13 +1272,18 @@ namespace System.Net.Http.Functional.Tests
             });
         }
 
-        [ActiveIssue(20010, TargetFrameworkMonikers.Uap)]
         [OuterLoop] // TODO: Issue #11345
         [Theory]
         [InlineData(99)]
         [InlineData(1000)]
         public async Task GetAsync_StatusCodeOutOfRange_ExpectedException(int statusCode)
         {
+            if (PlatformDetection.IsUap && statusCode == 99)
+            {
+                // UAP platform allows this status code due to historical reasons.
+                return;
+            }
+            
             await LoopbackServer.CreateServerAsync(async (server, url) =>
             {
                 using (var client = new HttpClient())
@@ -1206,7 +1301,6 @@ namespace System.Net.Http.Functional.Tests
 
         #region Post Methods Tests
 
-        [ActiveIssue(20010, TargetFrameworkMonikers.Uap)]
         [OuterLoop] // TODO: Issue #11345
         [Theory, MemberData(nameof(VerifyUploadServers))]
         public async Task PostAsync_CallMethodTwice_StringContent(Uri remoteServer)
@@ -1232,7 +1326,6 @@ namespace System.Net.Http.Functional.Tests
             }
         }
 
-        [ActiveIssue(20010, TargetFrameworkMonikers.Uap)]
         [OuterLoop] // TODO: Issue #11345
         [Theory, MemberData(nameof(VerifyUploadServers))]
         public async Task PostAsync_CallMethod_UnicodeStringContent(Uri remoteServer)
@@ -1250,7 +1343,6 @@ namespace System.Net.Http.Functional.Tests
             }
         }
 
-        [ActiveIssue(20010, TargetFrameworkMonikers.Uap)]
         [OuterLoop] // TODO: Issue #11345
         [Theory, MemberData(nameof(VerifyUploadServersStreamsAndExpectedData))]
         public async Task PostAsync_CallMethod_StreamContent(Uri remoteServer, HttpContent content, byte[] expectedData)
@@ -1392,7 +1484,6 @@ namespace System.Net.Http.Functional.Tests
             }
         }
 
-        [ActiveIssue(20010, TargetFrameworkMonikers.Uap)]
         [OuterLoop] // TODO: Issue #11345
         [Theory, MemberData(nameof(EchoServers))]
         public async Task PostAsync_CallMethod_NullContent(Uri remoteServer)
@@ -1414,7 +1505,6 @@ namespace System.Net.Http.Functional.Tests
             }
         }
 
-        [ActiveIssue(20010, TargetFrameworkMonikers.Uap)]
         [OuterLoop] // TODO: Issue #11345
         [Theory, MemberData(nameof(EchoServers))]
         public async Task PostAsync_CallMethod_EmptyContent(Uri remoteServer)
@@ -1437,7 +1527,6 @@ namespace System.Net.Http.Functional.Tests
             }
         }
 
-        [ActiveIssue(20010, TargetFrameworkMonikers.Uap)]
         [OuterLoop] // TODO: Issue #11345
         [Theory]
         [InlineData(false)]
@@ -1462,12 +1551,22 @@ namespace System.Net.Http.Functional.Tests
             }
         }
 
-        [ActiveIssue(20010, TargetFrameworkMonikers.Uap)]
+        [ActiveIssue(22191, TargetFrameworkMonikers.Uap)]
         [OuterLoop] // takes several seconds
-        [Theory]
-        [InlineData(302, false)]
-        [InlineData(307, true)]
-        public async Task PostAsync_Redirect_LargePayload(int statusCode, bool expectRedirectToPost)
+        [Fact]
+        public async Task PostAsync_RedirectWith307_LargePayload()
+        {
+            await PostAsync_Redirect_LargePayload_Helper(307, true);
+        }
+
+        [OuterLoop] // takes several seconds
+        [Fact]
+        public async Task PostAsync_RedirectWith302_LargePayload()
+        {
+            await PostAsync_Redirect_LargePayload_Helper(302, false);
+        }
+
+        public async Task PostAsync_Redirect_LargePayload_Helper(int statusCode, bool expectRedirectToPost)
         {
             using (var fs = new FileStream(Path.Combine(Path.GetTempPath(), Path.GetTempFileName()), FileMode.Create, FileAccess.ReadWrite, FileShare.None, 0x1000, FileOptions.DeleteOnClose))
             {
@@ -1491,7 +1590,6 @@ namespace System.Net.Http.Functional.Tests
             }
         }
 
-        [ActiveIssue(20010, TargetFrameworkMonikers.Uap)]
         [OuterLoop] // TODO: Issue #11345
         [Theory, MemberData(nameof(EchoServers))] // NOTE: will not work for in-box System.Net.Http.dll due to disposal of request content
         public async Task PostAsync_ReuseRequestContent_Success(Uri remoteServer)
@@ -1530,32 +1628,11 @@ namespace System.Net.Http.Functional.Tests
             }
         }
 
-        [ActiveIssue(20010, TargetFrameworkMonikers.Uap)]
-        [OuterLoop] // TODO: Issue #11345
-        [PlatformSpecific(TestPlatforms.Windows)] // CopyToAsync(Stream, TransportContext) isn't used on unix
-        [Fact]
-        public async Task PostAsync_Post_ChannelBindingHasExpectedValue()
-        {
-            using (var client = new HttpClient())
-            {
-                string expectedContent = "Test contest";
-                var content = new ChannelBindingAwareContent(expectedContent);
-                using (HttpResponseMessage response = await client.PostAsync(Configuration.Http.SecureRemoteEchoServer, content))
-                {
-                    Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-
-                    ChannelBinding channelBinding = content.ChannelBinding;
-                    Assert.NotNull(channelBinding);
-                    _output.WriteLine("Channel Binding: {0}", channelBinding);
-                }
-            }
-        }
-
         #endregion
 
         #region Various HTTP Method Tests
 
-        [ActiveIssue(20010, TargetFrameworkMonikers.Uap)]
+        [ActiveIssue(22161, TargetFrameworkMonikers.Uap)]
         [OuterLoop] // TODO: Issue #11345
         [Theory, MemberData(nameof(HttpMethods))]
         public async Task SendAsync_SendRequestUsingMethodToEchoServerWithNoContent_MethodCorrectlySent(
@@ -1581,14 +1658,11 @@ namespace System.Net.Http.Functional.Tests
             string method,
             bool secureServer)
         {
-            if (PlatformDetection.IsFullFramework)
+            if (PlatformDetection.IsFullFramework && method == "GET")
             {
                 // .NET Framework doesn't allow a content body with this HTTP verb.
                 // It will throw a System.Net.ProtocolViolation exception.
-                if (method == "GET")
-                {
-                    return;
-                }
+                return;
             }
 
             using (var client = new HttpClient())
@@ -1614,7 +1688,7 @@ namespace System.Net.Http.Functional.Tests
             }
         }
 
-        [ActiveIssue(20010, TargetFrameworkMonikers.Uap)]
+        [ActiveIssue(20010, TargetFrameworkMonikers.Uap)] // Test hangs. But this test seems invalid. An HttpRequestMessage can only be sent once.
         [OuterLoop] // TODO: Issue #11345
         [Theory]
         [InlineData("12345678910", 0)]
@@ -1649,21 +1723,25 @@ namespace System.Net.Http.Functional.Tests
             }
         }
 
-        [ActiveIssue(20010, TargetFrameworkMonikers.Uap)]
         [OuterLoop] // TODO: Issue #11345
         [Theory, MemberData(nameof(HttpMethodsThatDontAllowContent))]
         public async Task SendAsync_SendRequestUsingNoBodyMethodToEchoServerWithContent_NoBodySent(
             string method,
             bool secureServer)
         {
-            if (PlatformDetection.IsFullFramework)
+            if (PlatformDetection.IsFullFramework && method == "HEAD")
             {
                 // .NET Framework doesn't allow a content body with this HTTP verb.
                 // It will throw a System.Net.ProtocolViolation exception.
-                if (method == "HEAD")
-                {
-                    return;
-                }
+                return;
+            }
+
+            if (PlatformDetection.IsUap && method == "TRACE")
+            {
+                // UAP platform doesn't allow a content body with this HTTP verb.
+                // It will throw an exception HttpRequestException/COMException
+                // with "The requested operation is invalid" message.
+                return;
             }
 
             using (var client = new HttpClient())
@@ -1697,7 +1775,7 @@ namespace System.Net.Http.Functional.Tests
         #endregion
 
         #region Version tests
-        [ActiveIssue(20010, TargetFrameworkMonikers.Uap)]
+        [SkipOnTargetFramework(TargetFrameworkMonikers.Uap, "UAP does not allow HTTP/1.0 requests.")]
         [OuterLoop] // TODO: Issue #11345
         [Fact]
         public async Task SendAsync_RequestVersion10_ServerReceivesVersion10Request()
@@ -1796,7 +1874,7 @@ namespace System.Net.Http.Functional.Tests
             }
         }
 
-        [ActiveIssue(20010, TargetFrameworkMonikers.Uap)]
+        [ActiveIssue(22735)]
         [SkipOnTargetFramework(TargetFrameworkMonikers.NetFramework, "Specifying Version(2,0) throws exception on netfx")]
         [OuterLoop] // TODO: Issue #11345
         [ConditionalTheory(nameof(IsWindows10Version1607OrGreater)), MemberData(nameof(Http2NoPushServers))]
@@ -1865,7 +1943,7 @@ namespace System.Net.Http.Functional.Tests
         #endregion
 
         #region Proxy tests
-        [ActiveIssue(20010, TargetFrameworkMonikers.Uap)]
+        [SkipOnTargetFramework(TargetFrameworkMonikers.Uap, "UAP does not support custom proxies.")]
         [OuterLoop] // TODO: Issue #11345
         [Theory]
         [MemberData(nameof(CredentialsForProxy))]
@@ -1915,7 +1993,7 @@ namespace System.Net.Http.Functional.Tests
             }
         }
 
-        [ActiveIssue(20010, TargetFrameworkMonikers.Uap)]
+        [SkipOnTargetFramework(TargetFrameworkMonikers.Uap, "UAP does not support custom proxies.")]
         [OuterLoop] // TODO: Issue #11345
         [Theory]
         [MemberData(nameof(BypassedProxies))]
@@ -1932,7 +2010,7 @@ namespace System.Net.Http.Functional.Tests
             }
         }
 
-        [ActiveIssue(20010, TargetFrameworkMonikers.Uap)]
+        [SkipOnTargetFramework(TargetFrameworkMonikers.Uap, "UAP does not support custom proxies.")]
         [OuterLoop] // TODO: Issue #11345
         [Fact]
         public void Proxy_HaveNoCredsAndUseAuthenticatedCustomProxy_ProxyAuthenticationRequiredStatusCode()
@@ -1974,7 +2052,6 @@ namespace System.Net.Http.Functional.Tests
         #endregion
 
         #region Uri wire transmission encoding tests
-        [ActiveIssue(20010, TargetFrameworkMonikers.Uap)]
         [OuterLoop] // TODO: Issue #11345
         [Fact]
         public async Task SendRequest_UriPathHasReservedChars_ServerReceivedExpectedPath()
