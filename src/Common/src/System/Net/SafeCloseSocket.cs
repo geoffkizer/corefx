@@ -179,7 +179,7 @@ namespace System.Net.Sockets
                     innerSocket.BlockingRelease();
                 }
 
-                InnerReleaseHandle();
+//                InnerReleaseHandle();
 #if DEBUG
             }
             catch (Exception exception) when (!ExceptionCheck.IsFatal(exception))
