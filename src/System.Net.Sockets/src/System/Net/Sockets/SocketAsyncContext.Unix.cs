@@ -623,7 +623,7 @@ namespace System.Net.Sockets
         private OperationQueue<ReadOperation> _receiveQueue;
         private OperationQueue<WriteOperation> _sendQueue;
         private SocketAsyncEngine.Token _asyncEngineToken;
-        private Interop.Sys.SocketEvents _registeredEvents;
+        private bool _registered;
         private bool _nonBlockingSet;
 
         private readonly object _registerLock = new object();
@@ -636,33 +636,33 @@ namespace System.Net.Sockets
             _sendQueue.Init();
         }
 
-        private void Register(Interop.Sys.SocketEvents events)
+        private void Register()
         {
+            Debug.Assert(_nonBlockingSet);
             lock (_registerLock)
             {
-                Debug.Assert((_registeredEvents & events) == Interop.Sys.SocketEvents.None, $"Unexpected values: _registeredEvents={_registeredEvents}, events={events}");
-
-                if (!_asyncEngineToken.WasAllocated)
+                if (!_registered)
                 {
-                    _asyncEngineToken = new SocketAsyncEngine.Token(this);
-                }
+                    Debug.Assert(!_asyncEngineToken.WasAllocated);
+                    var token = new SocketAsyncEngine.Token(this);
 
-                events |= _registeredEvents;
-
-                Interop.Error errorCode;
-                if (!_asyncEngineToken.TryRegister(_socket, _registeredEvents, events, out errorCode))
-                {
-                    if (errorCode == Interop.Error.ENOMEM || errorCode == Interop.Error.ENOSPC)
+                    Interop.Error errorCode;
+                    if (!token.TryRegister(_socket, out errorCode))
                     {
-                        throw new OutOfMemoryException();
+                        token.Free();
+                        if (errorCode == Interop.Error.ENOMEM || errorCode == Interop.Error.ENOSPC)
+                        {
+                            throw new OutOfMemoryException();
+                        }
+                        else
+                        {
+                            throw new InternalException();
+                        }
                     }
-                    else
-                    {
-                        throw new InternalException();                        
-                    }
-                }
 
-                _registeredEvents = events;
+                    _asyncEngineToken = token;
+                    _registered = true;
+                }
             }
         }
 
@@ -702,9 +702,15 @@ namespace System.Net.Sockets
             }
         }
 
-        private bool TryBeginOperation<TOperation>(ref OperationQueue<TOperation> queue, TOperation operation, Interop.Sys.SocketEvents events, bool maintainOrder, out bool isStopped)
+        private bool TryBeginOperation<TOperation>(ref OperationQueue<TOperation> queue, TOperation operation, bool maintainOrder, out bool isStopped)
             where TOperation : AsyncOperation
         {
+            // TODO: This should happen outside of queue lock.
+            if (!_registered)
+            {
+                Register();
+            }
+
             // Exactly one of the two queue locks must be held by the caller
             // Disable for now, as this confounds the reentrancy check
             // I will revisit later...
@@ -731,11 +737,6 @@ namespace System.Net.Sockets
                         return false;
                     }
                     break;
-            }
-
-            if ((_registeredEvents & events) == Interop.Sys.SocketEvents.None)
-            {
-                Register(events);
             }
 
             queue.Enqueue(operation);
@@ -774,7 +775,7 @@ namespace System.Net.Sockets
                 {
                     lock (_receiveQueue.QueueLock)
                     {
-                        if (TryBeginOperation(ref _receiveQueue, operation, Interop.Sys.SocketEvents.Read, maintainOrder: false, isStopped: out isStopped))
+                        if (TryBeginOperation(ref _receiveQueue, operation, maintainOrder: false, isStopped: out isStopped))
                         {
                             break;
                         }
@@ -833,7 +834,7 @@ namespace System.Net.Sockets
             {
                 lock (_receiveQueue.QueueLock)
                 {
-                    if (TryBeginOperation(ref _receiveQueue, operation, Interop.Sys.SocketEvents.Read, maintainOrder: false, isStopped: out isStopped))
+                    if (TryBeginOperation(ref _receiveQueue, operation, maintainOrder: false, isStopped: out isStopped))
                     {
                         break;
                     }
@@ -880,7 +881,7 @@ namespace System.Net.Sockets
                 {
                     lock (_sendQueue.QueueLock)
                     {
-                        if (TryBeginOperation(ref _sendQueue, operation, Interop.Sys.SocketEvents.Write, maintainOrder: false, isStopped: out isStopped))
+                        if (TryBeginOperation(ref _sendQueue, operation, maintainOrder: false, isStopped: out isStopped))
                         {
                             break;
                         }
@@ -928,7 +929,7 @@ namespace System.Net.Sockets
             {
                 lock (_sendQueue.QueueLock)
                 {
-                    if (TryBeginOperation(ref _sendQueue, operation, Interop.Sys.SocketEvents.Write, maintainOrder: false, isStopped: out isStopped))
+                    if (TryBeginOperation(ref _sendQueue, operation, maintainOrder: false, isStopped: out isStopped))
                     {
                         break;
                     }
@@ -993,7 +994,7 @@ namespace System.Net.Sockets
                     };
 
                     bool isStopped;
-                    while (!TryBeginOperation(ref _receiveQueue, operation, Interop.Sys.SocketEvents.Read, maintainOrder: true, isStopped: out isStopped))
+                    while (!TryBeginOperation(ref _receiveQueue, operation, maintainOrder: true, isStopped: out isStopped))
                     {
                         if (isStopped)
                         {
@@ -1051,7 +1052,7 @@ namespace System.Net.Sockets
                 };
 
                 bool isStopped;
-                while (!TryBeginOperation(ref _receiveQueue, operation, Interop.Sys.SocketEvents.Read, maintainOrder: true, isStopped: out isStopped))
+                while (!TryBeginOperation(ref _receiveQueue, operation, maintainOrder: true, isStopped: out isStopped))
                 {
                     if (isStopped)
                     {
@@ -1118,7 +1119,7 @@ namespace System.Net.Sockets
                     };
 
                     bool isStopped;
-                    while (!TryBeginOperation(ref _receiveQueue, operation, Interop.Sys.SocketEvents.Read, maintainOrder: true, isStopped: out isStopped))
+                    while (!TryBeginOperation(ref _receiveQueue, operation, maintainOrder: true, isStopped: out isStopped))
                     {
                         if (isStopped)
                         {
@@ -1176,7 +1177,7 @@ namespace System.Net.Sockets
                 };
 
                 bool isStopped;
-                while (!TryBeginOperation(ref _receiveQueue, operation, Interop.Sys.SocketEvents.Read, maintainOrder: true, isStopped: out isStopped))
+                while (!TryBeginOperation(ref _receiveQueue, operation, maintainOrder: true, isStopped: out isStopped))
                 {
                     if (isStopped)
                     {
@@ -1238,7 +1239,7 @@ namespace System.Net.Sockets
                     };
 
                     bool isStopped;
-                    while (!TryBeginOperation(ref _receiveQueue, operation, Interop.Sys.SocketEvents.Read, maintainOrder: true, isStopped: out isStopped))
+                    while (!TryBeginOperation(ref _receiveQueue, operation, maintainOrder: true, isStopped: out isStopped))
                     {
                         if (isStopped)
                         {
@@ -1303,7 +1304,7 @@ namespace System.Net.Sockets
                 };
 
                 bool isStopped;
-                while (!TryBeginOperation(ref _receiveQueue, operation, Interop.Sys.SocketEvents.Read, maintainOrder: true, isStopped: out isStopped))
+                while (!TryBeginOperation(ref _receiveQueue, operation, maintainOrder: true, isStopped: out isStopped))
                 {
                     if (isStopped)
                     {
@@ -1376,7 +1377,7 @@ namespace System.Net.Sockets
                     };
 
                     bool isStopped;
-                    while (!TryBeginOperation(ref _sendQueue, operation, Interop.Sys.SocketEvents.Write, maintainOrder: true, isStopped: out isStopped))
+                    while (!TryBeginOperation(ref _sendQueue, operation, maintainOrder: true, isStopped: out isStopped))
                     {
                         if (isStopped)
                         {
@@ -1431,7 +1432,7 @@ namespace System.Net.Sockets
                 };
 
                 bool isStopped;
-                while (!TryBeginOperation(ref _sendQueue, operation, Interop.Sys.SocketEvents.Write, maintainOrder: true, isStopped: out isStopped))
+                while (!TryBeginOperation(ref _sendQueue, operation, maintainOrder: true, isStopped: out isStopped))
                 {
                     if (isStopped)
                     {
@@ -1497,7 +1498,7 @@ namespace System.Net.Sockets
                     };
 
                     bool isStopped;
-                    while (!TryBeginOperation(ref _sendQueue, operation, Interop.Sys.SocketEvents.Write, maintainOrder: true, isStopped: out isStopped))
+                    while (!TryBeginOperation(ref _sendQueue, operation, maintainOrder: true, isStopped: out isStopped))
                     {
                         if (isStopped)
                         {
@@ -1556,7 +1557,7 @@ namespace System.Net.Sockets
                 };
 
                 bool isStopped;
-                while (!TryBeginOperation(ref _sendQueue, operation, Interop.Sys.SocketEvents.Write, maintainOrder: true, isStopped: out isStopped))
+                while (!TryBeginOperation(ref _sendQueue, operation, maintainOrder: true, isStopped: out isStopped))
                 {
                     if (isStopped)
                     {
@@ -1606,7 +1607,7 @@ namespace System.Net.Sockets
                     };
 
                     bool isStopped;
-                    while (!TryBeginOperation(ref _sendQueue, operation, Interop.Sys.SocketEvents.Write, maintainOrder: true, isStopped: out isStopped))
+                    while (!TryBeginOperation(ref _sendQueue, operation, maintainOrder: true, isStopped: out isStopped))
                     {
                         if (isStopped)
                         {
@@ -1658,7 +1659,7 @@ namespace System.Net.Sockets
                 };
 
                 bool isStopped;
-                while (!TryBeginOperation(ref _sendQueue, operation, Interop.Sys.SocketEvents.Write, maintainOrder: true, isStopped: out isStopped))
+                while (!TryBeginOperation(ref _sendQueue, operation, maintainOrder: true, isStopped: out isStopped))
                 {
                     if (isStopped)
                     {
