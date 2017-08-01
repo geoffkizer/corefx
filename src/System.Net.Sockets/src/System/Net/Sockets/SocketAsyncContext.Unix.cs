@@ -520,7 +520,7 @@ namespace System.Net.Sockets
             { 
                 // Freeing the token will prevent any future event delivery.  This socket will be unregistered
                 // from the event port automatically by the OS when it's closed.
-                _asyncEngineToken.Free();
+//                _asyncEngineToken.Free();
             }
         }
 
