@@ -768,9 +768,35 @@ namespace System.Net.Sockets
             }
         }
 
-        // This is a terrible name, rename, possibly move too
-        // Return true for pending, false for completed sync (incl abort)
-        // Maybe "StartAsyncOperation"?
+#if false   // For the future
+        // I can't move the lock taking here yet
+        // But, evetually...
+        private void PerformSyncOperation<TOperation>(ref OperationQueue<TOperation> queue, TOperation operation, int timeout, bool maintainOrder)
+            where TOperation : AsyncOperation
+        {
+            // CONSIDER: Alloc wait object here
+
+            using (queue.Lock())
+            {
+                if (!StartAsyncOperation(ref queue, operation, maintainOrder: false))
+                {
+                    // Completed synchronously
+                    return;
+                }
+            }
+
+            // CONSIDER: Move Wait logic here, only place it's called, I think
+            if (!operation.Wait(timeout))
+            {
+                // CONSIDER: DoAbort could take an errorCode
+                operation.DoAbort();
+                operation.ErrorCode = SocketError.TimedOut;
+            }
+        }
+#endif
+
+        //  Maybe rename for PerformAsyncOperation, like above
+        // Return true for pending, false for completed sync (incl failure and abort)
         private bool StartAsyncOperation<TOperation>(ref OperationQueue<TOperation> queue, TOperation operation, bool maintainOrder)
             where TOperation : AsyncOperation
         {
@@ -945,23 +971,9 @@ namespace System.Net.Sockets
                     SocketAddressLen = socketAddressLen
                 };
 
-                bool isStopped;
-                while (true)
+                using (_sendQueue.Lock())
                 {
-                    using (_sendQueue.Lock())
-                    {
-                        if (TryBeginOperation(ref _sendQueue, operation, maintainOrder: false, isStopped: out isStopped))
-                        {
-                            break;
-                        }
-                    }
-
-                    if (isStopped)
-                    {
-                        return SocketError.Interrupted;
-                    }
-
-                    if (operation.TryComplete(this))
+                    if (!StartAsyncOperation(ref _sendQueue, operation, maintainOrder: false))
                     {
                         return operation.ErrorCode;
                     }
@@ -993,27 +1005,14 @@ namespace System.Net.Sockets
                 SocketAddressLen = socketAddressLen
             };
 
-            bool isStopped;
-            while (true)
+            using (_sendQueue.Lock())
             {
-                using (_sendQueue.Lock())
-                {
-                    if (TryBeginOperation(ref _sendQueue, operation, maintainOrder: false, isStopped: out isStopped))
-                    {
-                        break;
-                    }
-                }
-
-                if (isStopped)
-                {
-                    return SocketError.OperationAborted;
-                }
-
-                if (operation.TryComplete(this))
+                if (!StartAsyncOperation(ref _sendQueue, operation, maintainOrder: false))
                 {
                     return operation.ErrorCode;
                 }
             }
+
             return SocketError.IOPending;
         }
 
