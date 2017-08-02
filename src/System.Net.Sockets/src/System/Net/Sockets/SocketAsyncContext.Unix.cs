@@ -638,7 +638,7 @@ namespace System.Net.Sockets
 
                 using (Lock())
                 {
-                    Debug.Assert(State != QueueState.Stopped)
+                    Debug.Assert(State != QueueState.Stopped);
 #if TRACE
                     Trace($"{QueueId(context)}: Enter StopAndAbort, State={this.State}, IsEmpty={this.IsEmpty}");
 #endif
