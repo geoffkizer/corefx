@@ -633,8 +633,12 @@ namespace System.Net.Sockets
 
             public void StopAndAbort(SocketAsyncContext context)
             {
+                // We should be called exactly once, by SafeCloseSocket.
+                Debug.Assert(State != QueueState.Stopped);
+
                 using (Lock())
                 {
+                    Debug.Assert(State != QueueState.Stopped)
 #if TRACE
                     Trace($"{QueueId(context)}: Enter StopAndAbort, State={this.State}, IsEmpty={this.IsEmpty}");
 #endif
