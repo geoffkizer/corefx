@@ -755,12 +755,6 @@ namespace System.Net.Sockets
             // TODO: Shouldn't be locked here
             Debug.Assert(queue.IsLocked);
 
-            // TODO: This should happen outside of queue lock.
-            if (!_registered)
-            {
-                Register();
-            }
-
             bool isStopped;
             while (true)
             {
@@ -790,6 +784,12 @@ namespace System.Net.Sockets
         {
             // TODO: Push queue locking into queue class
             Debug.Assert(queue.IsLocked);
+
+            // TODO: This should happen outside of queue lock.
+            if (!_registered)
+            {
+                Register();
+            }
 
 #if TRACE
             Trace($"{queue.QueueId(this)}: Enter TryBeginOperation for {IdOf(operation)}, State={queue.State}, IsEmpty={queue.IsEmpty}, maintainOrder={maintainOrder}");
