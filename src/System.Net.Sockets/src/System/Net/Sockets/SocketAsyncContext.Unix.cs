@@ -911,29 +911,16 @@ namespace System.Net.Sockets
                 SocketAddressLen = socketAddressLen
             };
 
-            bool isStopped;
-            while (true)
+            using (_receiveQueue.Lock())
             {
-                using (_receiveQueue.Lock())
-                {
-                    if (TryBeginOperation(ref _receiveQueue, operation, maintainOrder: false, isStopped: out isStopped))
-                    {
-                        break;
-                    }
-                }
-
-                if (isStopped)
-                {
-                    return SocketError.OperationAborted;
-                }
-
-                if (operation.TryComplete(this))
+                if (!StartAsyncOperation(ref _receiveQueue, operation, maintainOrder: false))
                 {
                     socketAddressLen = operation.SocketAddressLen;
                     acceptedFd = operation.AcceptedFileDescriptor;
                     return operation.ErrorCode;
                 }
             }
+
             return SocketError.IOPending;
         }
 
