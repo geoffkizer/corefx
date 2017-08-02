@@ -1067,23 +1067,11 @@ namespace System.Net.Sockets
                         SocketAddressLen = socketAddressLen,
                     };
 
-                    bool isStopped;
-                    while (!TryBeginOperation(ref _receiveQueue, operation, maintainOrder: true, isStopped: out isStopped))
+                    if (!StartAsyncOperation(ref _receiveQueue, operation, maintainOrder: true))
                     {
-                        if (isStopped)
-                        {
-                            flags = operation.ReceivedFlags;
-                            bytesReceived = operation.BytesTransferred;
-                            return SocketError.Interrupted;
-                        }
-
-                        if (operation.TryComplete(this))
-                        {
-                            socketAddressLen = operation.SocketAddressLen;
-                            flags = operation.ReceivedFlags;
-                            bytesReceived = operation.BytesTransferred;
-                            return operation.ErrorCode;
-                        }
+                        flags = operation.ReceivedFlags;
+                        bytesReceived = operation.BytesTransferred;
+                        return operation.ErrorCode;
                     }
                 }
 
@@ -1193,23 +1181,11 @@ namespace System.Net.Sockets
                     SocketAddressLen = socketAddressLen,
                 };
 
-                bool isStopped;
-                while (!TryBeginOperation(ref _receiveQueue, operation, maintainOrder: true, isStopped: out isStopped))
+                if (!StartAsyncOperation(ref _receiveQueue, operation, maintainOrder: true))
                 {
-                    if (isStopped)
-                    {
-                        bytesReceived = 0;
-                        receivedFlags = SocketFlags.None;
-                        return SocketError.OperationAborted;
-                    }
-
-                    if (operation.TryComplete(this))
-                    {
-                        socketAddressLen = operation.SocketAddressLen;
-                        receivedFlags = operation.ReceivedFlags;
-                        bytesReceived = operation.BytesTransferred;
-                        return operation.ErrorCode;
-                    }
+                    receivedFlags = operation.ReceivedFlags;
+                    bytesReceived = operation.BytesTransferred;
+                    return operation.ErrorCode;
                 }
 
                 bytesReceived = 0;
@@ -1260,25 +1236,13 @@ namespace System.Net.Sockets
                         SocketAddressLen = socketAddressLen,
                     };
 
-                    bool isStopped;
-                    while (!TryBeginOperation(ref _receiveQueue, operation, maintainOrder: true, isStopped: out isStopped))
+                    if (!StartAsyncOperation(ref _receiveQueue, operation, maintainOrder: true))
                     {
-                        if (isStopped)
-                        {
-                            flags = operation.ReceivedFlags;
-                            bytesReceived = operation.BytesTransferred;
-                            return SocketError.Interrupted;
-                        }
-
-                        if (operation.TryComplete(this))
-                        {
-                            socketAddressLen = operation.SocketAddressLen;
-                            flags = operation.ReceivedFlags;
-                            bytesReceived = operation.BytesTransferred;
-                            return operation.ErrorCode;
-                        }
+                        socketAddressLen = operation.SocketAddressLen;
+                        flags = operation.ReceivedFlags;
+                        bytesReceived = operation.BytesTransferred;
+                        return operation.ErrorCode;
                     }
-
                 }
 
                 bool signaled = operation.Wait(timeout);
@@ -1318,23 +1282,12 @@ namespace System.Net.Sockets
                     SocketAddressLen = socketAddressLen,
                 };
 
-                bool isStopped;
-                while (!TryBeginOperation(ref _receiveQueue, operation, maintainOrder: true, isStopped: out isStopped))
+                if (!StartAsyncOperation(ref _receiveQueue, operation, maintainOrder: true))
                 {
-                    if (isStopped)
-                    {
-                        bytesReceived = 0;
-                        receivedFlags = SocketFlags.None;
-                        return SocketError.OperationAborted;
-                    }
-
-                    if (operation.TryComplete(this))
-                    {
-                        socketAddressLen = operation.SocketAddressLen;
-                        receivedFlags = operation.ReceivedFlags;
-                        bytesReceived = operation.BytesTransferred;
-                        return operation.ErrorCode;
-                    }
+                    socketAddressLen = operation.SocketAddressLen;
+                    receivedFlags = operation.ReceivedFlags;
+                    bytesReceived = operation.BytesTransferred;
+                    return operation.ErrorCode;
                 }
 
                 bytesReceived = 0;
@@ -1380,26 +1333,13 @@ namespace System.Net.Sockets
                         IsIPv6 = isIPv6,
                     };
 
-                    bool isStopped;
-                    while (!TryBeginOperation(ref _receiveQueue, operation, maintainOrder: true, isStopped: out isStopped))
+                    if (!StartAsyncOperation(ref _receiveQueue, operation, maintainOrder: true))
                     {
-                        if (isStopped)
-                        {
-                            socketAddressLen = operation.SocketAddressLen;
-                            flags = operation.ReceivedFlags;
-                            ipPacketInformation = operation.IPPacketInformation;
-                            bytesReceived = operation.BytesTransferred;
-                            return SocketError.Interrupted;
-                        }
-
-                        if (operation.TryComplete(this))
-                        {
-                            socketAddressLen = operation.SocketAddressLen;
-                            flags = operation.ReceivedFlags;
-                            ipPacketInformation = operation.IPPacketInformation;
-                            bytesReceived = operation.BytesTransferred;
-                            return operation.ErrorCode;
-                        }
+                        socketAddressLen = operation.SocketAddressLen;
+                        flags = operation.ReceivedFlags;
+                        ipPacketInformation = operation.IPPacketInformation;
+                        bytesReceived = operation.BytesTransferred;
+                        return operation.ErrorCode;
                     }
                 }
 
@@ -1445,25 +1385,13 @@ namespace System.Net.Sockets
                     IsIPv6 = isIPv6,
                 };
 
-                bool isStopped;
-                while (!TryBeginOperation(ref _receiveQueue, operation, maintainOrder: true, isStopped: out isStopped))
+                if (!StartAsyncOperation(ref _receiveQueue, operation, maintainOrder: true))
                 {
-                    if (isStopped)
-                    {
-                        ipPacketInformation = default(IPPacketInformation);
-                        bytesReceived = 0;
-                        receivedFlags = SocketFlags.None;
-                        return SocketError.OperationAborted;
-                    }
-
-                    if (operation.TryComplete(this))
-                    {
-                        socketAddressLen = operation.SocketAddressLen;
-                        receivedFlags = operation.ReceivedFlags;
-                        ipPacketInformation = operation.IPPacketInformation;
-                        bytesReceived = operation.BytesTransferred;
-                        return operation.ErrorCode;
-                    }
+                    socketAddressLen = operation.SocketAddressLen;
+                    receivedFlags = operation.ReceivedFlags;
+                    ipPacketInformation = operation.IPPacketInformation;
+                    bytesReceived = operation.BytesTransferred;
+                    return operation.ErrorCode;
                 }
 
                 ipPacketInformation = default(IPPacketInformation);
@@ -1521,20 +1449,10 @@ namespace System.Net.Sockets
                         BytesTransferred = bytesSent
                     };
 
-                    bool isStopped;
-                    while (!TryBeginOperation(ref _sendQueue, operation, maintainOrder: true, isStopped: out isStopped))
+                    if (!StartAsyncOperation(ref _sendQueue, operation, maintainOrder: true))
                     {
-                        if (isStopped)
-                        {
-                            bytesSent = operation.BytesTransferred;
-                            return SocketError.Interrupted;
-                        }
-
-                        if (operation.TryComplete(this))
-                        {
-                            bytesSent = operation.BytesTransferred;
-                            return operation.ErrorCode;
-                        }
+                        bytesSent = operation.BytesTransferred;
+                        return operation.ErrorCode;
                     }
                 }
 
@@ -1641,19 +1559,10 @@ namespace System.Net.Sockets
                     BytesTransferred = bytesSent
                 };
 
-                bool isStopped;
-                while (!TryBeginOperation(ref _sendQueue, operation, maintainOrder: true, isStopped: out isStopped))
+                if (!StartAsyncOperation(ref _sendQueue, operation, maintainOrder: true))
                 {
-                    if (isStopped)
-                    {
-                        return SocketError.OperationAborted;
-                    }
-
-                    if (operation.TryComplete(this))
-                    {
-                        bytesSent = operation.BytesTransferred;
-                        return operation.ErrorCode;
-                    }
+                    bytesSent = operation.BytesTransferred;
+                    return operation.ErrorCode;
                 }
                 
                 return SocketError.IOPending;
@@ -1707,20 +1616,10 @@ namespace System.Net.Sockets
                         BytesTransferred = bytesSent
                     };
 
-                    bool isStopped;
-                    while (!TryBeginOperation(ref _sendQueue, operation, maintainOrder: true, isStopped: out isStopped))
+                    if (!StartAsyncOperation(ref _sendQueue, operation, maintainOrder: true))
                     {
-                        if (isStopped)
-                        {
-                            bytesSent = operation.BytesTransferred;
-                            return SocketError.Interrupted;
-                        }
-
-                        if (operation.TryComplete(this))
-                        {
-                            bytesSent = operation.BytesTransferred;
-                            return operation.ErrorCode;
-                        }
+                        bytesSent = operation.BytesTransferred;
+                        return operation.ErrorCode;
                     }
                 }
 
@@ -1764,19 +1663,10 @@ namespace System.Net.Sockets
                     BytesTransferred = bytesSent
                 };
 
-                bool isStopped;
-                while (!TryBeginOperation(ref _sendQueue, operation, maintainOrder: true, isStopped: out isStopped))
+                if (!StartAsyncOperation(ref _sendQueue, operation, maintainOrder: true))
                 {
-                    if (isStopped)
-                    {
-                        return SocketError.OperationAborted;
-                    }
-
-                    if (operation.TryComplete(this))
-                    {
-                        bytesSent = operation.BytesTransferred;
-                        return operation.ErrorCode;
-                    }
+                    bytesSent = operation.BytesTransferred;
+                    return operation.ErrorCode;
                 }
 
                 return SocketError.IOPending;
@@ -1814,20 +1704,10 @@ namespace System.Net.Sockets
                         BytesTransferred = bytesSent
                     };
 
-                    bool isStopped;
-                    while (!TryBeginOperation(ref _sendQueue, operation, maintainOrder: true, isStopped: out isStopped))
+                    if (!StartAsyncOperation(ref _sendQueue, operation, maintainOrder: true))
                     {
-                        if (isStopped)
-                        {
-                            bytesSent = operation.BytesTransferred;
-                            return SocketError.Interrupted;
-                        }
-
-                        if (operation.TryComplete(this))
-                        {
-                            bytesSent = operation.BytesTransferred;
-                            return operation.ErrorCode;
-                        }
+                        bytesSent = operation.BytesTransferred;
+                        return operation.ErrorCode;
                     }
                 }
 
@@ -1866,19 +1746,10 @@ namespace System.Net.Sockets
                     BytesTransferred = bytesSent
                 };
 
-                bool isStopped;
-                while (!TryBeginOperation(ref _sendQueue, operation, maintainOrder: true, isStopped: out isStopped))
+                if (!StartAsyncOperation(ref _sendQueue, operation, maintainOrder: true))
                 {
-                    if (isStopped)
-                    {
-                        return SocketError.OperationAborted;
-                    }
-
-                    if (operation.TryComplete(this))
-                    {
-                        bytesSent = operation.BytesTransferred;
-                        return operation.ErrorCode;
-                    }
+                    bytesSent = operation.BytesTransferred;
+                    return operation.ErrorCode;
                 }
 
                 return SocketError.IOPending;
