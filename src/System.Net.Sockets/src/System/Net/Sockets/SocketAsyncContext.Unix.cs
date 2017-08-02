@@ -191,8 +191,7 @@ namespace System.Net.Sockets
 
                 // The operation successfully cancelled.  
                 // It's our responsibility to set the error code and invoke the completion.
-                Abort();
-                ErrorCode = SocketError.OperationAborted;
+                DoAbort();
 
                 var @event = CallbackOrEvent as ManualResetEventSlim;
                 if (@event != null)
@@ -234,6 +233,13 @@ namespace System.Net.Sockets
 
                 Debug.Assert(_state == (int)State.Complete);
                 return true;
+            }
+
+            // Called when op is not in the queue yet, so can't be otherwise executing
+            public void DoAbort()
+            {
+                Abort();
+                ErrorCode = SocketError.OperationAborted;
             }
 
             protected abstract void Abort();
@@ -463,7 +469,9 @@ namespace System.Net.Sockets
             public bool IsStopped { get { return State == QueueState.Stopped; } }
             public bool IsEmpty { get { return _tail == null; } }
 
+            // These should not be public
             public LockToken Lock() => new LockToken(_queueLock);
+            public bool IsLocked => Monitor.IsEntered(_queueLock);
 
 #if false
             public object QueueLock
@@ -738,19 +746,50 @@ namespace System.Net.Sockets
             }
         }
 
-        private bool TryBeginOperation<TOperation>(ref OperationQueue<TOperation> queue, TOperation operation, bool maintainOrder, out bool isStopped)
+        // This is a terrible name, rename, possibly move too
+        // Return true for pending, false for completed sync (incl abort)
+        // Maybe "StartAsyncOperation"?
+        private bool StartAsyncOperation<TOperation>(ref OperationQueue<TOperation> queue, TOperation operation, bool maintainOrder)
             where TOperation : AsyncOperation
         {
+            // TODO: Shouldn't be locked here
+            Debug.Assert(queue.IsLocked);
+
             // TODO: This should happen outside of queue lock.
             if (!_registered)
             {
                 Register();
             }
 
-            // Exactly one of the two queue locks must be held by the caller
-            // Disable for now, as this confounds the reentrancy check
-            // I will revisit later...
-//            Debug.Assert(Monitor.IsEntered(_sendQueue.QueueLock) ^ Monitor.IsEntered(_receiveQueue.QueueLock));
+            bool isStopped;
+            while (true)
+            {
+                if (TryBeginOperation(ref queue, operation, maintainOrder, isStopped: out isStopped))
+                {
+                    // Successfully enqueued
+                    return true;
+                }
+
+                if (isStopped)
+                {
+                    operation.DoAbort();
+                    return false;
+                }
+
+                // Try sync
+                if (operation.TryComplete(this))
+                {
+                    return false;
+                }
+            }
+        }
+
+        // This is the old "TryBeginOperation"; need to rewrite, rename, put on queue struct
+        private bool TryBeginOperation<TOperation>(ref OperationQueue<TOperation> queue, TOperation operation, bool maintainOrder, out bool isStopped)
+            where TOperation : AsyncOperation
+        {
+            // TODO: Push queue locking into queue class
+            Debug.Assert(queue.IsLocked);
 
 #if TRACE
             Trace($"{queue.QueueId(this)}: Enter TryBeginOperation for {IdOf(operation)}, State={queue.State}, IsEmpty={queue.IsEmpty}, maintainOrder={maintainOrder}");
@@ -806,24 +845,9 @@ namespace System.Net.Sockets
                     SocketAddressLen = socketAddressLen
                 };
 
-                bool isStopped;
-                while (true)
+                using (_receiveQueue.Lock())
                 {
-                    using (_receiveQueue.Lock())
-                    {
-                        if (TryBeginOperation(ref _receiveQueue, operation, maintainOrder: false, isStopped: out isStopped))
-                        {
-                            break;
-                        }
-                    }
-
-                    if (isStopped)
-                    {
-                        acceptedFd = (IntPtr)(-1);
-                        return SocketError.Interrupted;
-                    }
-
-                    if (operation.TryComplete(this))
+                    if (!StartAsyncOperation(ref _receiveQueue, operation, maintainOrder: false))
                     {
                         socketAddressLen = operation.SocketAddressLen;
                         acceptedFd = operation.AcceptedFileDescriptor;
