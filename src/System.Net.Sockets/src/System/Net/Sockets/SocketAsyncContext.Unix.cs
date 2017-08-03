@@ -8,6 +8,7 @@
 using Microsoft.Win32.SafeHandles;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Runtime.CompilerServices;
 using System.Threading;
 
 namespace System.Net.Sockets
@@ -71,17 +72,19 @@ namespace System.Net.Sockets
             {
                 Debug.Assert(_state == (int)State.Waiting, $"Unexpected _state: {_state}");
 
+                if (TraceEnabled) TraceWithContext(context, "Enter");
+
                 bool result = DoTryComplete(context);
 
-#if TRACE
-                Trace($"{IdOf(this)}: TryComplete, context={IdOf(context)}");
-#endif
+                if (TraceEnabled) TraceWithContext(context, $"Exit, result={result}");
 
                 return result;
             }
 
             public bool TryCompleteAsync(SocketAsyncContext context)
             {
+                if (TraceEnabled) TraceWithContext(context, "Enter");
+
                 Debug.Assert(context != null);
 
                 State oldState = (State)Interlocked.CompareExchange(ref _state, (int)State.Running, (int)State.Waiting);
@@ -89,10 +92,7 @@ namespace System.Net.Sockets
                 {
                     // This operation has already been cancelled, and had its completion processed.
                     // Simply return true to indicate no further processing is needed.
-#if TRACE
-                    Trace($"{IdOf(this)}: TryCompleteAsync: already cancelled, context={IdOf(context)}");
-#endif
-
+                    if (TraceEnabled) TraceWithContext(context, "Exit, previously cancelled");
                     return true;
                 }
 
@@ -106,9 +106,7 @@ namespace System.Net.Sockets
                 {
                     // EAGAIN
                     Volatile.Write(ref _state, (int)State.Waiting);
-#if TRACE
-                    Trace($"{IdOf(this)}: TryCompleteAsync: failed to complete, context={IdOf(context)}");
-#endif
+                    if (TraceEnabled) TraceWithContext(context, "Exit, received EAGAIN");
                     return false;
                 }
 
@@ -117,9 +115,7 @@ namespace System.Net.Sockets
 
                 Volatile.Write(ref _state, (int)State.Complete);
 
-#if TRACE
-                Trace($"{IdOf(this)}: TryCompleteAsync: processing completion, context={IdOf(context)}");
-#endif
+                if (TraceEnabled) TraceWithContext(context, "I/O completed, processing completion");
 
                 var @event = CallbackOrEvent as ManualResetEventSlim;
                 if (@event != null)
@@ -135,14 +131,14 @@ namespace System.Net.Sockets
                     ThreadPool.QueueUserWorkItem(o => ((AsyncOperation)o).InvokeCallback(), this);
                 }
 
+                if (TraceEnabled) TraceWithContext(context, "Exit");
+
                 return true;
             }
 
             public bool TryCancel()
             {
-#if TRACE
-                Trace($"{IdOf(this)}: Enter TryCancel");
-#endif
+                if (TraceEnabled) Trace("Enter");
 
                 // Try to transition from Waiting to Cancelled
                 var spinWait = new SpinWait();
@@ -154,25 +150,19 @@ namespace System.Net.Sockets
                     {
                         case State.Running:
                             // A completion attempt is in progress. Keep busy-waiting.
-#if TRACE
-                            Trace($"{IdOf(this)}: TryCancel busy wait");
-#endif
+                            if (TraceEnabled) Trace("Busy wait");
                             spinWait.SpinOnce();
                             break;
 
                         case State.Complete:
                             // A completion attempt succeeded. Consider this operation as having completed within the timeout.
-#if TRACE
-                            Trace($"{IdOf(this)}: TryCancel: already completed");
-#endif
+                            if (TraceEnabled) Trace("Exit, previously completed");
                             return false;
 
                         case State.Waiting:
                             // This operation was successfully cancelled.
                             // Break out of the loop to handle the cancellation
-#if TRACE
-                            Trace($"{IdOf(this)}: TryCancel: processing cancellation");
-#endif
+                            if (TraceEnabled) Trace("Exit, previously completed");
                             keepWaiting = false;
                             break;
 
@@ -180,12 +170,12 @@ namespace System.Net.Sockets
                             // Someone else cancelled the operation.
                             // Just return true to indicate the operation was cancelled.
                             // The previous canceller will have fired the completion, etc.
-#if TRACE
-                            Trace($"{IdOf(this)}: TryCancel: already cancelled");
-#endif
+                            if (TraceEnabled) Trace("Exit, previously cancelled");
                             return true;
                     }
                 }
+
+                if (TraceEnabled) Trace("Cancelled, processing completion");
 
                 // The operation successfully cancelled.  
                 // It's our responsibility to set the error code and invoke the completion.
@@ -205,6 +195,8 @@ namespace System.Net.Sockets
                     ThreadPool.QueueUserWorkItem(o => ((AsyncOperation)o).InvokeCallback(), this);
                 }
 
+                if (TraceEnabled) Trace("Exit");
+
                 // Note, we leave the operation in the OperationQueue.
                 // When we get around to processing it, we'll see it's cancelled and skip it.
                 return true;
@@ -217,7 +209,7 @@ namespace System.Net.Sockets
                     return true;
                 }
 
-#if TRACE
+#if false
                 Trace($"{IdOf(this)}: Wait: timed out");
 #endif
 
@@ -245,6 +237,16 @@ namespace System.Net.Sockets
             protected abstract bool DoTryComplete(SocketAsyncContext context);
 
             protected abstract void InvokeCallback();
+
+            public void Trace(string message, [CallerMemberName] string memberName = null)
+            {
+                OutputTrace($"{IdOf(this)}.{memberName}: {message}");
+            }
+
+            public void TraceWithContext(SocketAsyncContext context, string message, [CallerMemberName] string memberName = null)
+            {
+                OutputTrace($"{IdOf(context)}, {IdOf(this)}.{memberName}: {message}");
+            }
         }
 
         // These two abstract classes differentiate the operations that go in the
@@ -505,9 +507,7 @@ namespace System.Net.Sockets
             // Return true for pending, false for completed sync (incl failure and abort)
             public bool StartAsyncOperation(SocketAsyncContext context, TOperation operation)
             {
-#if TRACE
-                Trace($"{QueueId(context)}: Enter StartAsyncOperation for {IdOf(operation)}, State={State}, IsEmpty={IsEmpty}");
-#endif
+                if (TraceEnabled) Trace(context, $"Enter, State={State}, IsEmpty={IsEmpty}");
 
                 // TODO: Shouldn't be locked here
                 Debug.Assert(IsLocked);
@@ -556,15 +556,11 @@ namespace System.Net.Sockets
                 AsyncOperation op;
                 using (Lock())
                 {
-#if TRACE
-                    Trace($"{QueueId(context)}: Enter Complete, State={this.State}, IsEmpty={this.IsEmpty}");
-#endif
+                    if (TraceEnabled) Trace(context, $"Enter");
 
                     if (IsStopped)
                     {
-#if TRACE
-                        Trace($"{QueueId(context)}: Leave Complete, State={this.State}, IsEmpty={this.IsEmpty}");
-#endif
+                        if (TraceEnabled) Trace(context, $"Exit (stopped)");
                         return;
                     }
 
@@ -573,10 +569,7 @@ namespace System.Net.Sockets
                         // Queue is empty
                         // Set state to QueueState.Set to allow callers to try to perform I/O immediately
                         State = QueueState.Set;
-
-#if TRACE
-                        Trace($"{QueueId(context)}: Leave Complete, State={this.State}, IsEmpty={this.IsEmpty}");
-#endif
+                        if (TraceEnabled) Trace(context, $"Exit (queue empty)");
                         return;
                     }
 
@@ -589,9 +582,7 @@ namespace System.Net.Sockets
                     {
                         if (IsStopped)
                         {
-#if TRACE
-                            Trace($"{QueueId(context)}: Leave Complete, State={this.State}, IsEmpty={this.IsEmpty}");
-#endif
+                            if (TraceEnabled) Trace(context, $"Exit (stopped)");
                             return;
                         }
 
@@ -602,9 +593,7 @@ namespace System.Net.Sockets
 
                             // Set state to QueueState.Set to allow callers to try to perform I/O immediately
                             State = QueueState.Set;
-#if TRACE
-                            Trace($"{QueueId(context)}: Leave Complete, State={this.State}, IsEmpty={this.IsEmpty}");
-#endif
+                            if (TraceEnabled) Trace(context, $"Exit (finished queue)");
                             return;
                         }
                         else
@@ -615,9 +604,7 @@ namespace System.Net.Sockets
                     }
                 }
 
-#if TRACE
-                Trace($"{QueueId(context)}: Leave Complete, State={this.State}, IsEmpty={this.IsEmpty}");
-#endif
+                if (TraceEnabled) Trace(context, $"Exit (received EAGAIN)");
             }
 
             public void StopAndAbort(SocketAsyncContext context)
@@ -625,18 +612,11 @@ namespace System.Net.Sockets
                 // We should be called exactly once, by SafeCloseSocket.
                 Debug.Assert(State != QueueState.Stopped);
 
+                if (TraceEnabled) Trace(context, $"Enter");
+
                 using (Lock())
                 {
                     Debug.Assert(State != QueueState.Stopped);
-#if TRACE
-                    Trace($"{QueueId(context)}: Enter StopAndAbort, State={this.State}, IsEmpty={this.IsEmpty}");
-#endif
-
-                    if (State == QueueState.Stopped)
-                    {
-                        // Already stopped, don''t need to do it again
-                        return;
-                    }
 
                     State = QueueState.Stopped;
 
@@ -649,21 +629,20 @@ namespace System.Net.Sockets
                             op = op.Next;
                         } while (op != _tail);
                     }
-
-#if TRACE
-                    Trace($"{IdOf(context)}: Leave Complete, State={this.State}, IsEmpty={this.IsEmpty}");
-#endif
                 }
+
+                if (TraceEnabled) Trace(context, $"Exit");
             }
 
-#if TRACE
-            public string QueueType =>
-                typeof(TOperation) == typeof(ReadOperation) ? "recv" :
-                typeof(TOperation) == typeof(WriteOperation) ? "send" :
-                "";
+            public void Trace(SocketAsyncContext context, string message, [CallerMemberName] string memberName = null)
+            {
+                string queueType =
+                    typeof(TOperation) == typeof(ReadOperation) ? "recv" :
+                    typeof(TOperation) == typeof(WriteOperation) ? "send" :
+                    "???";
 
-            public string QueueId(SocketAsyncContext context) => $"{IdOf(context)}-{QueueType}";
-#endif
+                OutputTrace($"{IdOf(context)}-{queueType}.{memberName}: {message}, State={State}, IsEmpty={IsEmpty}");
+            }
         }
 
         private readonly SafeCloseSocket _socket;
@@ -1680,13 +1659,26 @@ namespace System.Net.Sockets
             }
         }
 
-#if TRACE
-        public static void Trace(string s)
+        //
+        // Tracing stuff
+        //
+
+            // temporary; default to false
+        public static bool TraceEnabled => true;
+
+        public void Trace(string message, [CallerMemberName] string memberName = null)
         {
+            OutputTrace($"{IdOf(this)}.{memberName}: {message}");
+        }
+
+        public static void OutputTrace(string s)
+        {
+            // CONSIDER: Change to NetEventSource
+#if TRACE
             Console.WriteLine(s);
+#endif
         }
 
         public static string IdOf(object o) => $"{o.GetType().Name}#{o.GetHashCode():X2}";
-#endif
     }
 }
