@@ -473,18 +473,6 @@ namespace System.Net.Sockets
             public LockToken Lock() => new LockToken(_queueLock);
             public bool IsLocked => Monitor.IsEntered(_queueLock);
 
-#if false
-            public object QueueLock
-            {
-                get
-                {
-                    // Make sure we don't have unexpected reentrancy
-                    Debug.Assert(!Monitor.IsEntered(_queueLock));
-                    return _queueLock;
-                }
-            }
-#endif
-
             public void Init()
             {
                 Debug.Assert(_queueLock == null);
@@ -540,49 +528,6 @@ namespace System.Net.Sockets
 
                 return true;
             }
-
-#if false
-            private bool TryDequeue(out TOperation operation)
-            {
-                if (_tail == null)
-                {
-                    operation = null;
-                    return false;
-                }
-
-                AsyncOperation head = _tail.Next;
-                if (head == _tail)
-                {
-                    _tail = null;
-                }
-                else
-                {
-                    _tail.Next = head.Next;
-                }
-
-                head.Next = null;
-                operation = (TOperation)head;
-                return true;
-            }
-
-            private void Requeue(TOperation operation)
-            {
-                // Insert at the head of the queue
-                Debug.Assert(!IsStopped, "Expected !IsStopped");
-                Debug.Assert(operation.Next == null, "Operation already in queue");
-
-                if (IsEmpty)
-                {
-                    operation.Next = operation;
-                    _tail = operation;
-                }
-                else
-                {
-                    operation.Next = _tail.Next;
-                    _tail.Next = operation;
-                }
-            }
-#endif
 
             public void Complete(SocketAsyncContext context)
             {
@@ -806,93 +751,6 @@ namespace System.Net.Sockets
                 operation.DoAbort();
                 operation.ErrorCode = SocketError.TimedOut;
             }
-        }
-#endif
-
-#if false
-        //  Maybe rename for PerformAsyncOperation, like above
-        // Return true for pending, false for completed sync (incl failure and abort)
-        private bool StartAsyncOperation<TOperation>(ref OperationQueue<TOperation> queue, TOperation operation)
-            where TOperation : AsyncOperation
-        {
-#if TRACE
-            Trace($"{queue.QueueId(this)}: Enter StartAsyncOperation for {IdOf(operation)}, State={queue.State}, IsEmpty={queue.IsEmpty}");
-#endif
-
-            // TODO: Shouldn't be locked here
-            Debug.Assert(queue.IsLocked);
-
-            // TODO: This should happen outside of queue lock.
-            if (!_registered)
-            {
-                Register();
-            }
-
-            // Check if we need to retry the operation synchronously.
-            while (queue.IsEmpty && queue.State == QueueState.Set)
-            {
-                queue.State = QueueState.Clear;
-
-                // Try sync
-                // TODO: Don't do this under lock
-                if (operation.TryComplete(this))
-                {
-                    return false;
-                }
-            }
-
-            if (queue.State == QueueState.Stopped)
-            {
-                // TODO: Don't do under lock
-                operation.DoAbort();
-                return false;
-            }
-
-            queue.Enqueue(operation);
-            return true;
-        }
-#endif
-
-#if false
-        // This is the old "TryBeginOperation"; need to rewrite, rename, put on queue struct
-        private bool TryBeginOperation<TOperation>(ref OperationQueue<TOperation> queue, TOperation operation, out bool isStopped)
-            where TOperation : AsyncOperation
-        {
-            // TODO: Push queue locking into queue class
-            Debug.Assert(queue.IsLocked);
-
-
-#if TRACE
-            Trace($"{queue.QueueId(this)}: Enter TryBeginOperation for {IdOf(operation)}, State={queue.State}, IsEmpty={queue.IsEmpty}");
-#endif
-
-            switch (queue.State)
-            {
-                case QueueState.Stopped:
-                    isStopped = true;
-                    return false;
-
-                case QueueState.Clear:
-                    break;
-
-                case QueueState.Set:
-                    if (queue.IsEmpty)
-                    {
-                        isStopped = false;
-                        queue.State = QueueState.Clear;
-                        return false;
-                    }
-                    break;
-            }
-
-            queue.Enqueue(operation);
-
-#if TRACE
-            Trace($"{IdOf(this)}: Enqueue {IdOf(operation)}, State={queue.State}, IsEmpty={queue.IsEmpty}");
-#endif
-
-            isStopped = false;
-            return true;
         }
 #endif
 
