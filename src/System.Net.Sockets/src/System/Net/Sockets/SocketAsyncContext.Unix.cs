@@ -778,37 +778,11 @@ namespace System.Net.Sockets
         private bool StartAsyncOperation<TOperation>(ref OperationQueue<TOperation> queue, TOperation operation)
             where TOperation : AsyncOperation
         {
+#if TRACE
+            Trace($"{queue.QueueId(this)}: Enter StartAsyncOperation for {IdOf(operation)}, State={queue.State}, IsEmpty={queue.IsEmpty}");
+#endif
+
             // TODO: Shouldn't be locked here
-            Debug.Assert(queue.IsLocked);
-
-            bool isStopped;
-            while (true)
-            {
-                if (TryBeginOperation(ref queue, operation, isStopped: out isStopped))
-                {
-                    // Successfully enqueued
-                    return true;
-                }
-
-                if (isStopped)
-                {
-                    operation.DoAbort();
-                    return false;
-                }
-
-                // Try sync
-                if (operation.TryComplete(this))
-                {
-                    return false;
-                }
-            }
-        }
-
-        // This is the old "TryBeginOperation"; need to rewrite, rename, put on queue struct
-        private bool TryBeginOperation<TOperation>(ref OperationQueue<TOperation> queue, TOperation operation, out bool isStopped)
-            where TOperation : AsyncOperation
-        {
-            // TODO: Push queue locking into queue class
             Debug.Assert(queue.IsLocked);
 
             // TODO: This should happen outside of queue lock.
@@ -816,6 +790,39 @@ namespace System.Net.Sockets
             {
                 Register();
             }
+
+            // Check if we need to retry the operation synchronously.
+            while (queue.IsEmpty && queue.State == QueueState.Set)
+            {
+                queue.State = QueueState.Clear;
+
+                // Try sync
+                // TODO: Don't do this under lock
+                if (operation.TryComplete(this))
+                {
+                    return false;
+                }
+            }
+
+            if (queue.State == QueueState.Stopped)
+            {
+                // TODO: Don't do under lock
+                operation.DoAbort();
+                return false;
+            }
+
+            queue.Enqueue(operation);
+            return true;
+        }
+
+#if false
+        // This is the old "TryBeginOperation"; need to rewrite, rename, put on queue struct
+        private bool TryBeginOperation<TOperation>(ref OperationQueue<TOperation> queue, TOperation operation, out bool isStopped)
+            where TOperation : AsyncOperation
+        {
+            // TODO: Push queue locking into queue class
+            Debug.Assert(queue.IsLocked);
+
 
 #if TRACE
             Trace($"{queue.QueueId(this)}: Enter TryBeginOperation for {IdOf(operation)}, State={queue.State}, IsEmpty={queue.IsEmpty}");
@@ -849,6 +856,7 @@ namespace System.Net.Sockets
             isStopped = false;
             return true;
         }
+#endif
 
         public SocketError Accept(byte[] socketAddress, ref int socketAddressLen, int timeout, out IntPtr acceptedFd)
         {
