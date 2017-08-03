@@ -491,9 +491,43 @@ namespace System.Net.Sockets
                 _queueLock = new object();
             }
 
-            public void Enqueue(TOperation operation)
+            //  Maybe rename for PerformAsyncOperation, like above
+            // Return true for pending, false for completed sync (incl failure and abort)
+            public bool StartAsyncOperation(SocketAsyncContext context, TOperation operation)
             {
-                Debug.Assert(!IsStopped, "Expected !IsStopped");
+#if TRACE
+                Trace($"{QueueId(context)}: Enter StartAsyncOperation for {IdOf(operation)}, State={State}, IsEmpty={IsEmpty}");
+#endif
+
+                // TODO: Shouldn't be locked here
+                Debug.Assert(IsLocked);
+
+                // TODO: This should happen outside of queue lock.
+                if (!context._registered)
+                {
+                    context.Register();
+                }
+
+                // Check if we need to retry the operation synchronously.
+                while (IsEmpty && State == QueueState.Set)
+                {
+                    State = QueueState.Clear;
+
+                    // Try sync
+                    // TODO: Don't do this under lock
+                    if (operation.TryComplete(context))
+                    {
+                        return false;
+                    }
+                }
+
+                if (State == QueueState.Stopped)
+                {
+                    // TODO: Don't do under lock
+                    operation.DoAbort();
+                    return false;
+                }
+
                 Debug.Assert(operation.Next == operation, "Expected operation.Next == operation");
 
                 if (!IsEmpty)
@@ -503,6 +537,8 @@ namespace System.Net.Sockets
                 }
 
                 _tail = operation;
+
+                return true;
             }
 
 #if false
@@ -773,6 +809,7 @@ namespace System.Net.Sockets
         }
 #endif
 
+#if false
         //  Maybe rename for PerformAsyncOperation, like above
         // Return true for pending, false for completed sync (incl failure and abort)
         private bool StartAsyncOperation<TOperation>(ref OperationQueue<TOperation> queue, TOperation operation)
@@ -814,6 +851,7 @@ namespace System.Net.Sockets
             queue.Enqueue(operation);
             return true;
         }
+#endif
 
 #if false
         // This is the old "TryBeginOperation"; need to rewrite, rename, put on queue struct
@@ -881,7 +919,7 @@ namespace System.Net.Sockets
 
                 using (_receiveQueue.Lock())
                 {
-                    if (!StartAsyncOperation(ref _receiveQueue, operation))
+                    if (!_receiveQueue.StartAsyncOperation(this, operation))
                     {
                         socketAddressLen = operation.SocketAddressLen;
                         acceptedFd = operation.AcceptedFileDescriptor;
@@ -925,7 +963,7 @@ namespace System.Net.Sockets
 
             using (_receiveQueue.Lock())
             {
-                if (!StartAsyncOperation(ref _receiveQueue, operation))
+                if (!_receiveQueue.StartAsyncOperation(this, operation))
                 {
                     socketAddressLen = operation.SocketAddressLen;
                     acceptedFd = operation.AcceptedFileDescriptor;
@@ -959,7 +997,7 @@ namespace System.Net.Sockets
 
                 using (_sendQueue.Lock())
                 {
-                    if (!StartAsyncOperation(ref _sendQueue, operation))
+                    if (!_sendQueue.StartAsyncOperation(this, operation))
                     {
                         return operation.ErrorCode;
                     }
@@ -993,7 +1031,7 @@ namespace System.Net.Sockets
 
             using (_sendQueue.Lock())
             {
-                if (!StartAsyncOperation(ref _sendQueue, operation))
+                if (!_sendQueue.StartAsyncOperation(this, operation))
                 {
                     return operation.ErrorCode;
                 }
@@ -1047,7 +1085,7 @@ namespace System.Net.Sockets
                         SocketAddressLen = socketAddressLen,
                     };
 
-                    if (!StartAsyncOperation(ref _receiveQueue, operation))
+                    if (!_receiveQueue.StartAsyncOperation(this, operation))
                     {
                         flags = operation.ReceivedFlags;
                         bytesReceived = operation.BytesTransferred;
@@ -1093,7 +1131,7 @@ namespace System.Net.Sockets
                     SocketAddressLen = socketAddressLen,
                 };
 
-                if (!StartAsyncOperation(ref _receiveQueue, operation))
+                if (!_receiveQueue.StartAsyncOperation(this, operation))
                 {
                     receivedFlags = operation.ReceivedFlags;
                     bytesReceived = operation.BytesTransferred;
@@ -1148,7 +1186,7 @@ namespace System.Net.Sockets
                         SocketAddressLen = socketAddressLen,
                     };
 
-                    if (!StartAsyncOperation(ref _receiveQueue, operation))
+                    if (!_receiveQueue.StartAsyncOperation(this, operation))
                     {
                         socketAddressLen = operation.SocketAddressLen;
                         flags = operation.ReceivedFlags;
@@ -1194,7 +1232,7 @@ namespace System.Net.Sockets
                     SocketAddressLen = socketAddressLen,
                 };
 
-                if (!StartAsyncOperation(ref _receiveQueue, operation))
+                if (!_receiveQueue.StartAsyncOperation(this, operation))
                 {
                     socketAddressLen = operation.SocketAddressLen;
                     receivedFlags = operation.ReceivedFlags;
@@ -1245,7 +1283,7 @@ namespace System.Net.Sockets
                         IsIPv6 = isIPv6,
                     };
 
-                    if (!StartAsyncOperation(ref _receiveQueue, operation))
+                    if (!_receiveQueue.StartAsyncOperation(this, operation))
                     {
                         socketAddressLen = operation.SocketAddressLen;
                         flags = operation.ReceivedFlags;
@@ -1297,7 +1335,7 @@ namespace System.Net.Sockets
                     IsIPv6 = isIPv6,
                 };
 
-                if (!StartAsyncOperation(ref _receiveQueue, operation))
+                if (!_receiveQueue.StartAsyncOperation(this, operation))
                 {
                     socketAddressLen = operation.SocketAddressLen;
                     receivedFlags = operation.ReceivedFlags;
@@ -1358,7 +1396,7 @@ namespace System.Net.Sockets
                         BytesTransferred = bytesSent
                     };
 
-                    if (!StartAsyncOperation(ref _sendQueue, operation))
+                    if (!_sendQueue.StartAsyncOperation(this, operation))
                     {
                         bytesSent = operation.BytesTransferred;
                         return operation.ErrorCode;
@@ -1403,7 +1441,7 @@ namespace System.Net.Sockets
                     BytesTransferred = bytesSent
                 };
 
-                if (!StartAsyncOperation(ref _sendQueue, operation))
+                if (!_sendQueue.StartAsyncOperation(this, operation))
                 {
                     bytesSent = operation.BytesTransferred;
                     return operation.ErrorCode;
@@ -1460,7 +1498,7 @@ namespace System.Net.Sockets
                         BytesTransferred = bytesSent
                     };
 
-                    if (!StartAsyncOperation(ref _sendQueue, operation))
+                    if (!_sendQueue.StartAsyncOperation(this, operation))
                     {
                         bytesSent = operation.BytesTransferred;
                         return operation.ErrorCode;
@@ -1509,7 +1547,7 @@ namespace System.Net.Sockets
                     BytesTransferred = bytesSent
                 };
 
-                if (!StartAsyncOperation(ref _sendQueue, operation))
+                if (!_sendQueue.StartAsyncOperation(this, operation))
                 {
                     bytesSent = operation.BytesTransferred;
                     return operation.ErrorCode;
@@ -1550,7 +1588,7 @@ namespace System.Net.Sockets
                         BytesTransferred = bytesSent
                     };
 
-                    if (!StartAsyncOperation(ref _sendQueue, operation))
+                    if (!_sendQueue.StartAsyncOperation(this, operation))
                     {
                         bytesSent = operation.BytesTransferred;
                         return operation.ErrorCode;
@@ -1592,7 +1630,7 @@ namespace System.Net.Sockets
                     BytesTransferred = bytesSent
                 };
 
-                if (!StartAsyncOperation(ref _sendQueue, operation))
+                if (!_sendQueue.StartAsyncOperation(this, operation))
                 {
                     bytesSent = operation.BytesTransferred;
                     return operation.ErrorCode;
