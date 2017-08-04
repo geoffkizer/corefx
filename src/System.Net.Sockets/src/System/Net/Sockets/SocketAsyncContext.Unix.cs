@@ -449,7 +449,8 @@ namespace System.Net.Sockets
             {
                 Ready = 0,
                 Waiting = 1,
-                Stopped = 2,
+                Processing = 2,
+                Stopped = 3,
             }
 
             private object _queueLock;
@@ -458,6 +459,11 @@ namespace System.Net.Sockets
             private int _sequenceNumber;
 
             private LockToken Lock() => new LockToken(_queueLock);
+
+            private static WaitCallback s_processingCallback =
+                typeof(TOperation) == typeof(ReadOperation) ? ((o) => { var context = ((SocketAsyncContext)o); context._receiveQueue.ProcessQueue(context); }) :
+                typeof(TOperation) == typeof(WriteOperation) ? ((o) => { var context = ((SocketAsyncContext)o); context._sendQueue.ProcessQueue(context); }) :
+                (WaitCallback)null;
 
             public void Init()
             {
@@ -514,6 +520,7 @@ namespace System.Net.Sockets
                                 goto case QueueState.Waiting;
 
                             case QueueState.Waiting:
+                            case QueueState.Processing:
                                 // Enqueue the operation.
                                 Debug.Assert(operation.Next == operation, "Expected operation.Next == operation");
 
@@ -554,9 +561,56 @@ namespace System.Net.Sockets
                 }
             }
 
-            // CONSIDER:  If I'm tracing outside of locks, I may get inconsistent data...
-            public void Complete(SocketAsyncContext context)
+            public void HandleEvent(SocketAsyncContext context)
             {
+                using (Lock())
+                {
+                    if (TraceEnabled) Trace(context, $"Enter");
+
+                    _sequenceNumber++;
+                    switch (_state)
+                    {
+                        case QueueState.Ready:
+                            Debug.Assert(_tail == null, "State == Ready but queue is not empty!");
+                            if (TraceEnabled) Trace(context, $"Exit (previously ready)");
+                            return;
+
+                        case QueueState.Waiting:
+                            if (_tail == null)
+                            {
+                                _state = QueueState.Ready;
+                                if (TraceEnabled) Trace(context, $"Exit (queue empty)");
+                                return;
+                            }
+
+                            _state = QueueState.Processing;
+                            // Break out and release lock
+                            break;
+
+                        case QueueState.Processing:
+                            Debug.Assert(_tail != null, "State == Processing but queue is empty!");
+                            if (TraceEnabled) Trace(context, $"Exit (currently processing)");
+                            return;
+
+                        case QueueState.Stopped:
+                            if (TraceEnabled) Trace(context, $"Exit (stopped)");
+                            return;
+
+                        default:
+                            Environment.FailFast("unexpected queue state");
+                            return;
+                    }
+                }
+
+                // We just transitioned from Waiting to Processing.
+                // Spawn a work item to do the actual processing.
+                ThreadPool.QueueUserWorkItem(s_processingCallback, context);
+            }
+
+            // CONSIDER:  If I'm tracing outside of locks, I may get inconsistent data...
+            public void ProcessQueue(SocketAsyncContext context)
+            {
+                int observedSequenceNumber;
                 AsyncOperation op;
                 using (Lock())
                 {
@@ -565,20 +619,14 @@ namespace System.Net.Sockets
                     switch (_state)
                     {
                         case QueueState.Ready:
+                        case QueueState.Waiting:
+                            Debug.Assert(false, $"Unexpected queue state while processing I/O: {_state}");
                             Debug.Assert(_tail == null, "State == Ready but queue is not empty!");
-                            _sequenceNumber++;
-                            if (TraceEnabled) Trace(context, $"Exit (previously ready)");
                             return;
 
-                        case QueueState.Waiting:
-                            if (_tail == null)
-                            {
-                                _state = QueueState.Ready;
-                                _sequenceNumber++;
-                                if (TraceEnabled) Trace(context, $"Exit (queue empty)");
-                                return;
-                            }
-
+                        case QueueState.Processing:
+                            Debug.Assert(_tail != null, "Unexpected empty queue while processing I/O");
+                            observedSequenceNumber = _sequenceNumber;
                             op = _tail.Next;        // head of queue
                             break;
 
@@ -592,38 +640,66 @@ namespace System.Net.Sockets
                     }
                 }
 
-                while (op.TryCompleteAsync(context))
+                while (true)
                 {
-                    // Operation completed and continuation was queued.
-
-                    using (Lock())
+                    if (op.TryCompleteAsync(context))
                     {
-                        if (_state == QueueState.Stopped)
+                        // Operation completed and continuation was queued.
+                        using (Lock())
                         {
-                            if (TraceEnabled) Trace(context, $"Exit (stopped)");
-                            return;
-                        }
+                            if (_state == QueueState.Stopped)
+                            {
+                                if (TraceEnabled) Trace(context, $"Exit (stopped)");
+                                // TODO: Add assert here and elsewhere that queue is empty
+                                return;
+                            }
 
-                        Debug.Assert(_state == QueueState.Waiting, "_state unexpectedly changed while processing queue!");
+                            Debug.Assert(_state == QueueState.Waiting, $"_state={_state} while processing queue!");
 
-                        if (op == _tail)
-                        {
-                            // No more operations to process
-                            _tail = null;
-                            _state = QueueState.Ready;
-                            _sequenceNumber++;
-                            if (TraceEnabled) Trace(context, $"Exit (finished queue)");
-                            return;
+                            if (op == _tail)
+                            {
+                                // No more operations to process
+                                _tail = null;
+                                _state = QueueState.Ready;
+                                if (TraceEnabled) Trace(context, $"Exit (finished queue)");
+                                return;
+                            }
+                            else
+                            {
+                                // Pop current operation and advance to next
+                                op = _tail.Next = op.Next;
+                            }
                         }
-                        else
+                    }
+                    else
+                    {
+                        // Operation was not completed.
+                        using (Lock())
                         {
-                            // Pop current operation and advance to next
-                            op = _tail.Next = op.Next;
+                            if (_state == QueueState.Stopped)
+                            {
+                                if (TraceEnabled) Trace(context, $"Exit (stopped)");
+                                // TODO: Add assert here and elsewhere that queue is empty
+                                return;
+                            }
+
+                            Debug.Assert(_state == QueueState.Processing, $"_state={_state} while processing queue!");
+
+                            if (observedSequenceNumber != _sequenceNumber)
+                            {
+                                // We received another epoll notification since we previously checked it.
+                                // So, we need to retry the operation.
+                                Debug.Assert(observedSequenceNumber - _sequenceNumber < 10000, "Very large sequence number increase???");
+                                observedSequenceNumber = _sequenceNumber;
+                            }
+                            else
+                            {
+                                _state = QueueState.Waiting;
+                                if (TraceEnabled) Trace(context, $"Exit (received EAGAIN)");
+                            }
                         }
                     }
                 }
-
-                if (TraceEnabled) Trace(context, $"Exit (received EAGAIN)");
             }
 
             public void StopAndAbort(SocketAsyncContext context)
@@ -1357,12 +1433,12 @@ namespace System.Net.Sockets
 
             if ((events & Interop.Sys.SocketEvents.Read) != 0)
             {
-                _receiveQueue.Complete(this);
+                _receiveQueue.HandleEvent(this);
             }
 
             if ((events & Interop.Sys.SocketEvents.Write) != 0)
             {
-                _sendQueue.Complete(this);
+                _sendQueue.HandleEvent(this);
             }
         }
 
