@@ -163,7 +163,6 @@ namespace System.Net.Sockets
                         case State.Waiting:
                             // This operation was successfully cancelled.
                             // Break out of the loop to handle the cancellation
-                            if (TraceEnabled) Trace("Exit, previously completed");
                             keepWaiting = false;
                             break;
 
@@ -179,7 +178,7 @@ namespace System.Net.Sockets
                 if (TraceEnabled) Trace("Cancelled, processing completion");
 
                 // The operation successfully cancelled.  
-                // It's our responsibility to set the error code and invoke the completion.
+                // It's our responsibility to set the error code and queue the completion.
                 DoAbort();
 
                 var @event = CallbackOrEvent as ManualResetEventSlim;
@@ -200,29 +199,6 @@ namespace System.Net.Sockets
 
                 // Note, we leave the operation in the OperationQueue.
                 // When we get around to processing it, we'll see it's cancelled and skip it.
-                return true;
-            }
-
-            public bool Wait(int timeout)
-            {
-                if (Event.Wait(timeout))
-                {
-                    return true;
-                }
-
-#if false
-                Trace($"{IdOf(this)}: Wait: timed out");
-#endif
-
-                bool cancelled = TryCancel();
-
-                if (cancelled)
-                {
-                    Debug.Assert(_state == (int)State.Cancelled);
-                    return false;
-                }
-
-                Debug.Assert(_state == (int)State.Complete);
                 return true;
             }
 
@@ -805,11 +781,15 @@ namespace System.Net.Sockets
                     return;
                 }
 
-                // CONSIDER: Move Wait logic here, only place it's called, I think
-                if (!operation.Wait(timeout))
+                if (e.Wait(timeout))
                 {
-                    // Wait already called DoAbort (actually TryCancel)
-//                    operation.DoAbort();
+                    // Completed within timeout
+                    return;
+                }
+
+                bool cancelled = operation.TryCancel();
+                if (cancelled)
+                {
                     operation.ErrorCode = SocketError.TimedOut;
                 }
             }
