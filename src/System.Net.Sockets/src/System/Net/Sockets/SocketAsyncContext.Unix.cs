@@ -118,7 +118,7 @@ namespace System.Net.Sockets
 
                 Volatile.Write(ref _state, (int)State.Complete);
 
-                if (TraceEnabled) TraceWithContext(context, "I/O completed, processing completion");
+                if (TraceEnabled) TraceWithContext(context, $"I/O completed with {ErrorCode}, processing completion");
 
                 var @event = CallbackOrEvent as ManualResetEventSlim;
                 if (@event != null)
