@@ -404,10 +404,9 @@ namespace System.Net.Sockets
             }
         }
 
-        // This struct guards against:
+        // In debug builds, this struct guards against:
         // (1) Unexpected lock reentrancy, which should never happen
         // (2) Deadlock, by setting a reasonably large timeout
-        // TODO: Only do this in debug, likely
         private struct LockToken : IDisposable
         {
             private object _lockObject;
@@ -420,8 +419,12 @@ namespace System.Net.Sockets
 
                 Debug.Assert(!Monitor.IsEntered(_lockObject));
 
-                bool success = Monitor.TryEnter(_lockObject, 2000);
+#if DEBUG
+                bool success = Monitor.TryEnter(_lockObject, 10000);
                 Debug.Assert(success);
+#else
+                Monitor.Enter(_lockObject);
+#endif
             }
 
             public void Dispose()
