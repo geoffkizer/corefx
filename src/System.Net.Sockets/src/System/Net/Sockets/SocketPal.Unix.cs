@@ -523,6 +523,8 @@ namespace System.Net.Sockets
                 return true;
             }
 
+            Console.WriteLine($"In TryStartConnect for Socket {socket.GetHashCode():X}, IsDisconnected = false");
+
             Interop.Error err;
             fixed (byte* rawSocketAddress = socketAddress)
             {
@@ -1715,6 +1717,8 @@ namespace System.Net.Sockets
         internal static SocketError Disconnect(Socket socket, SafeCloseSocket handle, bool reuseSocket)
         {
             handle.SetToDisconnected();
+
+            Console.WriteLine($"In Disconnect for Socket {handle.GetHashCode():X}, SetToDisconnected called");
 
             socket.Shutdown(SocketShutdown.Both);
             return reuseSocket ?
