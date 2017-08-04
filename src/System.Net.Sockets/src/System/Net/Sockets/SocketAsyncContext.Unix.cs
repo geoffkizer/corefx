@@ -511,12 +511,16 @@ namespace System.Net.Sockets
                 _sequenceNumber = 0;
             }
 
-            public bool IsReady(out int observedSequenceNumber)
+            public bool IsReady(SocketAsyncContext context, out int observedSequenceNumber)
             {
                 using (Lock())
                 {
                     observedSequenceNumber = _sequenceNumber;
-                    return (_state == QueueState.Ready);
+                    bool isReady = (_state == QueueState.Ready);
+
+                    if (TraceEnabled) Trace(context, $"{isReady}");
+
+                    return isReady;
                 }
             }
 
@@ -564,7 +568,7 @@ namespace System.Net.Sockets
 
                                 _tail = operation;
 
-                                if (TraceEnabled) Trace(context, $"Leave, operation enqueued");
+                                if (TraceEnabled) Trace(context, $"Leave, enqueued {IdOf(operation)}");
                                 return true;
 
                             case QueueState.Stopped:
@@ -593,13 +597,14 @@ namespace System.Net.Sockets
                 }
             }
 
+            // CONSIDER:  If I'm tracing outside of locks, I may get inconsistent data...
             public void Complete(SocketAsyncContext context)
             {
-                if (TraceEnabled) Trace(context, $"Enter");
-
                 AsyncOperation op;
                 using (Lock())
                 {
+                    if (TraceEnabled) Trace(context, $"Enter");
+
                     switch (_state)
                     {
                         case QueueState.Ready:
@@ -669,10 +674,10 @@ namespace System.Net.Sockets
                 // We should be called exactly once, by SafeCloseSocket.
                 Debug.Assert(_state != QueueState.Stopped);
 
-                if (TraceEnabled) Trace(context, $"Enter");
-
                 using (Lock())
                 {
+                    if (TraceEnabled) Trace(context, $"Enter");
+
                     Debug.Assert(_state != QueueState.Stopped);
 
                     _state = QueueState.Stopped;
@@ -686,9 +691,9 @@ namespace System.Net.Sockets
                             op = op.Next;
                         } while (op != _tail);
                     }
-                }
 
-                if (TraceEnabled) Trace(context, $"Exit");
+                    if (TraceEnabled) Trace(context, $"Exit");
+                }
             }
 
             public void Trace(SocketAsyncContext context, string message, [CallerMemberName] string memberName = null)
@@ -698,7 +703,7 @@ namespace System.Net.Sockets
                     typeof(TOperation) == typeof(WriteOperation) ? "send" :
                     "???";
 
-                OutputTrace($"{IdOf(context)}-{queueType}.{memberName}: {message}, State={_state}, empty={(_tail == null)}");
+                OutputTrace($"{IdOf(context)}-{queueType}.{memberName}: {message}, {_state}-{_sequenceNumber}, {((_tail == null) ? "empty" : "not empty")}");
             }
         }
 
@@ -745,6 +750,8 @@ namespace System.Net.Sockets
 
                     _asyncEngineToken = token;
                     _registered = true;
+
+                    if (TraceEnabled) Trace("Registered");
                 }
             }
         }
@@ -816,7 +823,7 @@ namespace System.Net.Sockets
 
             SocketError errorCode;
             int observedSequenceNumber;
-            if (_receiveQueue.IsReady(out observedSequenceNumber) &&
+            if (_receiveQueue.IsReady(this, out observedSequenceNumber) &&
                 SocketPal.TryCompleteAccept(_socket, socketAddress, ref socketAddressLen, out acceptedFd, out errorCode))
             {
                 Debug.Assert(errorCode == SocketError.Success || acceptedFd == (IntPtr)(-1), $"Unexpected values: errorCode={errorCode}, acceptedFd={acceptedFd}");
@@ -846,7 +853,7 @@ namespace System.Net.Sockets
 
             SocketError errorCode;
             int observedSequenceNumber;
-            if (_receiveQueue.IsReady(out observedSequenceNumber) &&
+            if (_receiveQueue.IsReady(this, out observedSequenceNumber) &&
                 SocketPal.TryCompleteAccept(_socket, socketAddress, ref socketAddressLen, out acceptedFd, out errorCode))
             {
                 Debug.Assert(errorCode == SocketError.Success || acceptedFd == (IntPtr)(-1), $"Unexpected values: errorCode={errorCode}, acceptedFd={acceptedFd}");
@@ -879,7 +886,7 @@ namespace System.Net.Sockets
 
             SocketError errorCode;
             int observedSequenceNumber;
-            if (_sendQueue.IsReady(out observedSequenceNumber) &&
+            if (_sendQueue.IsReady(this, out observedSequenceNumber) &&
                 SocketPal.TryStartConnect(_socket, socketAddress, socketAddressLen, out errorCode))
             {
                 _socket.RegisterConnectResult(errorCode);
@@ -907,7 +914,7 @@ namespace System.Net.Sockets
 
             SocketError errorCode;
             int observedSequenceNumber;
-            if (_sendQueue.IsReady(out observedSequenceNumber) &&
+            if (_sendQueue.IsReady(this, out observedSequenceNumber) &&
                 SocketPal.TryStartConnect(_socket, socketAddress, socketAddressLen, out errorCode))
             {
                 _socket.RegisterConnectResult(errorCode);
@@ -953,7 +960,7 @@ namespace System.Net.Sockets
             SocketFlags receivedFlags;
             SocketError errorCode;
             int observedSequenceNumber;
-            if (_receiveQueue.IsReady(out observedSequenceNumber) &&
+            if (_receiveQueue.IsReady(this, out observedSequenceNumber) &&
                 SocketPal.TryCompleteReceiveFrom(_socket, buffer, offset, count, flags, socketAddress, ref socketAddressLen, out bytesReceived, out receivedFlags, out errorCode))
             {
                 flags = receivedFlags;
@@ -1051,7 +1058,7 @@ namespace System.Net.Sockets
 
             SocketError errorCode;
             int observedSequenceNumber;
-            if (_receiveQueue.IsReady(out observedSequenceNumber) &&
+            if (_receiveQueue.IsReady(this, out observedSequenceNumber) &&
                 SocketPal.TryCompleteReceiveFrom(_socket, buffer, offset, count, flags, socketAddress, ref socketAddressLen, out bytesReceived, out receivedFlags, out errorCode))
             {
                 return errorCode;
@@ -1098,7 +1105,7 @@ namespace System.Net.Sockets
             SocketFlags receivedFlags;
             SocketError errorCode;
             int observedSequenceNumber;
-            if (_receiveQueue.IsReady(out observedSequenceNumber) &&
+            if (_receiveQueue.IsReady(this, out observedSequenceNumber) &&
                 SocketPal.TryCompleteReceiveFrom(_socket, buffers, flags, socketAddress, ref socketAddressLen, out bytesReceived, out receivedFlags, out errorCode))
             {
                 flags = receivedFlags;
@@ -1127,7 +1134,7 @@ namespace System.Net.Sockets
 
             SocketError errorCode;
             int observedSequenceNumber;
-            if (_receiveQueue.IsReady(out observedSequenceNumber) &&
+            if (_receiveQueue.IsReady(this, out observedSequenceNumber) &&
                 SocketPal.TryCompleteReceiveFrom(_socket, buffers, flags, socketAddress, ref socketAddressLen, out bytesReceived, out receivedFlags, out errorCode))
             {
                 // Synchronous success or failure
@@ -1164,7 +1171,7 @@ namespace System.Net.Sockets
             SocketFlags receivedFlags;
             SocketError errorCode;
             int observedSequenceNumber;
-            if (_receiveQueue.IsReady(out observedSequenceNumber) &&
+            if (_receiveQueue.IsReady(this, out observedSequenceNumber) &&
                 SocketPal.TryCompleteReceiveMessageFrom(_socket, buffer, buffers, offset, count, flags, socketAddress, ref socketAddressLen, isIPv4, isIPv6, out bytesReceived, out receivedFlags, out ipPacketInformation, out errorCode))
             {
                 flags = receivedFlags;
@@ -1199,7 +1206,7 @@ namespace System.Net.Sockets
 
             SocketError errorCode;
             int observedSequenceNumber;
-            if (_receiveQueue.IsReady(out observedSequenceNumber) &&
+            if (_receiveQueue.IsReady(this, out observedSequenceNumber) &&
                 SocketPal.TryCompleteReceiveMessageFrom(_socket, buffer, buffers, offset, count, flags, socketAddress, ref socketAddressLen, isIPv4, isIPv6, out bytesReceived, out receivedFlags, out ipPacketInformation, out errorCode))
             {
                 return errorCode;
@@ -1255,7 +1262,7 @@ namespace System.Net.Sockets
             bytesSent = 0;
             SocketError errorCode;
             int observedSequenceNumber;
-            if (_sendQueue.IsReady(out observedSequenceNumber) &&
+            if (_sendQueue.IsReady(this, out observedSequenceNumber) &&
                 SocketPal.TryCompleteSendTo(_socket, buffer, ref offset, ref count, flags, socketAddress, socketAddressLen, ref bytesSent, out errorCode))
             {
                 return errorCode;
@@ -1350,7 +1357,7 @@ namespace System.Net.Sockets
             bytesSent = 0;
             SocketError errorCode;
             int observedSequenceNumber;
-            if (_sendQueue.IsReady(out observedSequenceNumber) &&
+            if (_sendQueue.IsReady(this, out observedSequenceNumber) &&
                 SocketPal.TryCompleteSendTo(_socket, buffer, ref offset, ref count, flags, socketAddress, socketAddressLen, ref bytesSent, out errorCode))
             {
                 return errorCode;
@@ -1397,7 +1404,7 @@ namespace System.Net.Sockets
             int offset = 0;
             SocketError errorCode;
             int observedSequenceNumber;
-            if (_sendQueue.IsReady(out observedSequenceNumber) &&
+            if (_sendQueue.IsReady(this, out observedSequenceNumber) &&
                 SocketPal.TryCompleteSendTo(_socket, buffers, ref bufferIndex, ref offset, flags, socketAddress, socketAddressLen, ref bytesSent, out errorCode))
             {
                 return errorCode;
@@ -1429,7 +1436,7 @@ namespace System.Net.Sockets
             int offset = 0;
             SocketError errorCode;
             int observedSequenceNumber;
-            if (_sendQueue.IsReady(out observedSequenceNumber) &&
+            if (_sendQueue.IsReady(this, out observedSequenceNumber) &&
                 SocketPal.TryCompleteSendTo(_socket, buffers, ref bufferIndex, ref offset, flags, socketAddress, socketAddressLen, ref bytesSent, out errorCode))
             {
                 return errorCode;
@@ -1463,7 +1470,7 @@ namespace System.Net.Sockets
             bytesSent = 0;
             SocketError errorCode;
             int observedSequenceNumber;
-            if (_sendQueue.IsReady(out observedSequenceNumber) &&
+            if (_sendQueue.IsReady(this, out observedSequenceNumber) &&
                 SocketPal.TryCompleteSendFile(_socket, fileHandle, ref offset, ref count, ref bytesSent, out errorCode))
             {
                 return errorCode;
@@ -1490,7 +1497,7 @@ namespace System.Net.Sockets
             bytesSent = 0;
             SocketError errorCode;
             int observedSequenceNumber;
-            if (_sendQueue.IsReady(out observedSequenceNumber) &&
+            if (_sendQueue.IsReady(this, out observedSequenceNumber) &&
                 SocketPal.TryCompleteSendFile(_socket, fileHandle, ref offset, ref count, ref bytesSent, out errorCode))
             {
                 return errorCode;
