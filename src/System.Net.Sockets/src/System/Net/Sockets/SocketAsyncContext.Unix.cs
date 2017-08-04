@@ -884,10 +884,13 @@ namespace System.Net.Sockets
             Debug.Assert(socketAddressLen > 0, $"Unexpected socketAddressLen: {socketAddressLen}");
             Debug.Assert(timeout == -1 || timeout > 0, $"Unexpected timeout: {timeout}");
 
+            // Connect is different than the usual "readiness" pattern of other operations.
+            // We need to initiate the connect before we try to complete it. 
+            // Thus, always call TryStartConnect regardless of readiness.
             SocketError errorCode;
             int observedSequenceNumber;
-            if (_sendQueue.IsReady(this, out observedSequenceNumber) &&
-                SocketPal.TryStartConnect(_socket, socketAddress, socketAddressLen, out errorCode))
+            _sendQueue.IsReady(this, out observedSequenceNumber);
+            if (SocketPal.TryStartConnect(_socket, socketAddress, socketAddressLen, out errorCode))
             {
                 _socket.RegisterConnectResult(errorCode);
                 return errorCode;
@@ -912,10 +915,13 @@ namespace System.Net.Sockets
 
             SetNonBlocking();
 
+            // Connect is different than the usual "readiness" pattern of other operations.
+            // We need to initiate the connect before we try to complete it. 
+            // Thus, always call TryStartConnect regardless of readiness.
             SocketError errorCode;
             int observedSequenceNumber;
-            if (_sendQueue.IsReady(this, out observedSequenceNumber) &&
-                SocketPal.TryStartConnect(_socket, socketAddress, socketAddressLen, out errorCode))
+            _sendQueue.IsReady(this, out observedSequenceNumber);
+            if (SocketPal.TryStartConnect(_socket, socketAddress, socketAddressLen, out errorCode))
             {
                 _socket.RegisterConnectResult(errorCode);
                 return errorCode;
