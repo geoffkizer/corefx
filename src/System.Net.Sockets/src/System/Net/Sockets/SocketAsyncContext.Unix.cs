@@ -696,6 +696,7 @@ namespace System.Net.Sockets
                             {
                                 _state = QueueState.Waiting;
                                 if (TraceEnabled) Trace(context, $"Exit (received EAGAIN)");
+                                return;
                             }
                         }
                     }
