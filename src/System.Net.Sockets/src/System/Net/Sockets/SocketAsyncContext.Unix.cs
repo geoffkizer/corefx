@@ -808,8 +808,8 @@ namespace System.Net.Sockets
                 // CONSIDER: Move Wait logic here, only place it's called, I think
                 if (!operation.Wait(timeout))
                 {
-                    // CONSIDER: DoAbort could take an errorCode
-                    operation.DoAbort();
+                    // Wait already called DoAbort (actually TryCancel)
+//                    operation.DoAbort();
                     operation.ErrorCode = SocketError.TimedOut;
                 }
             }
