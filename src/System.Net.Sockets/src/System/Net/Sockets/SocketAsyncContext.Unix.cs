@@ -676,7 +676,7 @@ namespace System.Net.Sockets
                                 return;
                             }
 
-                            Debug.Assert(_state == QueueState.Waiting, $"_state={_state} while processing queue!");
+                            Debug.Assert(_state == QueueState.Processing, $"_state={_state} while processing queue!");
 
                             if (op == _tail)
                             {
