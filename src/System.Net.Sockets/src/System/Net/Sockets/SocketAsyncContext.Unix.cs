@@ -558,6 +558,7 @@ namespace System.Net.Sockets
                                 return true;
 
                             case QueueState.Stopped:
+                                Debug.Assert(_tail == null);
                                 doAbort = true;
                                 break;
 
@@ -615,6 +616,7 @@ namespace System.Net.Sockets
                             return;
 
                         case QueueState.Stopped:
+                            Debug.Assert(_tail == null);
                             if (TraceEnabled) Trace(context, $"Exit (stopped)");
                             return;
 
@@ -653,6 +655,7 @@ namespace System.Net.Sockets
                             break;
 
                         case QueueState.Stopped:
+                            Debug.Assert(_tail == null);
                             if (TraceEnabled) Trace(context, $"Exit (stopped)");
                             return;
 
@@ -671,8 +674,8 @@ namespace System.Net.Sockets
                         {
                             if (_state == QueueState.Stopped)
                             {
+                                Debug.Assert(_tail == null);
                                 if (TraceEnabled) Trace(context, $"Exit (stopped)");
-                                // TODO: Add assert here and elsewhere that queue is empty
                                 return;
                             }
 
@@ -700,8 +703,8 @@ namespace System.Net.Sockets
                         {
                             if (_state == QueueState.Stopped)
                             {
+                                Debug.Assert(_tail == null);
                                 if (TraceEnabled) Trace(context, $"Exit (stopped)");
-                                // TODO: Add assert here and elsewhere that queue is empty
                                 return;
                             }
 
@@ -747,6 +750,8 @@ namespace System.Net.Sockets
                             op = op.Next;
                         } while (op != _tail);
                     }
+
+                    _tail = null;
 
                     if (TraceEnabled) Trace(context, $"Exit");
                 }
