@@ -1430,6 +1430,12 @@ namespace System.Net.Sockets
 
         public unsafe void HandleEvents(Interop.Sys.SocketEvents events)
         {
+            if ((events & Interop.Sys.SocketEvents.ReadClose) != 0 &&
+                (events & Interop.Sys.SocketEvents.Read) == 0)
+            {
+                Debug.Assert(false, "Saw ReadClose without Read");
+            }
+
             if ((events & Interop.Sys.SocketEvents.Error) != 0)
             {
                 // Set the Read and Write flags as well; the processing for these events
