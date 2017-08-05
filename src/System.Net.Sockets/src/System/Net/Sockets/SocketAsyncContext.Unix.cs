@@ -71,8 +71,6 @@ namespace System.Net.Sockets
 
             public bool TryComplete(SocketAsyncContext context)
             {
-                Debug.Assert(_state == (int)State.Waiting, $"Unexpected _state: {_state}");
-
                 if (TraceEnabled) TraceWithContext(context, "Enter");
 
                 bool result = DoTryComplete(context);
@@ -100,14 +98,14 @@ namespace System.Net.Sockets
             {
                 Debug.Assert(Volatile.Read(ref _state) == (int)State.Running);
 
-                Volatile.Write(ref _state, (int)State.Waiting);
+                Volatile.Write(ref _state, (int)State.Complete);
             }
 
             public void SetWaiting()
             {
                 Debug.Assert(Volatile.Read(ref _state) == (int)State.Running);
 
-                Volatile.Write(ref _state, (int)State.Complete);
+                Volatile.Write(ref _state, (int)State.Waiting);
             }
 
             // This will go away, or at least change to something else
