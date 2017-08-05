@@ -43,10 +43,6 @@ namespace System.Net.Sockets.Tests
 
     public abstract class CloseTests<T> : SocketTestHelperBase<T> where T : SocketHelperBase, new()
     {
-        // I really want something like the following tests:
-        // (1) Shutdown with pending (recv, recv async, send, send async) + force nonblocking
-        // (2) Close with same
-
         private Task<int> DoPendingReceive(Socket s)
         {
             Task<int> receiveTask = ReceiveAsync(s, new ArraySegment<byte>(new byte[1]));

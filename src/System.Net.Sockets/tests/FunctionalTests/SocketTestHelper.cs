@@ -27,6 +27,8 @@ namespace System.Net.Sockets.Tests
         public virtual bool ValidatesArrayArguments => true;
         public virtual bool UsesSync => false;
         public virtual bool DisposeDuringOperationResultsInDisposedException => false;
+        // CONSIDER: Why is linux just ConnectionAborted too?
+        public virtual SocketError DisposeDuringOperationSocketError => PlatformDetection.IsWindows ? SocketError.ConnectionAborted : SocketError.OperationAborted;
         public virtual bool ConnectAfterDisconnectResultsInInvalidOperationException => false;
         public virtual bool SupportsMultiConnect => true;
         public virtual bool SupportsAcceptIntoExistingSocket => true;
@@ -147,6 +149,7 @@ namespace System.Net.Sockets.Tests
             s.SendAsync(bufferList, SocketFlags.None);
         public override Task<int> SendToAsync(Socket s, ArraySegment<byte> buffer, EndPoint endPoint) =>
             s.SendToAsync(buffer, SocketFlags.None, endPoint);
+        public override SocketError DisposeDuringOperationSocketError => SocketError.OperationAborted;
     }
 
     public sealed class SocketHelperEap : SocketHelperBase
@@ -229,6 +232,7 @@ namespace System.Net.Sockets.Tests
         }
 
         public override bool SupportsMultiConnect => false;
+        public override SocketError DisposeDuringOperationSocketError => SocketError.OperationAborted;
     }
 
     public abstract class SocketTestHelperBase<T> : MemberDatas
@@ -260,6 +264,7 @@ namespace System.Net.Sockets.Tests
         public bool ValidatesArrayArguments => _socketHelper.ValidatesArrayArguments;
         public bool UsesSync => _socketHelper.UsesSync;
         public bool DisposeDuringOperationResultsInDisposedException => _socketHelper.DisposeDuringOperationResultsInDisposedException;
+        public SocketError DisposeDuringOperationSocketError => _socketHelper.DisposeDuringOperationSocketError;
         public bool ConnectAfterDisconnectResultsInInvalidOperationException => _socketHelper.ConnectAfterDisconnectResultsInInvalidOperationException;
         public bool SupportsMultiConnect => _socketHelper.SupportsMultiConnect;
         public bool SupportsAcceptIntoExistingSocket => _socketHelper.SupportsAcceptIntoExistingSocket;
