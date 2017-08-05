@@ -127,86 +127,10 @@ namespace System.Net.Sockets
                 Volatile.Write(ref _state, (int)State.Waiting);
             }
 
-#if false
-            // This will go away, or at least change to something else
-            public void ProcessCompletion()
-            {
-                var @event = CallbackOrEvent as ManualResetEventSlim;
-                if (@event != null)
-                {
-                    @event.Set();
-                }
-                else
-                {
-#if DEBUG
-                    Debug.Assert(Interlocked.CompareExchange(ref _callbackQueued, 1, 0) == 0, $"Unexpected _callbackQueued: {_callbackQueued}");
-#endif
-
-                    ThreadPool.QueueUserWorkItem(o => ((AsyncOperation)o).InvokeCallback(), this);
-                }
-            }
-#endif
             public void DoCallback()
             {
                 InvokeCallback();
             }
-
-#if false
-            public bool TryCompleteAsync(SocketAsyncContext context)
-            {
-                if (TraceEnabled) TraceWithContext(context, "Enter");
-
-                Debug.Assert(context != null);
-
-                State oldState = (State)Interlocked.CompareExchange(ref _state, (int)State.Running, (int)State.Waiting);
-                if (oldState == State.Cancelled)
-                {
-                    // This operation has already been cancelled, and had its completion processed.
-                    // Simply return true to indicate no further processing is needed.
-                    if (TraceEnabled) TraceWithContext(context, "Exit, previously cancelled");
-                    return true;
-                }
-
-                Debug.Assert(oldState == (int)State.Waiting);
-
-                bool completed = DoTryComplete(context);
-
-                Debug.Assert(Volatile.Read(ref _state) == (int)State.Running);
-
-                if (!completed)
-                {
-                    // EAGAIN
-                    Volatile.Write(ref _state, (int)State.Waiting);
-                    if (TraceEnabled) TraceWithContext(context, "Exit, received EAGAIN");
-                    return false;
-                }
-
-                // We've successfully completed this operation.  
-                // Set state and process completion.
-
-                Volatile.Write(ref _state, (int)State.Complete);
-
-                if (TraceEnabled) TraceWithContext(context, $"I/O completed with {ErrorCode}, processing completion");
-
-                var @event = CallbackOrEvent as ManualResetEventSlim;
-                if (@event != null)
-                {
-                    @event.Set();
-                }
-                else
-                {
-#if DEBUG
-                    Debug.Assert(Interlocked.CompareExchange(ref _callbackQueued, 1, 0) == 0, $"Unexpected _callbackQueued: {_callbackQueued}");
-#endif
-
-                    ThreadPool.QueueUserWorkItem(o => ((AsyncOperation)o).InvokeCallback(), this);
-                }
-
-                if (TraceEnabled) TraceWithContext(context, "Exit");
-
-                return true;
-            }
-#endif
 
             public bool TryCancel()
             {
@@ -556,8 +480,7 @@ namespace System.Net.Sockets
                 }
             }
 
-                //  Maybe rename for PerformAsyncOperation, like above
-                // Return true for pending, false for completed sync (incl failure and abort)
+            // Return true for pending, false for completed synchronously (including failure and abort)
             public bool StartAsyncOperation(SocketAsyncContext context, TOperation operation, int observedSequenceNumber)
             {
                 if (TraceEnabled) Trace(context, $"Enter");
@@ -673,7 +596,6 @@ namespace System.Net.Sockets
                 ThreadPool.QueueUserWorkItem(s_processingCallback, context);
             }
 
-            // CONSIDER:  If I'm tracing outside of locks, I may get inconsistent data...
             public void ProcessQueue(SocketAsyncContext context)
             {
                 int observedSequenceNumber;
@@ -1568,8 +1490,15 @@ namespace System.Net.Sockets
         // Tracing stuff
         //
 
-            // temporary; default to false
-        public static bool TraceEnabled => true;
+        // To enabled tracing:
+        // (1) Add reference to System.Console in the csproj
+        // (2) #define TRACE
+
+        // temporary; default to false
+        /// <summary>
+        ///  TODO: Make this under TRACE
+        /// </summary>
+        public const bool TraceEnabled = true;
 
         public void Trace(string message, [CallerMemberName] string memberName = null)
         {
