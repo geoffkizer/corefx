@@ -94,11 +94,28 @@ namespace System.Net.Sockets
                 return true;
             }
 
-            public void SetComplete()
+            public bool SetComplete()
             {
                 Debug.Assert(Volatile.Read(ref _state) == (int)State.Running);
 
                 Volatile.Write(ref _state, (int)State.Complete);
+
+                if (CallbackOrEvent is ManualResetEventSlim e)
+                {
+                    e.Set();
+
+                    // No callback needed
+                    return false;
+                }
+                else
+                {
+#if DEBUG
+                    Debug.Assert(Interlocked.CompareExchange(ref _callbackQueued, 1, 0) == 0, $"Unexpected _callbackQueued: {_callbackQueued}");
+#endif
+
+                    // Indicate callback is needed
+                    return true;
+                }
             }
 
             public void SetWaiting()
@@ -108,6 +125,7 @@ namespace System.Net.Sockets
                 Volatile.Write(ref _state, (int)State.Waiting);
             }
 
+#if false
             // This will go away, or at least change to something else
             public void ProcessCompletion()
             {
@@ -124,6 +142,11 @@ namespace System.Net.Sockets
 
                     ThreadPool.QueueUserWorkItem(o => ((AsyncOperation)o).InvokeCallback(), this);
                 }
+            }
+#endif
+            public void DoCallback()
+            {
+                InvokeCallback();
             }
 
 #if false
@@ -706,6 +729,8 @@ namespace System.Net.Sockets
                     }
                 }
 
+                bool needCallback = false;
+                AsyncOperation nextOp;
                 while (true)
                 {
                     bool wasCompleted = false;
@@ -715,8 +740,7 @@ namespace System.Net.Sockets
                         wasCompleted = op.TryComplete(context);
                         if (wasCompleted)
                         {
-                            op.SetComplete();
-                            op.ProcessCompletion();
+                            needCallback = op.SetComplete();
                         }
                         else
                         {
@@ -724,6 +748,7 @@ namespace System.Net.Sockets
                         }
                     }
 
+                    nextOp = null;
                     if (wasCompleted || wasCancelled)
                     {
                         // Remove the op from the queue and see if there's more to process.
@@ -734,24 +759,24 @@ namespace System.Net.Sockets
                             {
                                 Debug.Assert(_tail == null);
                                 if (TraceEnabled) Trace(context, $"Exit (stopped)");
-                                return;
-                            }
-
-                            Debug.Assert(_state == QueueState.Processing, $"_state={_state} while processing queue!");
-
-                            if (op == _tail)
-                            {
-                                // No more operations to process
-                                _tail = null;
-                                _state = QueueState.Ready;
-                                _sequenceNumber++;
-                                if (TraceEnabled) Trace(context, $"Exit (finished queue)");
-                                return;
                             }
                             else
                             {
-                                // Pop current operation and advance to next
-                                op = _tail.Next = op.Next;
+                                Debug.Assert(_state == QueueState.Processing, $"_state={_state} while processing queue!");
+
+                                if (op == _tail)
+                                {
+                                    // No more operations to process
+                                    _tail = null;
+                                    _state = QueueState.Ready;
+                                    _sequenceNumber++;
+                                    if (TraceEnabled) Trace(context, $"Exit (finished queue)");
+                                }
+                                else
+                                {
+                                    // Pop current operation and advance to next
+                                    nextOp = _tail.Next = op.Next;
+                                }
                             }
                         }
                     }
@@ -765,26 +790,51 @@ namespace System.Net.Sockets
                             {
                                 Debug.Assert(_tail == null);
                                 if (TraceEnabled) Trace(context, $"Exit (stopped)");
-                                return;
-                            }
-
-                            Debug.Assert(_state == QueueState.Processing, $"_state={_state} while processing queue!");
-
-                            if (observedSequenceNumber != _sequenceNumber)
-                            {
-                                // We received another epoll notification since we previously checked it.
-                                // So, we need to retry the operation.
-                                Debug.Assert(observedSequenceNumber - _sequenceNumber < 10000, "Very large sequence number increase???");
-                                observedSequenceNumber = _sequenceNumber;
                             }
                             else
                             {
-                                _state = QueueState.Waiting;
-                                if (TraceEnabled) Trace(context, $"Exit (received EAGAIN)");
-                                return;
+                                Debug.Assert(_state == QueueState.Processing, $"_state={_state} while processing queue!");
+
+                                if (observedSequenceNumber != _sequenceNumber)
+                                {
+                                    // We received another epoll notification since we previously checked it.
+                                    // So, we need to retry the operation.
+                                    Debug.Assert(observedSequenceNumber - _sequenceNumber < 10000, "Very large sequence number increase???");
+                                    observedSequenceNumber = _sequenceNumber;
+                                    nextOp = op;
+                                }
+                                else
+                                {
+                                    _state = QueueState.Waiting;
+                                    if (TraceEnabled) Trace(context, $"Exit (received EAGAIN)");
+                                }
                             }
                         }
                     }
+
+                    if (needCallback || nextOp == null)
+                    {
+                        break;
+                    }
+
+                    op = nextOp;
+                }
+
+                if (needCallback)
+                {
+                    if (nextOp != null)
+                    {
+                        Debug.Assert(_state == QueueState.Processing);
+
+                        // Spawn a new work item to continue processing the queue.
+                        ThreadPool.QueueUserWorkItem(s_processingCallback, context);
+                    }
+
+                    op.DoCallback();
+                }
+                else
+                {
+                    Debug.Assert(nextOp == null);
                 }
             }
 
