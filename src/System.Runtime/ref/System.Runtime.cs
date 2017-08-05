@@ -2055,6 +2055,7 @@ namespace System
         public unsafe String(sbyte* value, int startIndex, int length) { }
         [System.CLSCompliantAttribute(false)]
         public unsafe String(sbyte* value, int startIndex, int length, System.Text.Encoding enc) { }
+        public String(System.ReadOnlySpan<char> value) { }
         [System.Runtime.CompilerServices.IndexerName("Chars")]
         public char this[int index] { get { throw null; } }
         public int Length { get { throw null; } }
@@ -5052,6 +5053,7 @@ namespace System.IO
         [System.ObsoleteAttribute("Do not call or override this method.")]
         protected virtual void ObjectInvariant() { }
         public abstract int Read(byte[] buffer, int offset, int count);
+        public virtual int Read(System.Span<byte> destination) { throw null; }
         public System.Threading.Tasks.Task<int> ReadAsync(byte[] buffer, int offset, int count) { throw null; }
         public virtual System.Threading.Tasks.Task<int> ReadAsync(byte[] buffer, int offset, int count, System.Threading.CancellationToken cancellationToken) { throw null; }
         public virtual int ReadByte() { throw null; }
@@ -5059,6 +5061,7 @@ namespace System.IO
         public abstract void SetLength(long value);
         public static System.IO.Stream Synchronized(System.IO.Stream stream) { throw null; }
         public abstract void Write(byte[] buffer, int offset, int count);
+        public virtual void Write(System.ReadOnlySpan<byte> source) { }
         public System.Threading.Tasks.Task WriteAsync(byte[] buffer, int offset, int count) { throw null; }
         public virtual System.Threading.Tasks.Task WriteAsync(byte[] buffer, int offset, int count, System.Threading.CancellationToken cancellationToken) { throw null; }
         public virtual void WriteByte(byte value) { }
