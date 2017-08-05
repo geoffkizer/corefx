@@ -178,17 +178,17 @@ namespace System.Net.Sockets.Tests
 
                     Task<int> t = DoPendingReceive(client);
 
-                    Console.WriteLine("Close_WithPendingReceive: About to Close");
+                    client.Close();
 
-                    bool closed = Task.Run(() => client.Close()).Wait(1000);
-                    if (!closed)
+                    if (DisposeDuringOperationResultsInDisposedException)
                     {
-                        Console.WriteLine("Close_WithPendingReceive: Close is hung");
-                        return;
+                        await Assert.ThrowsAsync<ObjectDisposedException>(() => t);
                     }
-                    Console.WriteLine("Close_WithPendingReceive: Closed");
-
-                    await ShowResult("Close_WithPendingReceive", t);
+                    else
+                    {
+                        SocketException se = await Assert.ThrowsAsync<SocketException>(() => t);
+                        Assert.Equal(DisposeDuringOperationSocketError, se.SocketErrorCode);
+                    }
                 }
             }
         }
@@ -210,17 +210,17 @@ namespace System.Net.Sockets.Tests
 
                     Task t = DoPendingSend(client);
 
-                    Console.WriteLine("Close_WithPendingSend: About to Close");
+                    client.Close();
 
-                    bool closed = Task.Run(() => client.Close()).Wait(1000);
-                    if (!closed)
+                    if (DisposeDuringOperationResultsInDisposedException)
                     {
-                        Console.WriteLine("Close_WithPendingSend: Close is hung");
-                        return;
+                        await Assert.ThrowsAsync<ObjectDisposedException>(() => t);
                     }
-                    Console.WriteLine("Close_WithPendingSend: Closed");
-
-                    await ShowResult("Close_WithPendingSend", t);
+                    else
+                    {
+                        SocketException se = await Assert.ThrowsAsync<SocketException>(() => t);
+                        Assert.Equal(DisposeDuringOperationSocketError, se.SocketErrorCode);
+                    }
                 }
             }
         }
@@ -244,17 +244,9 @@ namespace System.Net.Sockets.Tests
                     await SendAsync(accepted, new ArraySegment<byte>(new byte[1]));
                     Assert.Equal(1, await receiveOne);
 
-                    Console.WriteLine("ReceiveAfterClose: About to Close");
+                    client.Close();
 
-                    bool closed = Task.Run(() => client.Close()).Wait(1000);
-                    if (!closed)
-                    {
-                        Console.WriteLine("ReceiveAfterClose: Close is hung");
-                        return;
-                    }
-                    Console.WriteLine("ReceiveAfterClose: Closed");
-
-                    await InvokeAndShowResult("ReceiveAfterClose", () => ReceiveAsync(client, new ArraySegment<byte>(new byte[1])));
+                    await Assert.ThrowsAsync<ObjectDisposedException>(() => ReceiveAsync(client, new ArraySegment<byte>(new byte[1])));
                 }
             }
         }
@@ -278,17 +270,9 @@ namespace System.Net.Sockets.Tests
                     Assert.Equal(1, await ReceiveAsync(accepted, new ArraySegment<byte>(new byte[1])));
                     await sendOne;
 
-                    Console.WriteLine("SendAfterClose: About to Close");
+                    client.Close();
 
-                    bool closed = Task.Run(() => client.Close()).Wait(1000);
-                    if (!closed)
-                    {
-                        Console.WriteLine("SendAfterClose: Close is hung");
-                        return;
-                    }
-                    Console.WriteLine("SendAfterClose: Closed");
-
-                    await InvokeAndShowResult("SendAfterClose", () => SendAsync(client, new ArraySegment<byte>(new byte[1])));
+                    await Assert.ThrowsAsync<ObjectDisposedException>(() => SendAsync(client, new ArraySegment<byte>(new byte[1])));
                 }
             }
         }
