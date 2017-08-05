@@ -568,11 +568,11 @@ namespace System.Net.Sockets
                 {
                     if (TraceEnabled) Trace(context, $"Enter");
 
-                    _sequenceNumber++;
                     switch (_state)
                     {
                         case QueueState.Ready:
                             Debug.Assert(_tail == null, "State == Ready but queue is not empty!");
+                            _sequenceNumber++;
                             if (TraceEnabled) Trace(context, $"Exit (previously ready)");
                             return;
 
@@ -580,6 +580,7 @@ namespace System.Net.Sockets
                             if (_tail == null)
                             {
                                 _state = QueueState.Ready;
+                                _sequenceNumber++;
                                 if (TraceEnabled) Trace(context, $"Exit (queue empty)");
                                 return;
                             }
@@ -590,6 +591,7 @@ namespace System.Net.Sockets
 
                         case QueueState.Processing:
                             Debug.Assert(_tail != null, "State == Processing but queue is empty!");
+                            _sequenceNumber++;
                             if (TraceEnabled) Trace(context, $"Exit (currently processing)");
                             return;
 
@@ -664,6 +666,7 @@ namespace System.Net.Sockets
                                 // No more operations to process
                                 _tail = null;
                                 _state = QueueState.Ready;
+                                _sequenceNumber++;
                                 if (TraceEnabled) Trace(context, $"Exit (finished queue)");
                                 return;
                             }
