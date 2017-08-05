@@ -711,7 +711,7 @@ namespace System.Net.Sockets
                 while (true)
                 {
                     bool wasCompleted = false;
-                    bool wasCancelled = op.TrySetRunning();
+                    bool wasCancelled = !op.TrySetRunning();
                     if (!wasCancelled)
                     {
                         wasCompleted = op.TryComplete(context);
