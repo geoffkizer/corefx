@@ -84,6 +84,53 @@ namespace System.Net.Sockets
                 return result;
             }
 
+            public bool TrySetRunning()
+            {
+                State oldState = (State)Interlocked.CompareExchange(ref _state, (int)State.Running, (int)State.Waiting);
+                if (oldState == State.Cancelled)
+                {
+                    // This operation has already been cancelled, and had its completion processed.
+                    // Simply return true to indicate no further processing is needed.
+                    return false;
+                }
+
+                Debug.Assert(oldState == (int)State.Waiting);
+                return true;
+            }
+
+            public void SetComplete()
+            {
+                Debug.Assert(Volatile.Read(ref _state) == (int)State.Running);
+
+                Volatile.Write(ref _state, (int)State.Waiting);
+            }
+
+            public void SetWaiting()
+            {
+                Debug.Assert(Volatile.Read(ref _state) == (int)State.Running);
+
+                Volatile.Write(ref _state, (int)State.Complete);
+            }
+
+            // This will go away, or at least change to something else
+            public void ProcessCompletion()
+            {
+                var @event = CallbackOrEvent as ManualResetEventSlim;
+                if (@event != null)
+                {
+                    @event.Set();
+                }
+                else
+                {
+#if DEBUG
+                    Debug.Assert(Interlocked.CompareExchange(ref _callbackQueued, 1, 0) == 0, $"Unexpected _callbackQueued: {_callbackQueued}");
+#endif
+
+                    ThreadPool.QueueUserWorkItem(o => ((AsyncOperation)o).InvokeCallback(), this);
+                }
+            }
+
+#if false
             public bool TryCompleteAsync(SocketAsyncContext context)
             {
                 if (TraceEnabled) TraceWithContext(context, "Enter");
@@ -138,6 +185,7 @@ namespace System.Net.Sockets
 
                 return true;
             }
+#endif
 
             public bool TryCancel()
             {
@@ -640,9 +688,26 @@ namespace System.Net.Sockets
 
                 while (true)
                 {
-                    if (op.TryCompleteAsync(context))
+                    bool wasCompleted = false;
+                    bool wasCancelled = op.TrySetRunning();
+                    if (!wasCancelled)
                     {
-                        // Operation completed and continuation was queued.
+                        wasCompleted = op.TryComplete(context);
+                        if (wasCompleted)
+                        {
+                            op.SetComplete();
+                            op.ProcessCompletion();
+                        }
+                        else
+                        {
+                            op.SetWaiting();
+                        }
+                    }
+
+                    if (wasCompleted || wasCancelled)
+                    {
+                        // Remove the op from the queue and see if there's more to process.
+
                         using (Lock())
                         {
                             if (_state == QueueState.Stopped)
@@ -672,7 +737,8 @@ namespace System.Net.Sockets
                     }
                     else
                     {
-                        // Operation was not completed.
+                        // Check for retry and reset queue state.
+
                         using (Lock())
                         {
                             if (_state == QueueState.Stopped)
