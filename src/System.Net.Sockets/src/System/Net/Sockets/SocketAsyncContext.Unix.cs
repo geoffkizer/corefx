@@ -577,14 +577,7 @@ namespace System.Net.Sockets
                             return;
 
                         case QueueState.Waiting:
-                            if (_tail == null)
-                            {
-                                _state = QueueState.Ready;
-                                _sequenceNumber++;
-                                if (TraceEnabled) Trace(context, $"Exit (queue empty)");
-                                return;
-                            }
-
+                            Debug.Assert(_tail != null, "State == Waiting but queue is empty!");
                             _state = QueueState.Processing;
                             // Break out and release lock
                             break;
