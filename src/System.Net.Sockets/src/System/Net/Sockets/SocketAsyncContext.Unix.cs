@@ -8,6 +8,9 @@ using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using System.Threading;
 
+// Disable unreachable code warning for trace code
+#pragma warning disable CS0162
+
 namespace System.Net.Sockets
 {
     // Note on asynchronous behavior here:
@@ -1647,9 +1650,9 @@ namespace System.Net.Sockets
 
         // To enabled tracing:
         // (1) Add reference to System.Console in the csproj
-        // (2) #define TRACE
+        // (2) #define SOCKETASYNCCONTEXT_TRACE
 
-#if TRACE
+#if SOCKETASYNCCONTEXT_TRACE
         public const bool TraceEnabled = true;
 #else
         public const bool TraceEnabled = false;
@@ -1663,7 +1666,7 @@ namespace System.Net.Sockets
         public static void OutputTrace(string s)
         {
             // CONSIDER: Change to NetEventSource
-#if TRACE
+#if SOCKETASYNCCONTEXT_TRACE
             Console.WriteLine(s);
 #endif
         }
