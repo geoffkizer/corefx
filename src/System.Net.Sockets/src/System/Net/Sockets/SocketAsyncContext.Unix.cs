@@ -2,9 +2,6 @@
 // The .NET Foundation licenses this file to you under the MIT license.
 // See the LICENSE file in the project root for more information.
 
-// Enable this to turn on async queue tracing
-#define TRACE
-
 using Microsoft.Win32.SafeHandles;
 using System;
 using System.Collections.Generic;
@@ -1488,11 +1485,11 @@ namespace System.Net.Sockets
         // (1) Add reference to System.Console in the csproj
         // (2) #define TRACE
 
-        // temporary; default to false
-        /// <summary>
-        ///  TODO: Make this under TRACE
-        /// </summary>
+#if TRACE
         public const bool TraceEnabled = true;
+#else
+        public const bool TraceEnabled = false;
+#endif
 
         public void Trace(string message, [CallerMemberName] string memberName = null)
         {
