@@ -628,12 +628,9 @@ namespace System.Net.Http.Headers
         private void AddHeaderInfo(HeaderDescriptor descriptor, HeaderStoreItemInfo sourceInfo)
         {
             HeaderStoreItemInfo destinationInfo = CreateAndAddHeaderToStore(descriptor);
-            Debug.Assert(sourceInfo.Parser == destinationInfo.Parser,
-                "Expected same parser on both source and destination header store for header '" + descriptor.Name +
-                "'.");
 
             // We have custom header values. The parsed values are strings.
-            if (destinationInfo.Parser == null)
+            if (descriptor.Parser == null)
             {
                 Debug.Assert((sourceInfo.RawValue == null) && (sourceInfo.InvalidValue == null),
                     "No raw or invalid values expected for custom headers.");
@@ -731,7 +728,7 @@ namespace System.Net.Http.Headers
         private HeaderStoreItemInfo CreateAndAddHeaderToStore(HeaderDescriptor descriptor)
         {
             // If we don't have the header in the store yet, add it now.
-            HeaderStoreItemInfo result = new HeaderStoreItemInfo(descriptor.Parser);
+            HeaderStoreItemInfo result = new HeaderStoreItemInfo();
 
             AddHeaderToStore(descriptor, result);
 
@@ -1043,7 +1040,7 @@ namespace System.Net.Http.Headers
             addToStore = false;
             if (!TryGetAndParseHeaderInfo(descriptor, out info))
             {
-                info = new HeaderStoreItemInfo(descriptor.Parser);
+                info = new HeaderStoreItemInfo();
                 addToStore = true;
             }
         }
@@ -1293,7 +1290,6 @@ namespace System.Net.Http.Headers
             private object _rawValue;
             private object _invalidValue;
             private object _parsedValue;
-            private HttpHeaderParser _parser;
 
             internal object RawValue
             {
@@ -1311,11 +1307,6 @@ namespace System.Net.Http.Headers
             {
                 get { return _parsedValue; }
                 set { _parsedValue = value; }
-            }
-
-            internal HttpHeaderParser Parser
-            {
-                get { return _parser; }
             }
 
             internal bool CanAddValue(HttpHeaderParser parser)
@@ -1340,10 +1331,8 @@ namespace System.Net.Http.Headers
                 get { return ((_rawValue == null) && (_invalidValue == null) && (_parsedValue == null)); }
             }
 
-            internal HeaderStoreItemInfo(HttpHeaderParser parser)
+            internal HeaderStoreItemInfo()
             {
-                // Can be null.
-                _parser = parser;
             }
         }
 #endregion
