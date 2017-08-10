@@ -14,10 +14,9 @@ using System.Threading;
 namespace System.Net.Sockets
 {
     // Note on asynchronous behavior here:
-    // TODO: Revise comment
 
     // The asynchronous socket operations here generally do the following:
-    // (1) If the operation queue is empty, try to perform the operation immediately, non-blocking.
+    // (1) If the operation queue is Ready (queue is empty), try to perform the operation immediately, non-blocking.
     // If this completes (i.e. does not return EWOULDBLOCK), then we return the results immediately
     // for both success (SocketError.Success) or failure.
     // No callback will happen; callers are expected to handle these synchronous completions themselves.
@@ -25,13 +24,13 @@ namespace System.Net.Sockets
     // appropriate queue and return SocketError.IOPending.
     // Enqueuing itself may fail because the socket is closed before the operation can be enqueued;
     // in this case, we return SocketError.OperationAborted (which matches what Winsock would return in this case).
-    // (3) When the queue completes the operation, it will post a work item to the threadpool
-    // to call the callback with results (either success or failure).
+    // (3) When we receive an epoll notification for the socket, we post a work item to the threadpool
+    // to perform the I/O and invoke the callback with the I/O result.
 
     // Synchronous operations generally do the same, except that instead of returning IOPending,
     // they block on an event handle until the operation is processed by the queue.
-    // Also, synchronous methods return SocketError.Interrupted when enqueuing fails
-    // (which again matches Winsock behavior).
+
+    // See comments on OperationQueue below for more details of how the queue coordination works.
 
     internal sealed class SocketAsyncContext
     {
@@ -452,26 +451,49 @@ namespace System.Net.Sockets
         private struct OperationQueue<TOperation>
             where TOperation : AsyncOperation
         {
-            // Description of queue states:
-            // Ready means that there MAY be data available from the OS.
-            // It also means the queue is empty.
-            // Callers are expected to check IsReady and, if true, try to perform the operation directly.
-            // If this fails (or IsReady was false), then callers should call StartAsyncOperation,
-            // which will transition us to Waiting (if we weren't already) and enqueue the operation.
-            // StartAsyncOperation may also complete synchronously (when?)
+            // Quick overview:
+            // 
+            // When attempting to perform an IO operation, the caller first checks IsReady,
+            // and if true, attempts to perform the operation itself.
+            // If this returns EWOULDBLOCK, or if the queue was not ready, then the operation
+            // is enqueued by calling StartAsyncOperation and the state becomes Waiting.
+            // When an epoll notification is received, we check if the state is Waiting,
+            // and if so, change the state to Processing and enqueue a workitem to the threadpool 
+            // to try to perform the enqueued operations.
+            // If an operation is successfully performed, we remove it from the queue,
+            // enqueue another threadpool workitem to process the next item in the queue (if any),
+            // and call the user's completion callback.
+            // If we successfully process all enqueued operations, then the state becomes Ready;
+            // otherwise, the state becomes Waiting and we wait for another epoll notification.
 
             private enum QueueState
             {
-                Ready = 0,
-                Waiting = 1,
-                Processing = 2,
-                Stopped = 3,
+                Ready = 0,          // Indicates that data MAY be available on the socket.
+                                    // Queue must be empty.
+                Waiting = 1,        // Indicates that data is definitely not available on the socket.
+                                    // Queue must not be empty.
+                Processing = 2,     // Indicates that a thread pool item has been scheduled (and may 
+                                    // be executing) to process the IO operations in the queue.
+                                    // Queue must not be empty.
+                Stopped = 3,        // Indicates that the queue has been stopped because the 
+                                    // socket has been closed.
+                                    // Queue must be empty.
             }
 
+            // These fields define the queue state.
+
+            private QueueState _state;      // See above
+            private int _sequenceNumber;    // This sequence number is updated when we receive an epoll notification.
+                                            // It allows us to detect when a new epoll notification has arrived
+                                            // since the last time we checked the state of the queue.
+                                            // If this happens, we MUST retry the operation, otherwise we risk
+                                            // "losing" the notification and causing the operation to pend indefinitely.
+            private AsyncOperation _tail;   // Queue of pending IO operations to process when data becomes available.
+
+            // The _queueLock is used to ensure atomic access to the queue state above.
+            // The lock is only ever held briefly, to read and/or update queue state, and
+            // never around any external call, e.g. OS call or user code invocation.
             private object _queueLock;
-            private AsyncOperation _tail;
-            private QueueState _state;
-            private int _sequenceNumber;
 
             private LockToken Lock() => new LockToken(_queueLock);
 
@@ -489,6 +511,7 @@ namespace System.Net.Sockets
                 _sequenceNumber = 0;
             }
 
+            // IsReady returns the current _sequenceNumber, which must be passed to StartAsyncOperation below.
             public bool IsReady(SocketAsyncContext context, out int observedSequenceNumber)
             {
                 using (Lock())
@@ -529,7 +552,7 @@ namespace System.Net.Sockets
                                     break;
                                 }
 
-                                // Caller tried the operation and got an EAGAIN, so we need to transition.
+                                // Caller tried the operation and got an EWOULDBLOCK, so we need to transition.
                                 _state = QueueState.Waiting;
                                 goto case QueueState.Waiting;
 
@@ -576,6 +599,7 @@ namespace System.Net.Sockets
                 }
             }
 
+            // Called on the epoll thread whenever we receive an epoll notification.
             public void HandleEvent(SocketAsyncContext context)
             {
                 using (Lock())
@@ -618,6 +642,7 @@ namespace System.Net.Sockets
                 ThreadPool.QueueUserWorkItem(s_processingCallback, context);
             }
 
+            // Called on the threadpool when data may be available.
             public void ProcessQueue(SocketAsyncContext context)
             {
                 int observedSequenceNumber;
@@ -626,28 +651,18 @@ namespace System.Net.Sockets
                 {
                     if (TraceEnabled) Trace(context, $"Enter");
 
-                    switch (_state)
+                    if (_state == QueueState.Stopped)
                     {
-                        case QueueState.Ready:
-                        case QueueState.Waiting:
-                            Debug.Assert(false, $"Unexpected queue state while processing I/O: {_state}");
-                            Debug.Assert(_tail == null, "State == Ready but queue is not empty!");
-                            return;
-
-                        case QueueState.Processing:
-                            Debug.Assert(_tail != null, "Unexpected empty queue while processing I/O");
-                            observedSequenceNumber = _sequenceNumber;
-                            op = _tail.Next;        // head of queue
-                            break;
-
-                        case QueueState.Stopped:
-                            Debug.Assert(_tail == null);
-                            if (TraceEnabled) Trace(context, $"Exit (stopped)");
-                            return;
-
-                        default:
-                            Environment.FailFast("unexpected queue state");
-                            return;
+                        Debug.Assert(_tail == null);
+                        if (TraceEnabled) Trace(context, $"Exit (stopped)");
+                        return;
+                    }
+                    else
+                    {
+                        Debug.Assert(_state == QueueState.Processing, $"_state={_state} while processing queue!");
+                        Debug.Assert(_tail != null, "Unexpected empty queue while processing I/O");
+                        observedSequenceNumber = _sequenceNumber;
+                        op = _tail.Next;        // head of queue
                     }
                 }
 
@@ -659,6 +674,7 @@ namespace System.Net.Sockets
                     bool wasCancelled = !op.TrySetRunning();
                     if (!wasCancelled)
                     {
+                        // Try to perform the IO
                         wasCompleted = op.TryComplete(context);
                         if (wasCompleted)
                         {
@@ -760,6 +776,7 @@ namespace System.Net.Sockets
                 }
             }
 
+            // Called when the socket is closed.
             public void StopAndAbort(SocketAsyncContext context)
             {
                 // We should be called exactly once, by SafeCloseSocket.
