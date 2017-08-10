@@ -217,7 +217,7 @@ namespace System.Net.Http.Headers
             HeaderStoreItemInfo info = null;
             if (TryGetAndParseHeaderInfo(descriptor, out info))
             {
-                values = GetValuesAsStrings(info);
+                values = GetValuesAsStrings(descriptor, info);
                 return true;
             }
 
@@ -277,9 +277,7 @@ namespace System.Net.Http.Headers
 
             foreach (var header in _headerStore)
             {
-                HeaderStoreItemInfo info = header.Value;
-
-                string stringValue = GetHeaderString(info);
+                string stringValue = GetHeaderString(header.Key, header.Value);
 
                 yield return new KeyValuePair<string, string>(header.Key.Name, stringValue);
             }
@@ -303,14 +301,14 @@ namespace System.Net.Http.Headers
                 return string.Empty;
             }
 
-            return GetHeaderString(info);
+            return GetHeaderString(descriptor, info);
         }
 
-        private string GetHeaderString(HeaderStoreItemInfo info)
+        private string GetHeaderString(HeaderDescriptor descriptor, HeaderStoreItemInfo info)
         {
             string stringValue;
 
-            string[] values = GetValuesAsStrings(info);
+            string[] values = GetValuesAsStrings(descriptor, info);
 
             if (values.Length == 1)
             {
@@ -321,9 +319,9 @@ namespace System.Net.Http.Headers
                 // Note that if we get multiple values for a header that doesn't support multiple values, we'll
                 // just separate the values using a comma (default separator).
                 string separator = HttpHeaderParser.DefaultSeparator;
-                if ((info.Parser != null) && (info.Parser.SupportsMultipleValues))
+                if ((descriptor.Parser != null) && (descriptor.Parser.SupportsMultipleValues))
                 {
-                    separator = info.Parser.Separator;
+                    separator = descriptor.Parser.Separator;
                 }
                 stringValue = string.Join(separator, values);
             }
@@ -346,12 +344,13 @@ namespace System.Net.Http.Headers
 
             foreach (var header in _headerStore)
             {
+                HeaderDescriptor descriptor = header.Key;
                 HeaderStoreItemInfo info = header.Value;
 
                 // Make sure we parse all raw values before returning the result. Note that this has to be
                 // done before we calculate the array length (next line): A raw value may contain a list of
                 // values.
-                if (!ParseRawHeaderValues(header.Key, info, false))
+                if (!ParseRawHeaderValues(descriptor, info, false))
                 {
                     // We have an invalid header value (contains invalid newline chars). Mark it as "to-be-deleted"
                     // and skip this header.
@@ -359,12 +358,12 @@ namespace System.Net.Http.Headers
                     {
                         invalidHeaders = new List<HeaderDescriptor>();
                     }
-                    invalidHeaders.Add(header.Key);
+                    invalidHeaders.Add(descriptor);
                 }
                 else
                 {
-                    string[] values = GetValuesAsStrings(info);
-                    yield return new KeyValuePair<string, IEnumerable<string>>(header.Key.Name, values);
+                    string[] values = GetValuesAsStrings(descriptor, info);
+                    yield return new KeyValuePair<string, IEnumerable<string>>(descriptor.Name, values);
                 }
             }
 
@@ -1184,7 +1183,7 @@ namespace System.Net.Http.Headers
             return false;
         }
 
-        private static string[] GetValuesAsStrings(HeaderStoreItemInfo info)
+        private static string[] GetValuesAsStrings(HeaderDescriptor descriptor, HeaderStoreItemInfo info)
         {
             Contract.Ensures(Contract.Result<string[]>() != null);
 
@@ -1197,7 +1196,7 @@ namespace System.Net.Http.Headers
                 int currentIndex = 0;
 
                 ReadStoreValues<string>(values, info.RawValue, null, ref currentIndex);
-                ReadStoreValues<object>(values, info.ParsedValue, info.Parser, ref currentIndex);
+                ReadStoreValues<object>(values, info.ParsedValue, descriptor.Parser, ref currentIndex);
 
                 // Set parser parameter to 'null' for invalid values: The invalid values is always a string so we 
                 // don't need the parser to "serialize" the value to a string.
