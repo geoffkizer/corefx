@@ -114,6 +114,22 @@ namespace System.Net.Http.Headers
             public char CharAt(int index) => _string[index];
         }
 
+        // Can't use Span here as it's unsupported.
+        private unsafe struct BytePtrAccessor : IHeaderNameAccessor
+        {
+            private byte* _p;
+            private int _length;
+
+            public BytePtrAccessor(byte* p, int length)
+            {
+                _p = p;
+                _length = length;
+            }
+
+            public int Length => _length;
+            public char CharAt(int index) => (char)_p[index];
+        }
+
         // Find possible known header match via lookup on length and a distinguishing char for that length.
         // Matching is case-insenstive.
         // NOTE: Because of this, we do not preserve the case of the original header,
@@ -347,6 +363,20 @@ namespace System.Net.Http.Headers
             if (candidate != null && StringComparer.OrdinalIgnoreCase.Equals(name, candidate.Name))
             {
                 return candidate;
+            }
+
+            return null;
+        }
+
+        internal unsafe static KnownHeader TryGetKnownHeader(ReadOnlySpan<byte> name)
+        {
+            fixed (byte* p = &name.DangerousGetPinnableReference())
+            {
+                KnownHeader candidate = GetCandidate(new BytePtrAccessor(p, name.Length));
+                if (candidate != null && CharArrayHelpers.EqualsOrdinalAsciiIgnoreCase(candidate.Name, name))
+                {
+                    return candidate;
+                }
             }
 
             return null;

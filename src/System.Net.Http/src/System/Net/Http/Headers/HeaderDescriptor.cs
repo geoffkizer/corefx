@@ -3,6 +3,7 @@
 // See the LICENSE file in the project root for more information.
 
 using System.Diagnostics;
+using System.Text;
 
 namespace System.Net.Http.Headers
 {
@@ -62,11 +63,61 @@ namespace System.Net.Http.Headers
             return true;
         }
 
+        public static bool TryGet(ReadOnlySpan<byte> headerName, out HeaderDescriptor descriptor)
+        {
+            Debug.Assert(headerName.Length > 0);
+
+            KnownHeader knownHeader = KnownHeaders.TryGetKnownHeader(headerName);
+            if (knownHeader != null)
+            {
+                descriptor = new HeaderDescriptor(knownHeader);
+                return true;
+            }
+
+#if false   // TODO
+            if (HttpRuleParser.GetTokenLength(headerName, 0) != headerName.Length)
+            {
+                descriptor = default(HeaderDescriptor);
+                return false;
+            }
+#endif
+
+            descriptor = new HeaderDescriptor(CharArrayHelpers.GetStringFromByteSpan(headerName));
+            return true;
+        }
+
         public HeaderDescriptor AsCustomHeader()
         {
             Debug.Assert(_knownHeader != null);
             Debug.Assert(_knownHeader.HeaderType != HttpHeaderType.Custom);
             return new HeaderDescriptor(_knownHeader.Name);
+        }
+
+        private const string Gzip = "gzip";
+        private const string Deflate = "deflate";
+
+        public string GetHeaderValue(ReadOnlySpan<byte> headerValue)
+        {
+            if (headerValue.Length == 0)
+            {
+                return string.Empty;
+            }
+
+            // If it's a known header value, use the known value instead of allocating a new string.
+
+            if (_knownHeader == KnownHeaders.ContentEncoding)
+            {
+                if (CharArrayHelpers.EqualsOrdinalAsciiIgnoreCase(Gzip, headerValue))
+                {
+                    return Gzip;
+                }
+                else if (CharArrayHelpers.EqualsOrdinalAsciiIgnoreCase(Deflate, headerValue))
+                {
+                    return Deflate;
+                }
+            }
+
+            return CharArrayHelpers.GetStringFromByteSpan(headerValue);
         }
     }
 }

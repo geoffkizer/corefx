@@ -394,38 +394,48 @@ namespace System.Net.Http
 
         private void ParseHeaderNameValue(Span<byte> line, HttpResponseMessage response)
         {
-            // TODO: Use Span to get the header name and value rather than going through ValueStringBuilder
-
-            _sb.Clear();
             int pos = 0;
-
-            // Get header name
-            char c = (char)line[pos++];
-            while (c != ':')
+            while (line[pos] != (byte)':')
             {
-                _sb.Append(c);
-                c = (char)line[pos++];
+                pos++;
+                if (pos == line.Length)
+                {
+                    // Ignore invalid header line that doesn't contain ':'.
+                    return;
+                }
             }
-            if (!HttpKnownHeaderNames.TryGetHeaderName(_sb.Chars, 0, _sb.Length, out string headerName))
+
+            if (pos == 0)
             {
-                headerName = _sb.ToString().TrimEnd(); // TryAddWithoutValidation will fail if the header name has trailing whitespace. So, trim it here.
+                // Ignore invalid empty header name.
+                return;
+            }
+
+            // CONSIDER: trailing whitespace?
+
+            if (!HeaderDescriptor.TryGet(line.Slice(0, pos), out HeaderDescriptor descriptor))
+            {
+                // Ignore invalid header name
+                return;
             }
 
             // Get header value
-            _sb.Clear();
-            while ((c = (char)line[pos++]) == ' ');
-            while (c != '\r')
+            while (pos < line.Length && line[pos] == (byte)' ')
             {
-                _sb.Append(c);
-                c = (char)line[pos++];
+                pos++;
             }
-            string headerValue = HttpKnownHeaderNames.GetHeaderValue(headerName, _sb.Chars, 0, _sb.Length);
 
-            // Add header to appropriate collection.
-            if (!response.Headers.TryAddWithoutValidation(headerName, headerValue))
+            string headerValue = descriptor.GetHeaderValue(line.Slice(pos));
+
+            // Note we ignore the return value from TryAddWithoutValidation; 
+            // if the header can't be added, we silently drop it.
+            if (descriptor.HeaderType == HttpHeaderType.Content)
             {
-                response.Content.Headers.TryAddWithoutValidation(headerName, headerValue);
-                // Existing handlers ignore headers that couldn't be added.  Do the same here.
+                response.Content.Headers.TryAddWithoutValidation(descriptor, headerValue);
+            }
+            else
+            {
+                response.Headers.TryAddWithoutValidation(descriptor, headerValue);
             }
         }
 
