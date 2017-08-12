@@ -400,7 +400,7 @@ namespace System.Net.Http.Headers
 
             // If the current header has only one value, we can't add another value. The strongly typed property
             // must not call AddParsedValue(), but SetParsedValue(). E.g. for headers like 'Date', 'Host'.
-            Debug.Assert(info.CanAddValue(descriptor.Parser), $"Header '{descriptor.Name}' doesn't support multiple values");
+            Debug.Assert(descriptor.Parser.SupportsMultipleValues, $"Header '{descriptor.Name}' doesn't support multiple values");
 
             AddValue(info, value, StoreLocation.Parsed);
         }
