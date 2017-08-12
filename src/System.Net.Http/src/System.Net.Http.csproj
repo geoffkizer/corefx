@@ -144,7 +144,6 @@
     <Compile Include="System\Net\Http\Managed\HttpContentWriteStream.cs" />
     <Compile Include="System\Net\Http\Managed\HttpProxyConnectionHandler.cs" />
     <Compile Include="System\Net\Http\Managed\ManagedHandler.cs" />
-    <Compile Include="System\Net\Http\Managed\ValueStringBuilder.cs" />
   </ItemGroup>
   <!-- Common, except for Windows net46 build -->
   <ItemGroup Condition="'$(TargetGroup)' != 'net46'  And '$(TargetGroup)' != 'netfx'">

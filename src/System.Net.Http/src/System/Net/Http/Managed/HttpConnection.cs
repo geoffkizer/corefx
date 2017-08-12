@@ -35,8 +35,6 @@ namespace System.Net.Http
         private readonly bool _usingProxy;
         private readonly byte[] _idnHostAsciiBytes;
 
-        private ValueStringBuilder _sb; // mutable struct, do not make this readonly
-
         private HttpRequestMessage _currentRequest;
         private readonly byte[] _writeBuffer;
         private int _writeOffset;
@@ -70,9 +68,6 @@ namespace System.Net.Http
             {
                 _idnHostAsciiBytes = Encoding.ASCII.GetBytes(requestIdnHost);
             }
-
-            const int DefaultCapacity = 16;
-            _sb = new ValueStringBuilder(DefaultCapacity);
 
             _writeBuffer = new byte[InitialWriteBufferSize];
             _writeOffset = 0;
