@@ -53,7 +53,7 @@ namespace System.Net.Http.Headers
                 return true;
             }
 
-            if (HttpRuleParser.GetTokenLength(headerName, 0) != headerName.Length)
+            if (!HttpRuleParser.IsToken(headerName))
             {
                 descriptor = default(HeaderDescriptor);
                 return false;
@@ -74,13 +74,11 @@ namespace System.Net.Http.Headers
                 return true;
             }
 
-#if false   // TODO
-            if (HttpRuleParser.GetTokenLength(headerName, 0) != headerName.Length)
+            if (!HttpRuleParser.IsToken(headerName))
             {
                 descriptor = default(HeaderDescriptor);
                 return false;
             }
-#endif
 
             descriptor = new HeaderDescriptor(CharArrayHelpers.GetStringFromByteSpan(headerName));
             return true;
