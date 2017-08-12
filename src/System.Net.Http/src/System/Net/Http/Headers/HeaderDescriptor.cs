@@ -10,7 +10,7 @@ namespace System.Net.Http.Headers
     // This struct represents a particular named header --
     // if the header is one of our known headers, then it contains a reference to the KnownHeader object;
     // otherwise, for custom headers, it just contains a string for the header name.
-    // Use HeaderDescriptor.Get to resolve an arbitrary header name to a HeaderDescriptor.
+    // Use HeaderDescriptor.TryGet to resolve an arbitrary header name to a HeaderDescriptor.
     internal struct HeaderDescriptor : IEquatable<HeaderDescriptor>
     {
         private readonly string _headerName;
@@ -22,7 +22,7 @@ namespace System.Net.Http.Headers
             _headerName = knownHeader.Name;
         }
 
-        // This should not be used directly; use static Get below
+        // This should not be used directly; use static TryGet below
         private HeaderDescriptor(string headerName)
         {
             _headerName = headerName;
@@ -42,6 +42,7 @@ namespace System.Net.Http.Headers
         public static bool operator ==(HeaderDescriptor left, HeaderDescriptor right) => left.Equals(right);
         public static bool operator !=(HeaderDescriptor left, HeaderDescriptor right) => !left.Equals(right);
 
+        // Returns false for invalid header name.
         public static bool TryGet(string headerName, out HeaderDescriptor descriptor)
         {
             Debug.Assert(!string.IsNullOrEmpty(headerName));
@@ -63,6 +64,7 @@ namespace System.Net.Http.Headers
             return true;
         }
 
+        // Returns false for invalid header name.
         public static bool TryGet(ReadOnlySpan<byte> headerName, out HeaderDescriptor descriptor)
         {
             Debug.Assert(headerName.Length > 0);
