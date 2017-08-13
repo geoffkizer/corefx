@@ -390,7 +390,7 @@ namespace System.Net.Http
         private void ParseHeaderNameValue(Span<byte> line, HttpResponseMessage response)
         {
             int pos = 0;
-            while (line[pos] != (byte)':')
+            while (line[pos] != (byte)':' && line[pos] != (byte)' ')
             {
                 pos++;
                 if (pos == line.Length)
@@ -414,13 +414,30 @@ namespace System.Net.Http
                 return;
             }
 
-            // Get header value
-            while (pos < line.Length && line[pos] == (byte)' ')
+            // Eat any trailing whitespace
+            while (line[pos] == (byte)' ')
+            {
+                pos++;
+                if (pos == line.Length)
+                {
+                    // Ignore invalid header line that doesn't contain ':'.
+                    return;
+                }
+            }
+
+            if (line[pos++] != ':')
+            {
+                // Ignore invalid header line that doesn't contain ':'.
+                return;
+            }
+
+            // Skip whitespace after colon
+            while (pos < line.Length && (line[pos] == (byte)' ' || line[pos] == '\t'))
             {
                 pos++;
             }
 
-            string headerValue = descriptor.GetHeaderValue(line.Slice(pos));
+            string headerValue = descriptor.GetHeaderValue(line.Slice(pos, line.Length - pos - 2));     // trim trailing \r\n
 
             // Note we ignore the return value from TryAddWithoutValidation; 
             // if the header can't be added, we silently drop it.
