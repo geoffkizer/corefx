@@ -18,7 +18,7 @@ namespace System.Net.Http.Headers
 
         internal const string ConnectionClose = "close";
         internal static readonly TransferCodingHeaderValue TransferEncodingChunked =
-            new TransferCodingHeaderValue("chunked");
+            TransferCodingHeaderValue.ChunkedSingleton;
         internal static readonly NameValueWithParametersHeaderValue ExpectContinue =
             new NameValueWithParametersHeaderValue("100-continue");
 
