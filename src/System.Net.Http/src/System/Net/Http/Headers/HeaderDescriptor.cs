@@ -93,6 +93,7 @@ namespace System.Net.Http.Headers
             return new HeaderDescriptor(_knownHeader.Name);
         }
 
+        // TODO: Remove
         private const string Gzip = "gzip";
         private const string Deflate = "deflate";
 
@@ -104,16 +105,15 @@ namespace System.Net.Http.Headers
             }
 
             // If it's a known header value, use the known value instead of allocating a new string.
-
-            if (_knownHeader == KnownHeaders.ContentEncoding)
+            string[] knownValues = _knownHeader?.KnownValues;
+            if (knownValues != null)
             {
-                if (CharArrayHelpers.EqualsOrdinalAsciiIgnoreCase(Gzip, headerValue))
+                for (int i = 0; i < knownValues.Length; i++)
                 {
-                    return Gzip;
-                }
-                else if (CharArrayHelpers.EqualsOrdinalAsciiIgnoreCase(Deflate, headerValue))
-                {
-                    return Deflate;
+                    if (CharArrayHelpers.EqualsOrdinalAsciiIgnoreCase(knownValues[i], headerValue))
+                    {
+                        return knownValues[i];
+                    }
                 }
             }
 
