@@ -165,7 +165,7 @@ namespace System.Net.Http.Headers
             }
         }
 
-        internal static void ToString(ObjectCollection<NameValueHeaderValue> values, char separator, bool leadingSeparator,
+        internal static void ToString(ICollection<NameValueHeaderValue> values, char separator, bool leadingSeparator,
             StringBuilder destination)
         {
             Debug.Assert(destination != null);
@@ -186,7 +186,7 @@ namespace System.Net.Http.Headers
             }
         }
 
-        internal static int GetHashCode(ObjectCollection<NameValueHeaderValue> values)
+        internal static int GetHashCode(ICollection<NameValueHeaderValue> values)
         {
             if ((values == null) || (values.Count == 0))
             {

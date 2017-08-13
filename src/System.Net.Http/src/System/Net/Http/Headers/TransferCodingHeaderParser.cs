@@ -8,24 +8,21 @@ namespace System.Net.Http.Headers
 {
     internal class TransferCodingHeaderParser : BaseHeaderParser
     {
-        private Func<TransferCodingHeaderValue> _transferCodingCreator;
+        bool _withQuality;      // Indicates that we should create TransferCodingWithQuality objects
 
         internal static readonly TransferCodingHeaderParser SingleValueParser =
-            new TransferCodingHeaderParser(false, CreateTransferCoding);
+            new TransferCodingHeaderParser(false, false);
         internal static readonly TransferCodingHeaderParser MultipleValueParser =
-            new TransferCodingHeaderParser(true, CreateTransferCoding);
+            new TransferCodingHeaderParser(true, false);
         internal static readonly TransferCodingHeaderParser SingleValueWithQualityParser =
-            new TransferCodingHeaderParser(false, CreateTransferCodingWithQuality);
+            new TransferCodingHeaderParser(false, true);
         internal static readonly TransferCodingHeaderParser MultipleValueWithQualityParser =
-            new TransferCodingHeaderParser(true, CreateTransferCodingWithQuality);
+            new TransferCodingHeaderParser(true, true);
 
-        private TransferCodingHeaderParser(bool supportsMultipleValues,
-            Func<TransferCodingHeaderValue> transferCodingCreator)
+        private TransferCodingHeaderParser(bool supportsMultipleValues, bool withQuality)
             : base(supportsMultipleValues)
         {
-            Debug.Assert(transferCodingCreator != null);
-
-            _transferCodingCreator = transferCodingCreator;
+            _withQuality = withQuality;
         }
 
         protected override int GetParsedValueLength(string value, int startIndex, object storeValue,
@@ -33,20 +30,10 @@ namespace System.Net.Http.Headers
         {
             TransferCodingHeaderValue temp = null;
             int resultLength = TransferCodingHeaderValue.GetTransferCodingLength(value, startIndex,
-                _transferCodingCreator, out temp);
+                _withQuality, out temp);
 
             parsedValue = temp;
             return resultLength;
-        }
-
-        private static TransferCodingHeaderValue CreateTransferCoding()
-        {
-            return new TransferCodingHeaderValue();
-        }
-
-        private static TransferCodingHeaderValue CreateTransferCodingWithQuality()
-        {
-            return new TransferCodingWithQualityHeaderValue();
         }
     }
 }

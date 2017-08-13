@@ -5,15 +5,19 @@
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
+using System.Collections.ObjectModel;
 using System.Text;
 
 namespace System.Net.Http.Headers
 {
     public class TransferCodingHeaderValue : ICloneable
     {
-        // Use ObjectCollection<T> since we may have multiple parameters with the same name.
-        private ObjectCollection<NameValueHeaderValue> _parameters;
+        private ICollection<NameValueHeaderValue> _parameters;
         private string _value;
+
+        internal const string Chunked = "chunked";
+        internal static readonly TransferCodingHeaderValue ChunkedSingleton = new TransferCodingHeaderValue(Chunked, 
+            new ReadOnlyCollection<NameValueHeaderValue>(Array.Empty<NameValueHeaderValue>()));
 
         public string Value
         {
@@ -26,6 +30,7 @@ namespace System.Net.Http.Headers
             {
                 if (_parameters == null)
                 {
+                    // Use ObjectCollection<T> since we may have multiple parameters with the same name.
                     _parameters = new ObjectCollection<NameValueHeaderValue>();
                 }
                 return _parameters;
@@ -34,6 +39,13 @@ namespace System.Net.Http.Headers
 
         internal TransferCodingHeaderValue()
         {
+        }
+
+        // Used by ChunkedSingleton
+        internal TransferCodingHeaderValue(string value, ICollection<NameValueHeaderValue> parameters)
+        {
+            _value = value;
+            _parameters = parameters;
         }
 
         protected TransferCodingHeaderValue(TransferCodingHeaderValue source)
@@ -79,9 +91,8 @@ namespace System.Net.Http.Headers
         }
 
         internal static int GetTransferCodingLength(string input, int startIndex,
-            Func<TransferCodingHeaderValue> transferCodingCreator, out TransferCodingHeaderValue parsedValue)
+            bool withQuality, out TransferCodingHeaderValue parsedValue)
         {
-            Debug.Assert(transferCodingCreator != null);
             Debug.Assert(startIndex >= 0);
 
             parsedValue = null;
@@ -102,14 +113,12 @@ namespace System.Net.Http.Headers
             string value = input.Substring(startIndex, valueLength);
             int current = startIndex + valueLength;
             current = current + HttpRuleParser.GetWhitespaceLength(input, current);
-            TransferCodingHeaderValue transferCodingHeader = null;
 
             // If we're not done and we have a parameter delimiter, then we have a list of parameters.
             if ((current < input.Length) && (input[current] == ';'))
             {
-                transferCodingHeader = transferCodingCreator();
+                TransferCodingHeaderValue transferCodingHeader = withQuality ? new TransferCodingWithQualityHeaderValue() : new TransferCodingHeaderValue();
                 transferCodingHeader._value = value;
-
                 current++; // skip delimiter.
                 int parameterLength = NameValueHeaderValue.GetNameValueListLength(input, current, ';',
                     (ObjectCollection<NameValueHeaderValue>)transferCodingHeader.Parameters);
@@ -122,12 +131,23 @@ namespace System.Net.Http.Headers
                 parsedValue = transferCodingHeader;
                 return current + parameterLength - startIndex;
             }
+            else
+            {
+                // We have a transfer coding without parameters.
+                // First, see if it's "chunked".
+                if (!withQuality && value.Equals(Chunked, StringComparison.InvariantCultureIgnoreCase))
+                {
+                    parsedValue = ChunkedSingleton;
+                }
+                else
+                {
+                    TransferCodingHeaderValue transferCodingHeader = withQuality ? new TransferCodingWithQualityHeaderValue() : new TransferCodingHeaderValue();
+                    transferCodingHeader._value = value;
+                    parsedValue = transferCodingHeader;
+                }
 
-            // We have a transfer coding without parameters.
-            transferCodingHeader = transferCodingCreator();
-            transferCodingHeader._value = value;
-            parsedValue = transferCodingHeader;
-            return current - startIndex;
+                return current - startIndex;
+            }
         }
 
         public override string ToString()
@@ -140,8 +160,13 @@ namespace System.Net.Http.Headers
 
         public override bool Equals(object obj)
         {
-            TransferCodingHeaderValue other = obj as TransferCodingHeaderValue;
+            // This will handle the ChunkedSingleton case
+            if (this == obj)
+            {
+                return true;
+            }
 
+            TransferCodingHeaderValue other = obj as TransferCodingHeaderValue;
             if (other == null)
             {
                 return false;
@@ -153,6 +178,11 @@ namespace System.Net.Http.Headers
 
         public override int GetHashCode()
         {
+            if (this == ChunkedSingleton)
+            {
+                return base.GetHashCode();
+            }
+
             // The value string is case-insensitive.
             return StringComparer.OrdinalIgnoreCase.GetHashCode(_value) ^ NameValueHeaderValue.GetHashCode(_parameters);
         }
@@ -160,7 +190,41 @@ namespace System.Net.Http.Headers
         // Implement ICloneable explicitly to allow derived types to "override" the implementation.
         object ICloneable.Clone()
         {
+            if (this == ChunkedSingleton)
+            {
+                return this;
+            }
+
             return new TransferCodingHeaderValue(this);
         }
     }
+
+#if false
+    internal sealed class TransferCodingHeaderValueChunked : TransferCodingHeaderValue, ICloneable
+    {
+        public const string Chunked = "chunked";
+
+        public static readonly TransferCodingHeaderValueChunked Instance = new TransferCodingHeaderValueChunked();
+
+        private TransferCodingHeaderValueChunked() :
+            base(Chunked, new ReadOnlyCollection<NameValueHeaderValue>(Array.Empty<NameValueHeaderValue>()))
+        {
+        }
+
+        public override bool Equals(object obj)
+        {
+            return obj == Instance;
+        }
+
+        public override int GetHashCode()
+        {
+            return 1;
+        }
+
+        object Clone()
+        {
+            return this;
+        }
+    }
+#endif
 }

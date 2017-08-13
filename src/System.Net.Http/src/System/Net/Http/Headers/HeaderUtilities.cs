@@ -188,12 +188,12 @@ namespace System.Net.Http.Headers
             }
         }
 
-        internal static bool AreEqualCollections<T>(ObjectCollection<T> x, ObjectCollection<T> y) where T : class
+        internal static bool AreEqualCollections<T>(ICollection<T> x, ICollection<T> y) where T : class
         {
             return AreEqualCollections(x, y, null);
         }
 
-        internal static bool AreEqualCollections<T>(ObjectCollection<T> x, ObjectCollection<T> y, IEqualityComparer<T> comparer) where T : class
+        internal static bool AreEqualCollections<T>(ICollection<T> x, ICollection<T> y, IEqualityComparer<T> comparer) where T : class
         {
             if (x == null)
             {
