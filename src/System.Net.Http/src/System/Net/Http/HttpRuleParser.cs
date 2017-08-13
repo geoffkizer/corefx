@@ -118,7 +118,15 @@ namespace System.Net.Http
         [Pure]
         internal static bool IsToken(string input)
         {
-            return GetTokenLength(input, 0) == input.Length;
+            for (int i = 0; i < input.Length; i++)
+            {
+                if (!IsTokenChar(input[i]))
+                {
+                    return false;
+                }
+            }
+
+            return true;
         }
 
         [Pure]
