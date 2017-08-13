@@ -16,7 +16,7 @@ namespace System.Net.Http.Headers
         protected abstract int GetParsedValueLength(string value, int startIndex, object storeValue,
             out object parsedValue);
 
-        public sealed override bool TryParseValue(string value, object storeValue, ref int index,
+        public override bool TryParseValue(string value, object storeValue, ref int index,
             out object parsedValue)
         {
             parsedValue = null;

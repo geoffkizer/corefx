@@ -25,6 +25,20 @@ namespace System.Net.Http.Headers
             _withQuality = withQuality;
         }
 
+        public override bool TryParseValue(string value, object storeValue, ref int index,
+            out object parsedValue)
+        {
+            // Optimize for the common case, which is just "chunked"
+            if (value != null && index == 0 && (value.Equals(TransferCodingHeaderValue.Chunked, StringComparison.OrdinalIgnoreCase)))
+            {
+                index = TransferCodingHeaderValue.Chunked.Length;
+                parsedValue = TransferCodingHeaderValue.ChunkedSingleton;
+                return true;
+            }
+
+            return base.TryParseValue(value, storeValue, ref index, out parsedValue);
+        }
+
         protected override int GetParsedValueLength(string value, int startIndex, object storeValue,
             out object parsedValue)
         {
