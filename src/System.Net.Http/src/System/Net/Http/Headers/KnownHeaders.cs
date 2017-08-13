@@ -373,7 +373,7 @@ namespace System.Net.Http.Headers
             fixed (byte* p = &name.DangerousGetPinnableReference())
             {
                 KnownHeader candidate = GetCandidate(new BytePtrAccessor(p, name.Length));
-                if (candidate != null && CharArrayHelpers.EqualsOrdinalAsciiIgnoreCase(candidate.Name, name))
+                if (candidate != null && ByteArrayHelpers.EqualsOrdinalAsciiIgnoreCase(candidate.Name, name))
                 {
                     return candidate;
                 }

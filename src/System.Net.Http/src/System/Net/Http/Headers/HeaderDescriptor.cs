@@ -82,7 +82,7 @@ namespace System.Net.Http.Headers
                 return false;
             }
 
-            descriptor = new HeaderDescriptor(CharArrayHelpers.GetStringFromByteSpan(headerName));
+            descriptor = new HeaderDescriptor(ByteArrayHelpers.GetStringFromByteSpan(headerName));
             return true;
         }
 
@@ -110,14 +110,14 @@ namespace System.Net.Http.Headers
             {
                 for (int i = 0; i < knownValues.Length; i++)
                 {
-                    if (CharArrayHelpers.EqualsOrdinalAsciiIgnoreCase(knownValues[i], headerValue))
+                    if (ByteArrayHelpers.EqualsOrdinalAsciiIgnoreCase(knownValues[i], headerValue))
                     {
                         return knownValues[i];
                     }
                 }
             }
 
-            return CharArrayHelpers.GetStringFromByteSpan(headerValue);
+            return ByteArrayHelpers.GetStringFromByteSpan(headerValue);
         }
     }
 }

@@ -3,7 +3,6 @@
 // See the LICENSE file in the project root for more information.
 
 using System.Diagnostics;
-using System.Text;
 
 namespace System
 {
@@ -61,38 +60,6 @@ namespace System
             return true;
         }
 
-        internal static bool EqualsOrdinalAsciiIgnoreCase(string left, ReadOnlySpan<byte> right)
-        {
-            Debug.Assert(left != null, "Expected non-null string");
-
-            if (left.Length != right.Length)
-            {
-                return false;
-            }
-
-            for (int i = 0; i < left.Length; i++)
-            {
-                uint charA = left[i];
-                uint charB = right[i];
-
-                unchecked
-                {
-                    // We're only interested in ASCII characters here.
-                    if ((charA - 'a') <= ('z' - 'a'))
-                        charA -= ('a' - 'A');
-                    if ((charB - 'a') <= ('z' - 'a'))
-                        charB -= ('a' - 'A');
-                }
-
-                if (charA != charB)
-                {
-                    return false;
-                }
-            }
-
-            return true;
-        }
-
         internal static void Trim(char[] array, ref int startIndex, ref int length)
         {
             DebugAssertArrayInputs(array, startIndex, length);
@@ -111,20 +78,6 @@ namespace System
 
             startIndex += offset;
             length = end - offset + 1;
-        }
-
-        internal static string GetStringFromByteSpan(ReadOnlySpan<byte> bytes)
-        {
-            string s;
-            unsafe
-            {
-                fixed (byte* p = &bytes.DangerousGetPinnableReference())
-                {
-                    s = Encoding.ASCII.GetString(p, bytes.Length);
-                }
-            }
-
-            return s;
         }
 
         [Conditional("DEBUG")]
