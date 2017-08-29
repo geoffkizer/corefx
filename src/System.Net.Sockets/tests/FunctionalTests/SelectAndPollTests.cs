@@ -4,7 +4,9 @@
 
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Linq;
 using System.Threading;
+using System.Threading.Tasks;
 
 using Xunit;
 
@@ -330,4 +332,110 @@ namespace System.Net.Sockets.Tests
             }
         }
     }
+
+    public abstract class SelectAndPollTests<T> : SocketTestHelperBase<T> where T : SocketHelperBase, new()
+    {
+        private async Task<(Socket client, Socket server)> GetConnectedStreamsAsync()
+        {
+            using (var listener = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp))
+            {
+                listener.BindToAnonymousPort(IPAddress.Loopback);
+                listener.Listen(1);
+
+                var client = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
+
+                Task<Socket> acceptTask = AcceptAsync(listener);
+                await ConnectAsync(client, listener.LocalEndPoint);
+                Socket server = await acceptTask;
+
+                client.NoDelay = true;
+                server.NoDelay = true;
+                return (client, server);
+            }
+        }
+
+#if false
+        [Fact]
+        public async Task PollRead_WithPendingPartialRead_Success()
+        {
+            (var client, var server) = await GetConnectedStreamsAsync();
+            using (client)
+            using (server)
+            {
+                var sendBuffer = Enumerable.Range(0, 10).Select(b => (byte)b).ToArray();
+                var receiveBuffer = new byte[1];
+
+                // Post a receive and a poll at the same time
+                var receiveTask = ReceiveAsync(server, new ArraySegment<byte>(receiveBuffer));
+                var pollTask = Task.Run(() => server.Poll(2000, SelectMode.SelectRead));
+
+                // Wait to try to ensure they are actually posted
+                await Task.Delay(200);
+
+                // Do the send
+                await SendAsync(client, new ArraySegment<byte>(sendBuffer));
+
+                Task.WaitAll(new Task[] { receiveTask, pollTask });
+
+                Assert.Equal(await receiveTask, receiveBuffer.Length);
+                Assert.True(await pollTask);
+            }
+        }
+
+        [Fact]
+        public async Task PollRead_WithPendingFullRead_Success()
+        {
+            (var client, var server) = await GetConnectedStreamsAsync();
+            using (client)
+            using (server)
+            {
+                var sendBuffer = Enumerable.Range(0, 10).Select(b => (byte)b).ToArray();
+                var receiveBuffer = new byte[20];
+
+                // Post a receive and a poll at the same time
+                var receiveTask = ReceiveAsync(server, new ArraySegment<byte>(receiveBuffer));
+                var pollTask = Task.Run(() => server.Poll(2000, SelectMode.SelectRead));
+
+                // Wait to try to ensure they are actually posted
+                await Task.Delay(200);
+
+                // Do the send
+                await SendAsync(client, new ArraySegment<byte>(sendBuffer));
+
+                Task.WaitAll(new Task[] { receiveTask, pollTask });
+
+                Assert.Equal(await receiveTask, sendBuffer.Length);
+                Assert.False(await pollTask);
+            }
+        }
+#endif
+
+        [Fact]
+        public async Task PollReadTest()
+        {
+            (var client, var server) = await GetConnectedStreamsAsync();
+            using (client)
+            using (server)
+            {
+                var sendBuffer = Enumerable.Range(0, 10).Select(b => (byte)b).ToArray();
+
+                // Do the send
+                await SendAsync(client, new ArraySegment<byte>(sendBuffer));
+
+                Assert.True(server.Poll(0, SelectMode.SelectRead));
+                Assert.True(server.Poll(0, SelectMode.SelectRead));
+
+                var receiveBuffer = new byte[1];
+                Assert.Equal(receiveBuffer.Length, await ReceiveAsync(server, new ArraySegment<byte>(receiveBuffer)));
+
+                Assert.True(server.Poll(0, SelectMode.SelectRead));
+            }
+        }
+    }
+
+    public sealed class SelectAndPollTestsSync : SelectAndPollTests<SocketHelperArraySync> { }
+    public sealed class SelectAndPollTestsSyncForceNonBlocking : SelectAndPollTests<SocketHelperSyncForceNonBlocking> { }
+    public sealed class SelectAndPollTestsApm : SelectAndPollTests<SocketHelperApm> { }
+    public sealed class SelectAndPollTestsTask : SelectAndPollTests<SocketHelperTask> { }
+    public sealed class SelectAndPollTestsEap : SelectAndPollTests<SocketHelperEap> { }
 }
