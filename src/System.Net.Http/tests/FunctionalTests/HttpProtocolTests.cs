@@ -30,10 +30,6 @@ namespace System.Net.Http.Functional.Tests
         // TODO #24713: The following pass on Windows on .NET Core but fail on .NET Framework.
         //[InlineData("HTTP/1.1 200      ", 200, "")]
         //[InlineData("HTTP/1.1 200      Something", 200, "Something")]
-        //[InlineData("HTTP/1.1\t200 OK", 200, "OK")]
-        //[InlineData("HTTP/1.1 200\tOK", 200, "OK")]
-        //[InlineData("HTTP/1.1 200", 200, "")]
-        //[InlineData("HTTP/1.1 200\t", 200, "")]
         //[InlineData("HTTP/1.1 200 O\tK", 200, "O\tK")]
         //[InlineData("HTTP/1.1 200 O    \t\t  \t\t\t\t  \t K", 200, "O    \t\t  \t\t\t\t  \t K")]
         //[InlineData("HTTP/1.1 999 this\ttoo\t", 999, "this\ttoo\t")]
