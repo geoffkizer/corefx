@@ -22,10 +22,7 @@ namespace System.Net.Http
                 // to cancel it if needed.
                 using (var saea = new BuilderAndCancellationTokenSocketAsyncEventArgs(cancellationToken))
                 {
-                    // Configure which server to which to connect.
-                    saea.RemoteEndPoint = IPAddress.TryParse(host, out IPAddress address) ?
-                        (EndPoint)new IPEndPoint(address, port) :
-                        new DnsEndPoint(host, port);
+                    saea.RemoteEndPoint = new DnsEndPoint(host, port);
 
                     // Hook up a callback that'll complete the Task when the operation completes.
                     saea.Completed += (s, e) =>
