@@ -1944,15 +1944,41 @@ namespace System.Net.Http.Functional.Tests
             Assert.Equal(new Version(1, 1), receivedRequestVersion);
         }
 
-        [SkipOnTargetFramework(TargetFrameworkMonikers.NetFramework, "Throws exception sending request using Version(0,0)")]
+        [SkipOnTargetFramework(TargetFrameworkMonikers.NetFramework, "Throws exception")]
+        [OuterLoop] // TODO: Issue #11345
+        [Theory]
+        [InlineData(0, 0)]
+        [InlineData(0, 1)]
+        [InlineData(1, 2)]
+        [InlineData(1, 3)]
+        [InlineData(2, 1)]
+        [InlineData(3, 0)]
+        [InlineData(12, 34)]
+        public async Task SendAsync_InvalidRequestVersion_ThrowsOr11(int major, int minor)
+        {
+            // Unknown versions are treated as 1.1 by WinHttpHandler/CurlHandler,
+            // but throw on ManagedHandler.
+
+            if (UseManagedHandler)
+            {
+                await Assert.ThrowsAsync<NotSupportedException>(async () => await SendRequestAndGetRequestVersionAsync(new Version(major, minor)));
+            }
+            else
+            {
+                Version receivedRequestVersion = await SendRequestAndGetRequestVersionAsync(new Version(major, minor));
+                Assert.Equal(new Version(1, 1), receivedRequestVersion);
+            }
+        }
+
+        [SkipOnTargetFramework(TargetFrameworkMonikers.NetFramework, "Throws exception")]
         [OuterLoop] // TODO: Issue #11345
         [Fact]
-        public async Task SendAsync_RequestVersionNotSpecified_ServerReceivesVersion11Request()
+        public async Task SendAsync_ManagedHandler_RequestVersion20_Throws()
         {
-            // The default value for HttpRequestMessage.Version is Version(1,1).
-            // So, we need to set something different (0,0), to test the "unknown" version.
-            Version receivedRequestVersion = await SendRequestAndGetRequestVersionAsync(new Version(0, 0));
-            Assert.Equal(new Version(1, 1), receivedRequestVersion);
+            if (UseManagedHandler)
+            {
+                await Assert.ThrowsAsync<NotSupportedException>(async () => await SendRequestAndGetRequestVersionAsync(new Version(2, 0)));
+            }
         }
 
         [ActiveIssue(23770, TestPlatforms.AnyUnix)]

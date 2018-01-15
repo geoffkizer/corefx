@@ -203,7 +203,27 @@ namespace System.Net.Http
             _currentRequest = request;
             try
             {
-                bool isHttp10 = request.Version.Major == 1 && request.Version.Minor == 0;
+                // Check specified version.  Only 1.0/1.1 are supported.
+                bool isHttp10;
+                if (request.Version.Major == 1)
+                {
+                    if (request.Version.Minor == 1)
+                    {
+                        isHttp10 = false;
+                    }
+                    else if (request.Version.Minor == 0)
+                    {
+                        isHttp10 = true;
+                    }
+                    else
+                    {
+                        throw new NotSupportedException(SR.net_http_unsupported_version);
+                    }
+                }
+                else
+                {
+                    throw new NotSupportedException(SR.net_http_unsupported_version);
+                }
 
                 // Send the request.
                 if (NetEventSource.IsEnabled) Trace($"Sending request: {request}");
