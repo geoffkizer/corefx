@@ -17,21 +17,10 @@ namespace System.Net.Sockets
 #endif
     {
         private bool _isBoundToIocp;
-//        private ThreadPoolBoundHandle _iocpBoundHandle;
         private bool _skipCompletionPortOnSuccess;
         private object _iocpBindingLock = new object();
 
         public void SetExposed() { /* nop */ }
-
-#if false
-        private ThreadPoolBoundHandle IOCPBoundHandle
-        {
-            get
-            {
-                return _iocpBoundHandle;
-            }
-        }
-#endif
 
         // TODO: These methods don't need to be on SafeCloseSocket and would probably be better on SimpleOverlapped itself,
         // Or really just not existing and have the code that uses it do it directly, as we're now doing in the SAEA case...
@@ -41,7 +30,6 @@ namespace System.Net.Sockets
             return simpleOverlapped.NativeOverlapped;
         }
 
-        // TODO: Do not call in PreAllocated case...
         internal unsafe void FreeNativeOverlapped(NativeOverlapped* nativeOverlapped)
         {
             Overlapped.Free(nativeOverlapped);
@@ -53,7 +41,7 @@ namespace System.Net.Sockets
             return simpleOverlapped.UserState;
         }
 
-        // Binds the Socket Win32 Handle to the ThreadPool's CompletionPort.
+        // TODO: Rename to something like EnsureBound
         public void GetOrAllocateThreadPoolBoundHandle(bool trySkipCompletionPortOnSuccess)
         {
             // Check to see if the socket native _handle is already
@@ -79,7 +67,6 @@ namespace System.Net.Sockets
                     // Bind the socket native _handle to the ThreadPool.
                     if (NetEventSource.IsEnabled) NetEventSource.Info(this, "calling ThreadPool.BindHandle()");
 
-//                    ThreadPoolBoundHandle boundHandle;
                     try
                     {
                         // The handle (this) may have been already released:
@@ -99,6 +86,11 @@ namespace System.Net.Sockets
                         CompletionPortHelper.SkipCompletionPortOnSuccess(this))
                     {
                         _skipCompletionPortOnSuccess = true;
+                    }
+                    else
+                    {
+                        // Temp, just for testing
+                        throw new Exception("SkipCompletionPortOnSuccess failed???");
                     }
 
                     // Don't set this until after we've configured the handle above (if we did)
@@ -131,15 +123,6 @@ namespace System.Net.Sockets
 
         private void InnerReleaseHandle()
         {
-            // ThreadPoolBoundHandle doesn't actually do anything in Dispose, so skip this.
-#if false
-            // Keep m_IocpBoundHandle around after disposing it to allow freeing NativeOverlapped.
-            // ThreadPoolBoundHandle allows FreeNativeOverlapped even after it has been disposed.
-            if (_iocpBoundHandle != null)
-            {
-                _iocpBoundHandle.Dispose();
-            }
-#endif
         }
 
         internal sealed partial class InnerSafeCloseSocket : SafeHandleMinusOneIsInvalid
@@ -309,12 +292,6 @@ namespace System.Net.Sockets
 
         public static IOPoller Instance = s_lazyInstance.Value;
 
-        // TODO:
-        // Single instance, create on demand 
-        // Create IOCP
-        // Bind call that does similar Bind logic to above
-        // Background task that does the IOCP call and enqueues
-
         public IOPoller()
         {
             _iocpHandle = InteropTemp.CreateIoCompletionPort((IntPtr)(-1), IntPtr.Zero, IntPtr.Zero, 0);
@@ -343,7 +320,7 @@ namespace System.Net.Sockets
             try
             {
                 // TODO: It's not ideal to wait here, because we'll block a thread pool thread.
-                // For now though, just live with it.
+                // For now though, just live with it -- should be fine for benchmarking scenarios
 
                 bool success = InteropTemp.GetQueuedCompletionStatusEx(_iocpHandle, entries, (uint)BatchSize, out uint count, -1, false);
 
