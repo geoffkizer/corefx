@@ -16,7 +16,8 @@ namespace System.Net.Sockets
         SafeHandleMinusOneIsInvalid
 #endif
     {
-        private ThreadPoolBoundHandle _iocpBoundHandle;
+        private bool _isBoundToIocp;
+//        private ThreadPoolBoundHandle _iocpBoundHandle;
         private bool _skipCompletionPortOnSuccess;
         private object _iocpBindingLock = new object();
 
@@ -57,7 +58,7 @@ namespace System.Net.Sockets
         {
             // Check to see if the socket native _handle is already
             // bound to the ThreadPool's completion port.
-            if (_released || _iocpBoundHandle == null)
+            if (_released || !_isBoundToIocp)
             {
                 GetOrAllocateThreadPoolBoundHandleSlow(trySkipCompletionPortOnSuccess);
             }
@@ -73,18 +74,19 @@ namespace System.Net.Sockets
 
             lock (_iocpBindingLock)
             {
-                if (_iocpBoundHandle == null)
+                if (!_isBoundToIocp)
                 {
                     // Bind the socket native _handle to the ThreadPool.
                     if (NetEventSource.IsEnabled) NetEventSource.Info(this, "calling ThreadPool.BindHandle()");
 
-                    ThreadPoolBoundHandle boundHandle;
+//                    ThreadPoolBoundHandle boundHandle;
                     try
                     {
                         // The handle (this) may have been already released:
                         // E.g.: The socket has been disposed in the main thread. A completion callback may
                         //       attempt starting another operation.
-                        boundHandle = ThreadPoolBoundHandle.BindHandle(this);
+
+                        IOPoller.Instance.BindHandle(handle);
                     }
                     catch (Exception exception) when (!ExceptionCheck.IsFatal(exception))
                     {
@@ -94,13 +96,13 @@ namespace System.Net.Sockets
 
                     // Try to disable completions for synchronous success, if requested
                     if (trySkipCompletionPortOnSuccess &&
-                        CompletionPortHelper.SkipCompletionPortOnSuccess(boundHandle.Handle))
+                        CompletionPortHelper.SkipCompletionPortOnSuccess(this))
                     {
                         _skipCompletionPortOnSuccess = true;
                     }
 
                     // Don't set this until after we've configured the handle above (if we did)
-                    _iocpBoundHandle = boundHandle;
+                    _isBoundToIocp = true;
                 }
             }
         }
@@ -109,7 +111,7 @@ namespace System.Net.Sockets
         {
             get
             {
-                Debug.Assert(_iocpBoundHandle != null);
+                Debug.Assert(_isBoundToIocp);
                 return _skipCompletionPortOnSuccess;
             }
         }
@@ -255,19 +257,162 @@ namespace System.Net.Sockets
     }
 
     // Based on ThreadPoolBoundHandleOverlapped with the thread pool crap ripped out
-    internal class SimpleOverlapped : Overlapped
+    internal sealed class SimpleOverlapped : Overlapped
     {
+        private readonly IOCompletionCallback _completionCallback;
         private readonly object _userState;
-        private unsafe NativeOverlapped* _nativeOverlapped;
+        private readonly unsafe NativeOverlapped* _nativeOverlapped;
+        private uint _errorCode;
+        private uint _numBytes;
 
-        public unsafe SimpleOverlapped(IOCompletionCallback callback, object state, object pinData)
+        public unsafe SimpleOverlapped(IOCompletionCallback completionCallback, object state, object pinData)
         {
+            // Base overlapped does not expose the completionCallback.  So just store it ourselves for now.
+            _completionCallback = completionCallback;
             _userState = state;
 
-            _nativeOverlapped = Pack(callback, pinData);
+            _nativeOverlapped = Pack(completionCallback, pinData);
         }
 
         public object UserState => _userState;
         public unsafe NativeOverlapped* NativeOverlapped => _nativeOverlapped;
+
+        // TODO: This really only should be called once.  Currently we'll call it again when we retrieve the UserState.  Fix this.
+
+        public static unsafe SimpleOverlapped FromNativeOverlapped(NativeOverlapped* nativeOverlapped)
+        {
+            var simpleOverlapped = (SimpleOverlapped)Unpack(nativeOverlapped);
+            Debug.Assert(simpleOverlapped.NativeOverlapped == nativeOverlapped);
+            return simpleOverlapped;
+        }
+
+        public unsafe void SetResult(uint errorCode, uint numBytes)
+        {
+            _errorCode = errorCode;
+            _numBytes = numBytes;
+        }
+
+        public unsafe void InvokeCompletionCallback()
+        {
+            _completionCallback(_errorCode, _numBytes, _nativeOverlapped);
+        }
+    }
+
+    internal sealed class IOPoller
+    {
+        private IntPtr _iocpHandle;
+        private WaitCallback _pollCallback;
+
+        private static readonly WaitCallback s_completionCallback = CompletionCallback;
+
+        private static Lazy<IOPoller> s_lazyInstance = new Lazy<IOPoller>();
+
+        public static IOPoller Instance = s_lazyInstance.Value;
+
+        // TODO:
+        // Single instance, create on demand 
+        // Create IOCP
+        // Bind call that does similar Bind logic to above
+        // Background task that does the IOCP call and enqueues
+
+        public IOPoller()
+        {
+            _iocpHandle = InteropTemp.CreateIoCompletionPort((IntPtr)(-1), IntPtr.Zero, IntPtr.Zero, 0);
+            if (_iocpHandle == IntPtr.Zero)
+                throw new Exception("Completion port creation failed");
+
+            _pollCallback = PollIO;
+
+            ThreadPool.UnsafeQueueUserWorkItem(_pollCallback, null);
+        }
+
+        public void BindHandle(IntPtr handle)
+        {
+            // Bind socket to completion port
+            var result = InteropTemp.CreateIoCompletionPort(handle, _iocpHandle, IntPtr.Zero, 0);
+            if (result != _iocpHandle)
+                throw new Exception("Completion port bind failed");
+        }
+
+        private const int BatchSize = 256;
+
+        private unsafe void PollIO(object _)
+        {
+            InteropTemp.OverlappedEntry* entries = stackalloc InteropTemp.OverlappedEntry[BatchSize];
+
+            try
+            {
+                // TODO: It's not ideal to wait here, because we'll block a thread pool thread.
+                // For now though, just live with it.
+
+                bool success = InteropTemp.GetQueuedCompletionStatusEx(_iocpHandle, entries, (uint)BatchSize, out uint count, -1, false);
+
+                if (!success)
+                {
+                    throw new Exception("GetQueuedCompletionStatusEx failed");
+                }
+
+                if (count == 0)
+                {
+                    throw new Exception("GetQueuedCompletionStatusEx returned 0 entries");
+                }
+
+                for (uint i = 0; i < count; i++)
+                {
+                    uint errorCode = (uint)entries[i].lpOverlapped->InternalLow.ToInt64();
+                    uint bytesTransferred = (uint)entries[i].dwNumberOfBytesTransferred;
+                    NativeOverlapped* nativeOverlapped = entries[i].lpOverlapped;
+                    SimpleOverlapped simpleOverlapped = SimpleOverlapped.FromNativeOverlapped(nativeOverlapped);
+
+                    // CONSIDER: Technically we don't actually need to pass errorCode here as it's stored in the NativeOverlapped
+                    simpleOverlapped.SetResult(errorCode, bytesTransferred);
+
+                    ThreadPool.UnsafeQueueUserWorkItem(s_completionCallback, simpleOverlapped);
+                }
+
+                // Queue another work item to poll later
+                ThreadPool.UnsafeQueueUserWorkItem(_pollCallback, null);
+            }
+            catch (Exception e)
+            {
+                Environment.FailFast($"IOPoller threw exception: {e}");
+            }
+        }
+
+        private static void CompletionCallback(object state)
+        {
+            // TODO: Execution context handling
+
+            SimpleOverlapped simpleOverlapped = (SimpleOverlapped)state;
+            simpleOverlapped.InvokeCompletionCallback();
+        }
+
+        static class InteropTemp
+        {
+            [DllImport("kernel32.dll")]
+            internal static unsafe extern IntPtr CreateIoCompletionPort(
+                IntPtr FileHandle,
+                IntPtr ExistingCompletionPort,
+                IntPtr CompletionKey,
+                int NumberOfConcurrentThreads);
+
+            [StructLayout(LayoutKind.Sequential)]
+            internal unsafe struct OverlappedEntry
+            {
+                public IntPtr lpCompletionKey;
+                public NativeOverlapped* lpOverlapped;
+                public IntPtr Internal;
+                public int dwNumberOfBytesTransferred;
+            }
+
+            [DllImport("kernel32.dll", SetLastError = true)]
+            internal static unsafe extern bool GetQueuedCompletionStatusEx(
+                IntPtr CompletionPort,
+                OverlappedEntry* lpCompletionPortEntries,
+                uint ulCount,
+                out uint ulNumEntriesRemoved,
+                int dwMilliseconds,
+                bool fAlertable);
+        }
     }
 }
