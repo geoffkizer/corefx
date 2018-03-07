@@ -22,6 +22,7 @@ namespace System.Net.Sockets
 
         public void SetExposed() { /* nop */ }
 
+#if false
         private ThreadPoolBoundHandle IOCPBoundHandle
         {
             get
@@ -29,6 +30,7 @@ namespace System.Net.Sockets
                 return _iocpBoundHandle;
             }
         }
+#endif
 
         // TODO: These methods don't need to be on SafeCloseSocket and would probably be better on SimpleOverlapped itself,
         // Or really just not existing and have the code that uses it do it directly, as we're now doing in the SAEA case...
@@ -127,12 +129,15 @@ namespace System.Net.Sockets
 
         private void InnerReleaseHandle()
         {
+            // ThreadPoolBoundHandle doesn't actually do anything in Dispose, so skip this.
+#if false
             // Keep m_IocpBoundHandle around after disposing it to allow freeing NativeOverlapped.
             // ThreadPoolBoundHandle allows FreeNativeOverlapped even after it has been disposed.
             if (_iocpBoundHandle != null)
             {
                 _iocpBoundHandle.Dispose();
             }
+#endif
         }
 
         internal sealed partial class InnerSafeCloseSocket : SafeHandleMinusOneIsInvalid
