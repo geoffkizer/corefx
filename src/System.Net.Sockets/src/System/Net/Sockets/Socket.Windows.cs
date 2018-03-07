@@ -285,13 +285,13 @@ namespace System.Net.Sockets
 
         }
 
-        internal ThreadPoolBoundHandle GetOrAllocateThreadPoolBoundHandle()
+        internal void GetOrAllocateThreadPoolBoundHandle()
         {
             // There is a known bug that exists through Windows 7 with UDP and
             // SetFileCompletionNotificationModes.
             // So, don't try to enable skipping the completion port on success in this case.
             bool trySkipCompletionPortOnSuccess = !(CompletionPortHelper.PlatformHasUdpIssue && _protocolType == ProtocolType.Udp);
-            return _handle.GetOrAllocateThreadPoolBoundHandle(trySkipCompletionPortOnSuccess);
+            _handle.GetOrAllocateThreadPoolBoundHandle(trySkipCompletionPortOnSuccess);
         }
     }
 }

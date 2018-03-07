@@ -22,7 +22,7 @@ namespace System.Net.Sockets
 
         public void SetExposed() { /* nop */ }
 
-        public ThreadPoolBoundHandle IOCPBoundHandle
+        private ThreadPoolBoundHandle IOCPBoundHandle
         {
             get
             {
@@ -30,8 +30,23 @@ namespace System.Net.Sockets
             }
         }
 
+        internal unsafe NativeOverlapped* AllocateNativeOverlapped(IOCompletionCallback callback, object state, object pinData)
+        {
+            return IOCPBoundHandle.AllocateNativeOverlapped(callback, state, pinData);
+        }
+
+        internal unsafe NativeOverlapped* AllocateNativeOverlapped(PreAllocatedOverlapped preAllocated)
+        {
+            return IOCPBoundHandle.AllocateNativeOverlapped(preAllocated);
+        }
+
+        internal unsafe void FreeNativeOverlapped(NativeOverlapped* nativeOverlapped)
+        {
+            IOCPBoundHandle.FreeNativeOverlapped(nativeOverlapped);
+        }
+
         // Binds the Socket Win32 Handle to the ThreadPool's CompletionPort.
-        public ThreadPoolBoundHandle GetOrAllocateThreadPoolBoundHandle(bool trySkipCompletionPortOnSuccess)
+        public void GetOrAllocateThreadPoolBoundHandle(bool trySkipCompletionPortOnSuccess)
         {
             // Check to see if the socket native _handle is already
             // bound to the ThreadPool's completion port.
@@ -39,8 +54,6 @@ namespace System.Net.Sockets
             {
                 GetOrAllocateThreadPoolBoundHandleSlow(trySkipCompletionPortOnSuccess);
             }
-
-            return _iocpBoundHandle;
         }
 
         private void GetOrAllocateThreadPoolBoundHandleSlow(bool trySkipCompletionPortOnSuccess)

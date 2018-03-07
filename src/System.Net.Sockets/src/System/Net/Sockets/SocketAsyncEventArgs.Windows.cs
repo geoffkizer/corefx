@@ -63,8 +63,8 @@ namespace System.Net.Sockets
             Debug.Assert(_currentSocket.SafeHandle != null, "_currentSocket.SafeHandle is null");
             Debug.Assert(_preAllocatedOverlapped != null, "_preAllocatedOverlapped is null");
 
-            ThreadPoolBoundHandle boundHandle = _currentSocket.GetOrAllocateThreadPoolBoundHandle();
-            return boundHandle.AllocateNativeOverlapped(_preAllocatedOverlapped);
+            _currentSocket.GetOrAllocateThreadPoolBoundHandle();
+            return _currentSocket.SafeHandle.AllocateNativeOverlapped(_preAllocatedOverlapped);
         }
 
         private unsafe void FreeNativeOverlapped(NativeOverlapped* overlapped)
@@ -73,10 +73,10 @@ namespace System.Net.Sockets
             Debug.Assert(_operating == InProgress, $"Expected _operating == InProgress, got {_operating}");
             Debug.Assert(_currentSocket != null, "_currentSocket is null");
             Debug.Assert(_currentSocket.SafeHandle != null, "_currentSocket.SafeHandle is null");
-            Debug.Assert(_currentSocket.SafeHandle.IOCPBoundHandle != null, "_currentSocket.SafeHandle.IOCPBoundHandle is null");
+//            Debug.Assert(_currentSocket.SafeHandle.IOCPBoundHandle != null, "_currentSocket.SafeHandle.IOCPBoundHandle is null");
             Debug.Assert(_preAllocatedOverlapped != null, "_preAllocatedOverlapped is null");
 
-            _currentSocket.SafeHandle.IOCPBoundHandle.FreeNativeOverlapped(overlapped);
+            _currentSocket.SafeHandle.FreeNativeOverlapped(overlapped);
         }
 
         /// <summary>Handles the result of an IOCP operation.</summary>
