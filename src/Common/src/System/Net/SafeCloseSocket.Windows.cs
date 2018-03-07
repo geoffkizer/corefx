@@ -30,19 +30,24 @@ namespace System.Net.Sockets
             }
         }
 
+        // TODO: These methods don't need to be on SafeCloseSocket and would probably be better on SimpleOverlapped itself,
+        // Or really just not existing and have the code that uses it do it directly, as we're now doing in the SAEA case...
         internal unsafe NativeOverlapped* AllocateNativeOverlapped(IOCompletionCallback callback, object state, object pinData)
         {
-            return IOCPBoundHandle.AllocateNativeOverlapped(callback, state, pinData);
+            SimpleOverlapped simpleOverlapped = new SimpleOverlapped(callback, state, pinData);
+            return simpleOverlapped.NativeOverlapped;
         }
 
-        internal unsafe NativeOverlapped* AllocateNativeOverlapped(PreAllocatedOverlapped preAllocated)
-        {
-            return IOCPBoundHandle.AllocateNativeOverlapped(preAllocated);
-        }
-
+        // TODO: Do not call in PreAllocated case...
         internal unsafe void FreeNativeOverlapped(NativeOverlapped* nativeOverlapped)
         {
-            IOCPBoundHandle.FreeNativeOverlapped(nativeOverlapped);
+            Overlapped.Free(nativeOverlapped);
+        }
+
+        internal unsafe static object GetNativeOverlappedState(NativeOverlapped* nativeOverlapped)
+        {
+            SimpleOverlapped simpleOverlapped = (SimpleOverlapped)Overlapped.Unpack(nativeOverlapped);
+            return simpleOverlapped.UserState;
         }
 
         // Binds the Socket Win32 Handle to the ThreadPool's CompletionPort.
@@ -242,5 +247,22 @@ namespace System.Net.Sockets
                 return result;
             }
         }
+    }
+
+    // Based on ThreadPoolBoundHandleOverlapped with the thread pool crap ripped out
+    internal class SimpleOverlapped : Overlapped
+    {
+        private readonly object _userState;
+        private unsafe NativeOverlapped* _nativeOverlapped;
+
+        public unsafe SimpleOverlapped(IOCompletionCallback callback, object state, object pinData)
+        {
+            _userState = state;
+
+            _nativeOverlapped = Pack(callback, pinData);
+        }
+
+        public object UserState => _userState;
+        public unsafe NativeOverlapped* NativeOverlapped => _nativeOverlapped;
     }
 }

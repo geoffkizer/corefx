@@ -65,7 +65,7 @@ namespace System.Net.Sockets
             using (DebugThreadTracking.SetThreadKind(ThreadKinds.System))
             {
 #endif
-                BaseOverlappedAsyncResult asyncResult = (BaseOverlappedAsyncResult)ThreadPoolBoundHandle.GetNativeOverlappedState(nativeOverlapped);
+                BaseOverlappedAsyncResult asyncResult = (BaseOverlappedAsyncResult)SafeCloseSocket.GetNativeOverlappedState(nativeOverlapped);
 
                 if (asyncResult.InternalPeekCompleted)
                 {
