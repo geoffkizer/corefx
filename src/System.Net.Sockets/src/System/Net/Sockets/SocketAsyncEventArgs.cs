@@ -774,7 +774,8 @@ namespace System.Net.Sockets
             // Raise completion event.
             if (_context == null)
             {
-                ThreadPool.QueueUserWorkItem(s_executionWaitCallback, this);
+                _currentSocket._ioQueue.Schedule(s_executionWaitCallback, this);
+//                ThreadPool.QueueUserWorkItem(s_executionWaitCallback, this);
 //                OnCompleted(this);
             }
             else
