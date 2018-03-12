@@ -74,6 +74,7 @@ namespace System.Net.Sockets
         private readonly bool _flowExecutionContext;
         private ExecutionContext _context;
         private static readonly ContextCallback s_executionCallback = ExecutionCallback;
+        private static readonly WaitCallback s_executionWaitCallback = ExecutionCallback;
         private Socket _currentSocket;
         private bool _disposeCalled;
 
@@ -773,7 +774,8 @@ namespace System.Net.Sockets
             // Raise completion event.
             if (_context == null)
             {
-                OnCompleted(this);
+                ThreadPool.QueueUserWorkItem(s_executionWaitCallback, this);
+//                OnCompleted(this);
             }
             else
             {
