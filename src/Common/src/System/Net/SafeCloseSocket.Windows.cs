@@ -16,7 +16,7 @@ namespace System.Net.Sockets
         SafeHandleMinusOneIsInvalid
 #endif
     {
-        private ThreadPoolBoundHandle _iocpBoundHandle;
+        private bool _isBoundToIocp;
         private bool _skipCompletionPortOnSuccess;
         private object _iocpBindingLock = new object();
 
@@ -51,16 +51,8 @@ namespace System.Net.Sockets
             }
         }
 #endif
-        public bool IsBoundHandle() => GetThreadPoolBoundHandle() != null;
+        public bool IsBoundHandle() => _isBoundToIocp;
         public void BindHandle(bool trySkipCompletionPortOnSuccess)
-        {
-            GetOrAllocateThreadPoolBoundHandle(trySkipCompletionPortOnSuccess);
-        }
-
-        private ThreadPoolBoundHandle GetThreadPoolBoundHandle() => !_released ? _iocpBoundHandle : null;
-
-        // Binds the Socket Win32 Handle to the ThreadPool's CompletionPort.
-        private ThreadPoolBoundHandle GetOrAllocateThreadPoolBoundHandle(bool trySkipCompletionPortOnSuccess)
         {
             if (_released)
             {
@@ -68,45 +60,39 @@ namespace System.Net.Sockets
                 throw new ObjectDisposedException(typeof(Socket).FullName);
             }
 
-            if (_iocpBoundHandle != null)
-            {
-                return _iocpBoundHandle;
-            }
-
             lock (_iocpBindingLock)
             {
-                ThreadPoolBoundHandle boundHandle = _iocpBoundHandle;
-
-                if (boundHandle == null)
+                if (_isBoundToIocp)
                 {
-                    // Bind the socket native _handle to the ThreadPool.
-                    if (NetEventSource.IsEnabled) NetEventSource.Info(this, "calling ThreadPool.BindHandle()");
-
-                    try
-                    {
-                        // The handle (this) may have been already released:
-                        // E.g.: The socket has been disposed in the main thread. A completion callback may
-                        //       attempt starting another operation.
-                        boundHandle = ThreadPoolBoundHandle.BindHandle(this);
-                    }
-                    catch (Exception exception) when (!ExceptionCheck.IsFatal(exception))
-                    {
-                        CloseAsIs();
-                        throw;
-                    }
-
-                    // Try to disable completions for synchronous success, if requested
-                    if (trySkipCompletionPortOnSuccess &&
-                        CompletionPortHelper.SkipCompletionPortOnSuccess(boundHandle.Handle))
-                    {
-                        _skipCompletionPortOnSuccess = true;
-                    }
-
-                    // Don't set this until after we've configured the handle above (if we did)
-                    Volatile.Write(ref _iocpBoundHandle, boundHandle);
+                    return;
                 }
 
-                return boundHandle;
+                // Bind the socket native _handle to the ThreadPool.
+                if (NetEventSource.IsEnabled)
+                    NetEventSource.Info(this, "calling ThreadPool.BindHandle()");
+
+                try
+                {
+                    // The handle (this) may have been already released:
+                    // E.g.: The socket has been disposed in the main thread. A completion callback may
+                    //       attempt starting another operation.
+                    SingleThreadedCompletionPortManager.BindHandle(this.handle);
+                }
+                catch (Exception exception) when (!ExceptionCheck.IsFatal(exception))
+                {
+                    CloseAsIs();
+                    throw;
+                }
+
+                // Try to disable completions for synchronous success, if requested
+                if (trySkipCompletionPortOnSuccess &&
+                    CompletionPortHelper.SkipCompletionPortOnSuccess(this))
+                {
+                    _skipCompletionPortOnSuccess = true;
+                }
+
+                // Don't set this until after we've configured the handle above (if we did)
+                _isBoundToIocp = true;
             }
         }
 
@@ -156,15 +142,18 @@ namespace System.Net.Sockets
                 // case we need to do some recovery.
                 if (_blockable)
                 {
-                    if (NetEventSource.IsEnabled) NetEventSource.Info(this, $"handle:{handle}, Following 'blockable' branch");
+                    if (NetEventSource.IsEnabled)
+                        NetEventSource.Info(this, $"handle:{handle}, Following 'blockable' branch");
                     errorCode = Interop.Winsock.closesocket(handle);
 #if DEBUG
                     _closeSocketHandle = handle;
                     _closeSocketResult = errorCode;
 #endif
-                    if (errorCode == SocketError.SocketError) errorCode = (SocketError)Marshal.GetLastWin32Error();
+                    if (errorCode == SocketError.SocketError)
+                        errorCode = (SocketError)Marshal.GetLastWin32Error();
 
-                    if (NetEventSource.IsEnabled) NetEventSource.Info(this, $"handle:{handle}, closesocket()#1:{errorCode}");
+                    if (NetEventSource.IsEnabled)
+                        NetEventSource.Info(this, $"handle:{handle}, closesocket()#1:{errorCode}");
 
                     // If it's not WSAEWOULDBLOCK, there's no more recourse - we either succeeded or failed.
                     if (errorCode != SocketError.WouldBlock)
@@ -179,9 +168,11 @@ namespace System.Net.Sockets
                         handle,
                         Interop.Winsock.IoctlSocketConstants.FIONBIO,
                         ref nonBlockCmd);
-                    if (errorCode == SocketError.SocketError) errorCode = (SocketError)Marshal.GetLastWin32Error();
+                    if (errorCode == SocketError.SocketError)
+                        errorCode = (SocketError)Marshal.GetLastWin32Error();
 
-                    if (NetEventSource.IsEnabled) NetEventSource.Info(this, $"handle:{handle}, ioctlsocket()#1:{errorCode}");
+                    if (NetEventSource.IsEnabled)
+                        NetEventSource.Info(this, $"handle:{handle}, ioctlsocket()#1:{errorCode}");
 
                     // If that succeeded, try again.
                     if (errorCode == SocketError.Success)
@@ -191,8 +182,10 @@ namespace System.Net.Sockets
                         _closeSocketHandle = handle;
                         _closeSocketResult = errorCode;
 #endif
-                        if (errorCode == SocketError.SocketError) errorCode = (SocketError)Marshal.GetLastWin32Error();
-                        if (NetEventSource.IsEnabled) NetEventSource.Info(this, $"handle:{handle}, closesocket#2():{errorCode}");
+                        if (errorCode == SocketError.SocketError)
+                            errorCode = (SocketError)Marshal.GetLastWin32Error();
+                        if (NetEventSource.IsEnabled)
+                            NetEventSource.Info(this, $"handle:{handle}, closesocket#2():{errorCode}");
 
                         // If it's not WSAEWOULDBLOCK, there's no more recourse - we either succeeded or failed.
                         if (errorCode != SocketError.WouldBlock)
@@ -218,8 +211,10 @@ namespace System.Net.Sockets
 #if DEBUG
                 _closeSocketLinger = errorCode;
 #endif
-                if (errorCode == SocketError.SocketError) errorCode = (SocketError)Marshal.GetLastWin32Error();
-                if (NetEventSource.IsEnabled) NetEventSource.Info(this, $"handle:{handle}, setsockopt():{errorCode}");
+                if (errorCode == SocketError.SocketError)
+                    errorCode = (SocketError)Marshal.GetLastWin32Error();
+                if (NetEventSource.IsEnabled)
+                    NetEventSource.Info(this, $"handle:{handle}, setsockopt():{errorCode}");
 
                 if (errorCode != SocketError.Success && errorCode != SocketError.InvalidArgument && errorCode != SocketError.ProtocolOption)
                 {
@@ -232,7 +227,8 @@ namespace System.Net.Sockets
                 _closeSocketHandle = handle;
                 _closeSocketResult = errorCode;
 #endif
-                if (NetEventSource.IsEnabled) NetEventSource.Info(this, $"handle:{handle}, closesocket#3():{(errorCode == SocketError.SocketError ? (SocketError)Marshal.GetLastWin32Error() : errorCode)}");
+                if (NetEventSource.IsEnabled)
+                    NetEventSource.Info(this, $"handle:{handle}, closesocket#3():{(errorCode == SocketError.SocketError ? (SocketError)Marshal.GetLastWin32Error() : errorCode)}");
 
                 return errorCode;
             }
@@ -299,5 +295,135 @@ namespace System.Net.Sockets
         {
             _completionCallback(_errorCode, _numBytes, _nativeOverlapped);
         }
+    }
+
+    internal static class SingleThreadedCompletionPortManager
+    {
+        private static readonly SingleThreadedCompletionPort[] s_ports = CreatePorts();
+        private static int s_nextPort = 0;
+        private static readonly object s_lockObj = new object();
+
+        private static SingleThreadedCompletionPort[] CreatePorts()
+        {
+            SingleThreadedCompletionPort[] ports = new SingleThreadedCompletionPort[Environment.ProcessorCount];
+
+            for (int i = 0; i < ports.Length; i++)
+            {
+                ports[i] = new SingleThreadedCompletionPort();
+            }
+
+            return ports;
+        }
+
+        public static void BindHandle(IntPtr handle)
+        {
+            SingleThreadedCompletionPort port;
+
+            lock (s_lockObj)
+            {
+                port = s_ports[s_nextPort];
+                s_nextPort++;
+                if (s_nextPort == s_ports.Length)
+                {
+                    s_nextPort = 0;
+                }
+            }
+
+            port.BindHandle(handle);
+        }
+    }
+
+    internal sealed class SingleThreadedCompletionPort
+    {
+        private IntPtr _iocpHandle;
+
+        public SingleThreadedCompletionPort()
+        {
+            _iocpHandle = InteropTemp.CreateIoCompletionPort((IntPtr)(-1), IntPtr.Zero, IntPtr.Zero, 0);
+            if (_iocpHandle == IntPtr.Zero)
+                throw new Exception("Completion port creation failed");
+
+            var t = new Thread(() => Run());
+            t.IsBackground = true;
+            t.Start();
+        }
+
+        public void BindHandle(IntPtr handle)
+        {
+            // Bind socket to completion port
+            var result = InteropTemp.CreateIoCompletionPort(handle, _iocpHandle, IntPtr.Zero, 0);
+            if (result != _iocpHandle)
+                throw new Exception("Completion port bind failed");
+        }
+
+        private const int BatchSize = 256;
+
+        private unsafe void Run()
+        {
+            InteropTemp.OverlappedEntry* entries = stackalloc InteropTemp.OverlappedEntry[BatchSize];
+
+            try
+            {
+                while (true)
+                {
+                    bool success = InteropTemp.GetQueuedCompletionStatusEx(_iocpHandle, entries, (uint)BatchSize, out uint count, -1, false);
+
+                    if (!success)
+                    {
+                        throw new Exception("GetQueuedCompletionStatusEx failed");
+                    }
+
+                    if (count == 0)
+                    {
+                        throw new Exception("GetQueuedCompletionStatusEx returned 0 entries");
+                    }
+
+                    for (uint i = 0; i < count; i++)
+                    {
+                        uint errorCode = (uint)entries[i].lpOverlapped->InternalLow.ToInt64();
+                        uint bytesTransferred = (uint)entries[i].dwNumberOfBytesTransferred;
+                        NativeOverlapped* nativeOverlapped = entries[i].lpOverlapped;
+                        SimpleOverlapped simpleOverlapped = SimpleOverlapped.FromNativeOverlapped(nativeOverlapped);
+
+                        // CONSIDER: Technically we don't actually need to pass errorCode here as it's stored in the NativeOverlapped
+                        simpleOverlapped.SetResult(errorCode, bytesTransferred);
+                        simpleOverlapped.InvokeCompletionCallback();
+                    }
+                }
+            }
+            catch (Exception e)
+            {
+                Environment.FailFast($"SingleThreadedCompletionPort.Run threw exception: {e}");
+            }
+        }
+
+        static class InteropTemp
+        {
+            [DllImport("kernel32.dll")]
+            internal static unsafe extern IntPtr CreateIoCompletionPort(
+                IntPtr FileHandle,
+                IntPtr ExistingCompletionPort,
+                IntPtr CompletionKey,
+                int NumberOfConcurrentThreads);
+
+            [StructLayout(LayoutKind.Sequential)]
+            internal unsafe struct OverlappedEntry
+            {
+                public IntPtr lpCompletionKey;
+                public NativeOverlapped* lpOverlapped;
+                public IntPtr Internal;
+                public int dwNumberOfBytesTransferred;
+            }
+
+            [DllImport("kernel32.dll", SetLastError = true)]
+            internal static unsafe extern bool GetQueuedCompletionStatusEx(
+                IntPtr CompletionPort,
+                OverlappedEntry* lpCompletionPortEntries,
+                uint ulCount,
+                out uint ulNumEntriesRemoved,
+                int dwMilliseconds,
+                bool fAlertable);
+        }
+
     }
 }
