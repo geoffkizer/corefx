@@ -305,7 +305,7 @@ namespace System.Net.Sockets
 
         private static SingleThreadedCompletionPort[] CreatePorts()
         {
-            SingleThreadedCompletionPort[] ports = new SingleThreadedCompletionPort[Environment.ProcessorCount];
+            SingleThreadedCompletionPort[] ports = new SingleThreadedCompletionPort[8];
 
             for (int i = 0; i < ports.Length; i++)
             {
