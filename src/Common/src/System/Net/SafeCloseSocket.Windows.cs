@@ -114,7 +114,7 @@ namespace System.Net.Sockets
         {
             get
             {
-                Debug.Assert(_iocpBoundHandle != null);
+                Debug.Assert(IsBoundHandle());
                 return _skipCompletionPortOnSuccess;
             }
         }
@@ -260,19 +260,44 @@ namespace System.Net.Sockets
     }
 
     // Based on ThreadPoolBoundHandleOverlapped with the thread pool crap ripped out
-    internal class SimpleOverlapped : Overlapped
+    internal sealed class SimpleOverlapped : Overlapped
     {
+        private readonly IOCompletionCallback _completionCallback;
         private readonly object _userState;
-        private unsafe NativeOverlapped* _nativeOverlapped;
+        private readonly unsafe NativeOverlapped* _nativeOverlapped;
+        private uint _errorCode;
+        private uint _numBytes;
 
-        public unsafe SimpleOverlapped(IOCompletionCallback callback, object state, object pinData)
+        public unsafe SimpleOverlapped(IOCompletionCallback completionCallback, object state, object pinData)
         {
+            // Base overlapped does not expose the completionCallback.  So just store it ourselves for now.
+            _completionCallback = completionCallback;
             _userState = state;
 
-            _nativeOverlapped = Pack(callback, pinData);
+            _nativeOverlapped = Pack(completionCallback, pinData);
         }
 
         public object UserState => _userState;
         public unsafe NativeOverlapped* NativeOverlapped => _nativeOverlapped;
+
+        // TODO: This really only should be called once.  Currently we'll call it again when we retrieve the UserState.  Fix this.
+
+        public static unsafe SimpleOverlapped FromNativeOverlapped(NativeOverlapped* nativeOverlapped)
+        {
+            var simpleOverlapped = (SimpleOverlapped)Unpack(nativeOverlapped);
+            Debug.Assert(simpleOverlapped.NativeOverlapped == nativeOverlapped);
+            return simpleOverlapped;
+        }
+
+        public unsafe void SetResult(uint errorCode, uint numBytes)
+        {
+            _errorCode = errorCode;
+            _numBytes = numBytes;
+        }
+
+        public unsafe void InvokeCompletionCallback()
+        {
+            _completionCallback(_errorCode, _numBytes, _nativeOverlapped);
+        }
     }
 }
