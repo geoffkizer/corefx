@@ -47,15 +47,15 @@ namespace System.Net.Sockets
                 throw new ObjectDisposedException(s.GetType().FullName);
             }
 
-            ThreadPoolBoundHandle boundHandle = s.GetOrAllocateThreadPoolBoundHandle();
+            s.EnsureBound();
 
             unsafe
             {
-                NativeOverlapped* overlapped = boundHandle.AllocateNativeOverlapped(s_ioCallback, this, objectsToPin);
+                NativeOverlapped* overlapped = s.SafeHandle.AllocateNativeOverlapped(s_ioCallback, this, objectsToPin);
                 _nativeOverlapped = new SafeNativeOverlapped(s.SafeHandle, overlapped);
             }
 
-            if (NetEventSource.IsEnabled) NetEventSource.Info(this, $"{boundHandle}::AllocateNativeOverlapped. return={_nativeOverlapped}");
+            if (NetEventSource.IsEnabled) NetEventSource.Info(this, $"AllocateNativeOverlapped. return={_nativeOverlapped}");
         }
 
         private static unsafe void CompletionPortCallback(uint errorCode, uint numBytes, NativeOverlapped* nativeOverlapped)
@@ -65,7 +65,7 @@ namespace System.Net.Sockets
             using (DebugThreadTracking.SetThreadKind(ThreadKinds.System))
             {
 #endif
-                BaseOverlappedAsyncResult asyncResult = (BaseOverlappedAsyncResult)ThreadPoolBoundHandle.GetNativeOverlappedState(nativeOverlapped);
+                BaseOverlappedAsyncResult asyncResult = (BaseOverlappedAsyncResult)SafeCloseSocket.GetNativeOverlappedState(nativeOverlapped);
 
                 if (asyncResult.InternalPeekCompleted)
                 {

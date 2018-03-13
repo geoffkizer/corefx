@@ -39,7 +39,7 @@ namespace System.Net.Sockets
         private FileStream[] _sendPacketsFileStreams;
 
         // Overlapped object related variables.
-        private PreAllocatedOverlapped _preAllocatedOverlapped;
+        private SimpleOverlapped _preAllocatedOverlapped;
 
         private PinState _pinState;
         private enum PinState : byte { None = 0, MultipleBuffer, SendPackets }
@@ -53,7 +53,7 @@ namespace System.Net.Sockets
             try
             {
                 if (suppressFlow) ExecutionContext.SuppressFlow();
-                _preAllocatedOverlapped = new PreAllocatedOverlapped(s_completionPortCallback, this, null);
+                _preAllocatedOverlapped = new SimpleOverlapped(s_completionPortCallback, this, null);
             }
             finally
             {
@@ -76,8 +76,8 @@ namespace System.Net.Sockets
             Debug.Assert(_currentSocket.SafeHandle != null, "_currentSocket.SafeHandle is null");
             Debug.Assert(_preAllocatedOverlapped != null, "_preAllocatedOverlapped is null");
 
-            ThreadPoolBoundHandle boundHandle = _currentSocket.GetOrAllocateThreadPoolBoundHandle();
-            return boundHandle.AllocateNativeOverlapped(_preAllocatedOverlapped);
+            _currentSocket.EnsureBound();
+            return _preAllocatedOverlapped.NativeOverlapped;
         }
 
         private unsafe void FreeNativeOverlapped(NativeOverlapped* overlapped)
@@ -86,10 +86,9 @@ namespace System.Net.Sockets
             Debug.Assert(_operating == InProgress, $"Expected _operating == InProgress, got {_operating}");
             Debug.Assert(_currentSocket != null, "_currentSocket is null");
             Debug.Assert(_currentSocket.SafeHandle != null, "_currentSocket.SafeHandle is null");
-            Debug.Assert(_currentSocket.SafeHandle.IOCPBoundHandle != null, "_currentSocket.SafeHandle.IOCPBoundHandle is null");
             Debug.Assert(_preAllocatedOverlapped != null, "_preAllocatedOverlapped is null");
 
-            _currentSocket.SafeHandle.IOCPBoundHandle.FreeNativeOverlapped(overlapped);
+            // Note, this does nothing now...
         }
 
         /// <summary>Handles the result of an IOCP operation.</summary>
@@ -888,13 +887,13 @@ namespace System.Net.Sockets
         private IntPtr PtrSocketAddressBufferSize => PtrSocketAddressBuffer + _socketAddress.GetAddressSizeOffset();
 
         // Cleans up any existing Overlapped object and related state variables.
-        private void FreeOverlapped()
+        private unsafe void FreeOverlapped()
         {
             // Free the preallocated overlapped object. This in turn will unpin
             // any pinned buffers.
             if (_preAllocatedOverlapped != null)
             {
-                _preAllocatedOverlapped.Dispose();
+                SafeCloseSocket.FreeNativeOverlapped(_preAllocatedOverlapped.NativeOverlapped);
                 _preAllocatedOverlapped = null;
             }
         }
@@ -1174,7 +1173,7 @@ namespace System.Net.Sockets
 
         private static readonly unsafe IOCompletionCallback s_completionPortCallback = delegate (uint errorCode, uint numBytes, NativeOverlapped* nativeOverlapped)
         {
-            var saea = (SocketAsyncEventArgs)ThreadPoolBoundHandle.GetNativeOverlappedState(nativeOverlapped);
+            var saea = (SocketAsyncEventArgs)SafeCloseSocket.GetNativeOverlappedState(nativeOverlapped);
             if ((SocketError)errorCode == SocketError.Success)
             {
                 saea.FreeNativeOverlapped(nativeOverlapped);

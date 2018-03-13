@@ -22,6 +22,27 @@ namespace System.Net.Sockets
 
         public void SetExposed() { /* nop */ }
 
+        // TODO: These methods don't need to be on SafeCloseSocket and would probably be better on SimpleOverlapped itself,
+        // Or really just not existing and have the code that uses it do it directly, as we're now doing in the SAEA case...
+        internal unsafe NativeOverlapped* AllocateNativeOverlapped(IOCompletionCallback callback, object state, object pinData)
+        {
+            SimpleOverlapped simpleOverlapped = new SimpleOverlapped(callback, state, pinData);
+            return simpleOverlapped.NativeOverlapped;
+        }
+
+        // TODO: Do not call in PreAllocated case...
+        internal unsafe static void FreeNativeOverlapped(NativeOverlapped* nativeOverlapped)
+        {
+            Overlapped.Free(nativeOverlapped);
+        }
+
+        internal unsafe static object GetNativeOverlappedState(NativeOverlapped* nativeOverlapped)
+        {
+            SimpleOverlapped simpleOverlapped = (SimpleOverlapped)Overlapped.Unpack(nativeOverlapped);
+            return simpleOverlapped.UserState;
+        }
+
+#if false
         public ThreadPoolBoundHandle IOCPBoundHandle
         {
             get
@@ -29,11 +50,17 @@ namespace System.Net.Sockets
                 return _iocpBoundHandle;
             }
         }
+#endif
+        public bool IsBoundHandle() => GetThreadPoolBoundHandle() != null;
+        public void BindHandle(bool trySkipCompletionPortOnSuccess)
+        {
+            GetOrAllocateThreadPoolBoundHandle(trySkipCompletionPortOnSuccess);
+        }
 
-        public ThreadPoolBoundHandle GetThreadPoolBoundHandle() => !_released ? _iocpBoundHandle : null;
+        private ThreadPoolBoundHandle GetThreadPoolBoundHandle() => !_released ? _iocpBoundHandle : null;
 
         // Binds the Socket Win32 Handle to the ThreadPool's CompletionPort.
-        public ThreadPoolBoundHandle GetOrAllocateThreadPoolBoundHandle(bool trySkipCompletionPortOnSuccess)
+        private ThreadPoolBoundHandle GetOrAllocateThreadPoolBoundHandle(bool trySkipCompletionPortOnSuccess)
         {
             if (_released)
             {
@@ -107,12 +134,15 @@ namespace System.Net.Sockets
 
         private void InnerReleaseHandle()
         {
+            // ThreadPoolBoundHandle doesn't actually do anything in Dispose, so skip this.
+#if false
             // Keep m_IocpBoundHandle around after disposing it to allow freeing NativeOverlapped.
             // ThreadPoolBoundHandle allows FreeNativeOverlapped even after it has been disposed.
             if (_iocpBoundHandle != null)
             {
                 _iocpBoundHandle.Dispose();
             }
+#endif
         }
 
         internal sealed partial class InnerSafeCloseSocket : SafeHandleMinusOneIsInvalid
@@ -227,5 +257,22 @@ namespace System.Net.Sockets
                 return result;
             }
         }
+    }
+
+    // Based on ThreadPoolBoundHandleOverlapped with the thread pool crap ripped out
+    internal class SimpleOverlapped : Overlapped
+    {
+        private readonly object _userState;
+        private unsafe NativeOverlapped* _nativeOverlapped;
+
+        public unsafe SimpleOverlapped(IOCompletionCallback callback, object state, object pinData)
+        {
+            _userState = state;
+
+            _nativeOverlapped = Pack(callback, pinData);
+        }
+
+        public object UserState => _userState;
+        public unsafe NativeOverlapped* NativeOverlapped => _nativeOverlapped;
     }
 }
