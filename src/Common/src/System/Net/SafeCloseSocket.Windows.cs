@@ -2,10 +2,10 @@
 // The .NET Foundation licenses this file to you under the MIT license.
 // See the LICENSE file in the project root for more information.
 
-using Microsoft.Win32.SafeHandles;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Threading;
+using Microsoft.Win32.SafeHandles;
 
 namespace System.Net.Sockets
 {
@@ -76,7 +76,7 @@ namespace System.Net.Sockets
                     // The handle (this) may have been already released:
                     // E.g.: The socket has been disposed in the main thread. A completion callback may
                     //       attempt starting another operation.
-                    SingleThreadedCompletionPortManager.BindHandle(this.handle);
+                    CompletionPortManager.BindHandle(this.handle);
                 }
                 catch (Exception exception) when (!ExceptionCheck.IsFatal(exception))
                 {
@@ -297,27 +297,37 @@ namespace System.Net.Sockets
         }
     }
 
-    internal static class SingleThreadedCompletionPortManager
+    internal static class CompletionPortManager
     {
-        private static readonly SingleThreadedCompletionPort[] s_ports = CreatePorts();
+        private static readonly CompletionPortHandler[] s_ports;
         private static int s_nextPort = 0;
         private static readonly object s_lockObj = new object();
 
-        private static SingleThreadedCompletionPort[] CreatePorts()
+        static CompletionPortManager()
         {
-            SingleThreadedCompletionPort[] ports = new SingleThreadedCompletionPort[Environment.ProcessorCount];
+            int completionPorts = int.Parse(Environment.GetEnvironmentVariable("NETSOCKETS_COMPLETIONPORTS"));
+            if (completionPorts == 0)
+                completionPorts = Environment.ProcessorCount;
 
-            for (int i = 0; i < ports.Length; i++)
+            int threadsPerPort = int.Parse(Environment.GetEnvironmentVariable("NETSOCKETS_THREADSPERPORT"));
+            if (threadsPerPort == 0)
+                threadsPerPort = Environment.ProcessorCount;
+
+            int completionBatchSize = int.Parse(Environment.GetEnvironmentVariable("NETSOCKETS_COMPLETIONBATCHSIZE"));
+            if (completionBatchSize == 0)
+                completionBatchSize = 256;
+
+            s_ports = new CompletionPortHandler[completionPorts];
+
+            for (int i = 0; i < completionPorts; i++)
             {
-                ports[i] = new SingleThreadedCompletionPort();
+                s_ports[i] = new CompletionPortHandler(threadsPerPort, completionBatchSize);
             }
-
-            return ports;
         }
 
         public static void BindHandle(IntPtr handle)
         {
-            SingleThreadedCompletionPort port;
+            CompletionPortHandler port;
 
             lock (s_lockObj)
             {
@@ -333,19 +343,25 @@ namespace System.Net.Sockets
         }
     }
 
-    internal sealed class SingleThreadedCompletionPort
+    internal sealed class CompletionPortHandler
     {
-        private IntPtr _iocpHandle;
+        private readonly IntPtr _iocpHandle;
+        private readonly int _batchSize;
 
-        public SingleThreadedCompletionPort()
+        public CompletionPortHandler(int threadCount, int batchSize)
         {
+            _batchSize = batchSize;
+
             _iocpHandle = InteropTemp.CreateIoCompletionPort((IntPtr)(-1), IntPtr.Zero, IntPtr.Zero, 0);
             if (_iocpHandle == IntPtr.Zero)
                 throw new Exception("Completion port creation failed");
 
-            var t = new Thread(() => Run());
-            t.IsBackground = true;
-            t.Start();
+            for (int i = 0; i < threadCount; i++)
+            {
+                var t = new Thread(() => Run());
+                t.IsBackground = true;
+                t.Start();
+            }
         }
 
         public void BindHandle(IntPtr handle)
@@ -356,17 +372,15 @@ namespace System.Net.Sockets
                 throw new Exception("Completion port bind failed");
         }
 
-        private const int BatchSize = 256;
-
         private unsafe void Run()
         {
-            InteropTemp.OverlappedEntry* entries = stackalloc InteropTemp.OverlappedEntry[BatchSize];
+            InteropTemp.OverlappedEntry* entries = stackalloc InteropTemp.OverlappedEntry[_batchSize];
 
             try
             {
                 while (true)
                 {
-                    bool success = InteropTemp.GetQueuedCompletionStatusEx(_iocpHandle, entries, (uint)BatchSize, out uint count, -1, false);
+                    bool success = InteropTemp.GetQueuedCompletionStatusEx(_iocpHandle, entries, (uint)_batchSize, out uint count, -1, false);
 
                     if (!success)
                     {
