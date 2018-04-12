@@ -864,6 +864,7 @@ namespace System.Net.Sockets
                     }
                 }
 
+                bool wasCompleted = false;
                 bool needCallback = false;
                 while (true)
                 {
@@ -878,7 +879,7 @@ namespace System.Net.Sockets
                     // Try to perform the IO
                     if (op.TryComplete(context))
                     {
-                        needCallback = op.SetComplete();
+                        wasCompleted = true;
                         break;
                     }
 
@@ -913,6 +914,11 @@ namespace System.Net.Sockets
                             }
                         }
                     }
+                }
+
+                if (wasCompleted)
+                {
+                    needCallback = op.SetComplete();
                 }
 
                 // Remove the op from the queue and see if there's more to process.
