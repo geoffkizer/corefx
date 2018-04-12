@@ -869,12 +869,12 @@ namespace System.Net.Sockets
                 while (true)
                 {
                     bool wasCompleted = false;
+                    bool wasCancelled = false;
 
                     // Try to change the op state to Running.  
                     // If this fails, it means the operation was previously cancelled,
                     // and we should just remove it from the queue without further processing.
-                    bool isRunning = op.TrySetRunning();
-                    if (isRunning)
+                    if (op.TrySetRunning())
                     {
                         // Try to perform the IO
                         wasCompleted = op.TryComplete(context);
@@ -887,9 +887,13 @@ namespace System.Net.Sockets
                             op.SetWaiting();
                         }
                     }
+                    else
+                    {
+                        wasCancelled = true;
+                    }
 
                     nextOp = null;
-                    if (wasCompleted || !isRunning)
+                    if (wasCompleted || wasCancelled)
                     {
                         // Remove the op from the queue and see if there's more to process.
 
