@@ -897,6 +897,7 @@ namespace System.Net.Sockets
                     {
                         // Remove the op from the queue and see if there's more to process.
 
+                        bool enqueue = false;
                         using (Lock())
                         {
                             if (_state == QueueState.Stopped)
@@ -920,15 +921,15 @@ namespace System.Net.Sockets
                                 else
                                 {
                                     // Pop current operation and advance to next
-                                    nextOp = _tail.Next = op.Next;
+                                    _tail.Next = op.Next;
+                                    enqueue = true;
                                 }
                             }
                         }
 
-                        if (nextOp != null)
+                        if (enqueue)
                         {
                             ThreadPool.UnsafeQueueUserWorkItem(s_processingCallback, context);
-                            nextOp = null;
                         }
                     }
                     else
