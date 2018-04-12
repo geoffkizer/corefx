@@ -894,6 +894,7 @@ namespace System.Net.Sockets
                                 {
                                     Debug.Assert(_tail == null);
                                     Trace(context, $"Exit (stopped)");
+                                    return;
                                 }
                                 else
                                 {
@@ -911,6 +912,7 @@ namespace System.Net.Sockets
                                     {
                                         _state = QueueState.Waiting;
                                         Trace(context, $"Exit (received EAGAIN)");
+                                        return;
                                     }
                                 }
                             }
