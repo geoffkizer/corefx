@@ -864,7 +864,7 @@ namespace System.Net.Sockets
                     }
                 }
 
-                bool needCallback = false;
+                bool wasCancelled = false;
                 while (true)
                 {
                     // Try to change the op state to Running.  
@@ -872,13 +872,13 @@ namespace System.Net.Sockets
                     // and we should just remove it from the queue without further processing.
                     if (!op.TrySetRunning())
                     {
+                        wasCancelled = true;
                         break;
                     }
 
                     // Try to perform the IO
                     if (op.TryComplete(context))
                     {
-                        needCallback = op.SetComplete();
                         break;
                     }
 
@@ -952,12 +952,16 @@ namespace System.Net.Sockets
                     ThreadPool.UnsafeQueueUserWorkItem(s_processingCallback, context);
                 }
 
-                if (needCallback)
+                if (!wasCancelled)
                 {
-                    // At this point, the operation has completed and it's no longer
-                    // in the queue / no one else has a reference to it.  We can invoke
-                    // the callback and let it pool the object if appropriate.
-                    op.InvokeCallback(allowPooling: true);
+                    bool needCallback = op.SetComplete();
+                    if (needCallback)
+                    {
+                        // At this point, the operation has completed and it's no longer
+                        // in the queue / no one else has a reference to it.  We can invoke
+                        // the callback and let it pool the object if appropriate.
+                        op.InvokeCallback(allowPooling: true);
+                    }
                 }
             }
 
