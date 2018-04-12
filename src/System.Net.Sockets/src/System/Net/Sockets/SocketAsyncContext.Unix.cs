@@ -969,31 +969,35 @@ namespace System.Net.Sockets
             // Called when the socket is closed.
             public void StopAndAbort(SocketAsyncContext context)
             {
+                Trace(context, $"Enter");
+
                 // We should be called exactly once, by SafeCloseSocket.
                 Debug.Assert(_state != QueueState.Stopped);
 
+                AsyncOperation oldTail;
                 using (Lock())
                 {
-                    Trace(context, $"Enter");
-
                     Debug.Assert(_state != QueueState.Stopped);
 
                     _state = QueueState.Stopped;
-
-                    if (_tail != null)
-                    {
-                        AsyncOperation op = _tail;
-                        do
-                        {
-                            op.TryCancel();
-                            op = op.Next;
-                        } while (op != _tail);
-                    }
-
+                    oldTail = _tail;
                     _tail = null;
-
-                    Trace(context, $"Exit");
                 }
+
+                // Cancel any operations that were pending.
+                // Don't modify the list itself, as there could be code executing on other threads
+                // that's still trying to process the IO.
+                if (oldTail != null)
+                {
+                    AsyncOperation op = oldTail;
+                    do
+                    {
+                        op.TryCancel();
+                        op = op.Next;
+                    } while (op != oldTail);
+                }
+
+                Trace(context, $"Exit");
             }
 
             [Conditional("SOCKETASYNCCONTEXT_TRACE")]
