@@ -915,6 +915,12 @@ namespace System.Net.Sockets
                     }
                 }
 
+                bool needCallback = false;
+                if (wasCompleted)
+                {
+                    needCallback = op.SetComplete();
+                }
+
                 // Operation was either successfully completed (if wasCompleted == true) or previously cancelled.
                 // Remove the op from the queue and see if there's more to process.
 
@@ -953,16 +959,12 @@ namespace System.Net.Sockets
                     ThreadPool.UnsafeQueueUserWorkItem(s_processingCallback, context);
                 }
 
-                if (wasCompleted)
+                if (needCallback)
                 {
-                    bool needCallback = op.SetComplete();
-                    if (needCallback)
-                    {
-                        // At this point, the operation has completed and it's no longer
-                        // in the queue / no one else has a reference to it.  We can invoke
-                        // the callback and let it pool the object if appropriate.
-                        op.InvokeCallback(allowPooling: true);
-                    }
+                    // At this point, the operation has completed and it's no longer
+                    // in the queue / no one else has a reference to it.  We can invoke
+                    // the callback and let it pool the object if appropriate.
+                    op.InvokeCallback(allowPooling: true);
                 }
             }
 
