@@ -964,7 +964,7 @@ namespace System.Net.Sockets
                         }
                     }
 
-                    if (needCallback || nextOp == null)
+                    if (nextOp == null)
                     {
                         break;
                     }
