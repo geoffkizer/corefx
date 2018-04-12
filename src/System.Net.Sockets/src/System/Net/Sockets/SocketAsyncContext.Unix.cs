@@ -865,10 +865,10 @@ namespace System.Net.Sockets
                 }
 
                 bool needCallback = false;
+                bool wasCompleted = false;
+                bool wasCancelled = false;
                 while (true)
                 {
-                    bool wasCompleted = false;
-                    bool wasCancelled = false;
                     bool needRetry = false;
 
                     // Try to change the op state to Running.  
@@ -921,49 +921,49 @@ namespace System.Net.Sockets
                         wasCancelled = true;
                     }
 
-                    if (wasCompleted || wasCancelled)
-                    {
-                        // Remove the op from the queue and see if there's more to process.
-
-                        bool enqueue = false;
-                        using (Lock())
-                        {
-                            if (_state == QueueState.Stopped)
-                            {
-                                Debug.Assert(_tail == null);
-                                Trace(context, $"Exit (stopped)");
-                            }
-                            else
-                            {
-                                Debug.Assert(_state == QueueState.Processing, $"_state={_state} while processing queue!");
-                                Debug.Assert(_tail.Next == op, "Queue modified while processing queue");
-
-                                if (op == _tail)
-                                {
-                                    // No more operations to process
-                                    _tail = null;
-                                    _state = QueueState.Ready;
-                                    _sequenceNumber++;
-                                    Trace(context, $"Exit (finished queue)");
-                                }
-                                else
-                                {
-                                    // Pop current operation and advance to next
-                                    _tail.Next = op.Next;
-                                    enqueue = true;
-                                }
-                            }
-                        }
-
-                        if (enqueue)
-                        {
-                            ThreadPool.UnsafeQueueUserWorkItem(s_processingCallback, context);
-                        }
-                    }
-
                     if (!needRetry)
                     {
                         break;
+                    }
+                }
+
+                if (wasCompleted || wasCancelled)
+                {
+                    // Remove the op from the queue and see if there's more to process.
+
+                    bool enqueue = false;
+                    using (Lock())
+                    {
+                        if (_state == QueueState.Stopped)
+                        {
+                            Debug.Assert(_tail == null);
+                            Trace(context, $"Exit (stopped)");
+                        }
+                        else
+                        {
+                            Debug.Assert(_state == QueueState.Processing, $"_state={_state} while processing queue!");
+                            Debug.Assert(_tail.Next == op, "Queue modified while processing queue");
+
+                            if (op == _tail)
+                            {
+                                // No more operations to process
+                                _tail = null;
+                                _state = QueueState.Ready;
+                                _sequenceNumber++;
+                                Trace(context, $"Exit (finished queue)");
+                            }
+                            else
+                            {
+                                // Pop current operation and advance to next
+                                _tail.Next = op.Next;
+                                enqueue = true;
+                            }
+                        }
+                    }
+
+                    if (enqueue)
+                    {
+                        ThreadPool.UnsafeQueueUserWorkItem(s_processingCallback, context);
                     }
                 }
 
