@@ -924,35 +924,7 @@ namespace System.Net.Sockets
                     nextOp = null;
                     if (wasCompleted || wasCancelled)
                     {
-                        // Remove the op from the queue and see if there's more to process.
-
-                        using (Lock())
-                        {
-                            if (_state == QueueState.Stopped)
-                            {
-                                Debug.Assert(_tail == null);
-                                Trace(context, $"Exit (stopped)");
-                            }
-                            else
-                            {
-                                Debug.Assert(_state == QueueState.Processing, $"_state={_state} while processing queue!");
-                                Debug.Assert(_tail.Next == op, "Queue modified while processing queue");
-
-                                if (op == _tail)
-                                {
-                                    // No more operations to process
-                                    _tail = null;
-                                    _state = QueueState.Ready;
-                                    _sequenceNumber++;
-                                    Trace(context, $"Exit (finished queue)");
-                                }
-                                else
-                                {
-                                    // Pop current operation and advance to next
-                                    nextOp = _tail.Next = op.Next;
-                                }
-                            }
-                        }
+                        break;
                     }
                     else
                     {
@@ -994,21 +966,52 @@ namespace System.Net.Sockets
                     op = nextOp;
                 }
 
-                if (needCallback)
-                {
-                    if (nextOp != null)
-                    {
-                        Debug.Assert(_state == QueueState.Processing);
+                // Remove the op from the queue and see if there's more to process.
 
-                        // Spawn a new work item to continue processing the queue.
+                nextOp = null;
+                using (Lock())
+                {
+                    if (_state == QueueState.Stopped)
+                    {
+                        Debug.Assert(_tail == null);
+                        Trace(context, $"Exit (stopped)");
+                    }
+                    else
+                    {
+                        Debug.Assert(_state == QueueState.Processing, $"_state={_state} while processing queue!");
+                        Debug.Assert(_tail.Next == op, "Queue modified while processing queue");
+
+                        if (op == _tail)
+                        {
+                            // No more operations to process
+                            _tail = null;
+                            _state = QueueState.Ready;
+                            _sequenceNumber++;
+                            Trace(context, $"Exit (finished queue)");
+                        }
+                        else
+                        {
+                            // Pop current operation and advance to next
+                            nextOp = _tail.Next = op.Next;
+                        }
+                    }
+                }
+
+                if (nextOp != null)
+                {
+                    if (nextOp->Dispatch())
+                    {
                         ThreadPool.UnsafeQueueUserWorkItem(s_processingCallback, context);
                     }
+                }
 
+                if (needCallback)
+                {
                     return true;
                 }
                 else
                 {
-                    Debug.Assert(nextOp == null);
+//                    Debug.Assert(nextOp == null);
                     return false;
                 }
             }
