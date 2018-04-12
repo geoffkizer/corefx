@@ -695,9 +695,10 @@ namespace System.Net.Sockets
 
             private LockToken Lock() => new LockToken(_queueLock);
 
+            // TODO: Can this be cleaned up?
             private static readonly WaitCallback s_processingCallback =
-                typeof(TOperation) == typeof(ReadOperation) ? ((o) => { var context = ((SocketAsyncContext)o); context._receiveQueue.ProcessQueue(context); }) :
-                typeof(TOperation) == typeof(WriteOperation) ? ((o) => { var context = ((SocketAsyncContext)o); context._sendQueue.ProcessQueue(context); }) :
+                typeof(TOperation) == typeof(ReadOperation) ? ((op) => { var operation = ((ReadOperation)op); operation.AssociatedContext._receiveQueue.ProcessOperation(operation); }) :
+                typeof(TOperation) == typeof(WriteOperation) ? ((op) => { var operation = ((WriteOperation)op); operation.AssociatedContext._sendQueue.ProcessOperation(operation); }) :
                 (WaitCallback)null;
 
             public void Init()
@@ -800,6 +801,7 @@ namespace System.Net.Sockets
             // Called on the epoll thread whenever we receive an epoll notification.
             public void HandleEvent(SocketAsyncContext context)
             {
+                AsyncOperation op;
                 using (Lock())
                 {
                     Trace(context, $"Enter");
@@ -815,6 +817,7 @@ namespace System.Net.Sockets
                         case QueueState.Waiting:
                             Debug.Assert(_tail != null, "State == Waiting but queue is empty!");
                             _state = QueueState.Processing;
+                            op = _tail.Next;
                             // Break out and release lock
                             break;
 
@@ -837,9 +840,16 @@ namespace System.Net.Sockets
 
                 // We just transitioned from Waiting to Processing.
                 // Spawn a work item to do the actual processing.
-                ThreadPool.UnsafeQueueUserWorkItem(s_processingCallback, context);
+                ThreadPool.UnsafeQueueUserWorkItem(s_processingCallback, op);
+            }
+            
+            // TODO: Merge with below
+            public void ProcessOperation(TOperation operation)
+            {
+                ProcessQueue(operation.AssociatedContext);
             }
 
+            // TODO: Rename to process operation?
             // Called on the threadpool when data may be available.
             public void ProcessQueue(SocketAsyncContext context)
             {
