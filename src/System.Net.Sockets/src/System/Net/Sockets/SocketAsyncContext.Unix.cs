@@ -697,8 +697,8 @@ namespace System.Net.Sockets
 
             // TODO: Can this be cleaned up?
             private static readonly WaitCallback s_processingCallback =
-                typeof(TOperation) == typeof(ReadOperation) ? ((op) => { var operation = ((ReadOperation)op); operation.AssociatedContext._receiveQueue.ProcessOperation(operation); }) :
-                typeof(TOperation) == typeof(WriteOperation) ? ((op) => { var operation = ((WriteOperation)op); operation.AssociatedContext._sendQueue.ProcessOperation(operation); }) :
+                typeof(TOperation) == typeof(ReadOperation) ? ((op) => { var operation = ((ReadOperation)op); operation.AssociatedContext._receiveQueue.ProcessAsyncOperation(operation); }) :
+                typeof(TOperation) == typeof(WriteOperation) ? ((op) => { var operation = ((WriteOperation)op); operation.AssociatedContext._sendQueue.ProcessAsyncOperation(operation); }) :
                 (WaitCallback)null;
 
             public void Init()
@@ -844,15 +844,19 @@ namespace System.Net.Sockets
             }
             
             // TODO: Merge with below
-            public void ProcessOperation(TOperation operation)
+            public void ProcessAsyncOperation(TOperation operation)
             {
-                ProcessQueue(operation.AssociatedContext);
+                ProcessOperation(operation);
+
+                // TODO: Move callback here
             }
 
             // TODO: Rename to process operation?
             // Called on the threadpool when data may be available.
-            public void ProcessQueue(SocketAsyncContext context)
+            public void ProcessOperation(TOperation operation)
             {
+                SocketAsyncContext context = operation.AssociatedContext;
+
                 int observedSequenceNumber;
                 AsyncOperation op;
                 using (Lock())
