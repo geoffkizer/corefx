@@ -876,9 +876,7 @@ namespace System.Net.Sockets
                     }
 
                     // Try to perform the IO
-                    bool wasCompleted = false;
-                    wasCompleted = op.TryComplete(context);
-                    if (wasCompleted)
+                    if (op.TryComplete(context))
                     {
                         needCallback = op.SetComplete();
                         break;
