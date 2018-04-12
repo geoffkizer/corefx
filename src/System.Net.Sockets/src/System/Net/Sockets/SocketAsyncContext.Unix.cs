@@ -853,12 +853,11 @@ namespace System.Net.Sockets
 
             // TODO: Rename to process operation?
             // Called on the threadpool when data may be available.
-            public void ProcessOperation(TOperation operation)
+            public void ProcessOperation(TOperation op)
             {
-                SocketAsyncContext context = operation.AssociatedContext;
+                SocketAsyncContext context = op.AssociatedContext;
 
                 int observedSequenceNumber;
-                AsyncOperation op;
                 using (Lock())
                 {
                     Trace(context, $"Enter");
@@ -873,8 +872,8 @@ namespace System.Net.Sockets
                     {
                         Debug.Assert(_state == QueueState.Processing, $"_state={_state} while processing queue!");
                         Debug.Assert(_tail != null, "Unexpected empty queue while processing I/O");
+                        Debug.Assert(op == _tail.Next, "Operation is not at head of queue???");
                         observedSequenceNumber = _sequenceNumber;
-                        op = _tail.Next;        // head of queue
                     }
                 }
 
