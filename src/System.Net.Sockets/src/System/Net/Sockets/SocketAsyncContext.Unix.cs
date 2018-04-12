@@ -817,7 +817,7 @@ namespace System.Net.Sockets
             // Called on the epoll thread whenever we receive an epoll notification.
             public void HandleEvent(SocketAsyncContext context)
             {
-                TOperation op;
+                AsyncOperation op;
                 using (Lock())
                 {
                     Trace(context, $"Enter");
@@ -856,7 +856,7 @@ namespace System.Net.Sockets
 
                 // We just transitioned from Waiting to Processing.
                 // Dispatch the operation for processing.
-                if (op->Dispatch())
+                if (op.Dispatch())
                 {
                     // Async operation, queue to threadpool for processing.
                     ThreadPool.UnsafeQueueUserWorkItem(s_processingCallback, context);
@@ -868,7 +868,7 @@ namespace System.Net.Sockets
             // Possibly this should not be on the queue at all?  Not sure...
 
             // Called on the threadpool when data may be available.
-            private bool ProcessQueue2(SocketAsyncContext context)
+            private void ProcessQueue(SocketAsyncContext context)
             {
                 int observedSequenceNumber;
                 AsyncOperation op;
@@ -892,7 +892,6 @@ namespace System.Net.Sockets
                 }
 
                 bool needCallback = false;
-                AsyncOperation nextOp;
 
                 // TODO: This loop goes away, I think
                 while (true)
@@ -921,54 +920,43 @@ namespace System.Net.Sockets
                         wasCancelled = true;
                     }
 
-                    nextOp = null;
                     if (wasCompleted || wasCancelled)
                     {
                         break;
                     }
-                    else
-                    {
-                        // Check for retry and reset queue state.
 
-                        using (Lock())
+                    // Check for retry and reset queue state.
+
+                    using (Lock())
+                    {
+                        if (_state == QueueState.Stopped)
                         {
-                            if (_state == QueueState.Stopped)
+                            Debug.Assert(_tail == null);
+                            Trace(context, $"Exit (stopped)");
+                        }
+                        else
+                        {
+                            Debug.Assert(_state == QueueState.Processing, $"_state={_state} while processing queue!");
+
+                            if (observedSequenceNumber != _sequenceNumber)
                             {
-                                Debug.Assert(_tail == null);
-                                Trace(context, $"Exit (stopped)");
+                                // We received another epoll notification since we previously checked it.
+                                // So, we need to retry the operation.
+                                Debug.Assert(observedSequenceNumber - _sequenceNumber < 10000, "Very large sequence number increase???");
+                                observedSequenceNumber = _sequenceNumber;
                             }
                             else
                             {
-                                Debug.Assert(_state == QueueState.Processing, $"_state={_state} while processing queue!");
-
-                                if (observedSequenceNumber != _sequenceNumber)
-                                {
-                                    // We received another epoll notification since we previously checked it.
-                                    // So, we need to retry the operation.
-                                    Debug.Assert(observedSequenceNumber - _sequenceNumber < 10000, "Very large sequence number increase???");
-                                    observedSequenceNumber = _sequenceNumber;
-                                    nextOp = op;
-                                }
-                                else
-                                {
-                                    _state = QueueState.Waiting;
-                                    Trace(context, $"Exit (received EAGAIN)");
-                                }
+                                _state = QueueState.Waiting;
+                                Trace(context, $"Exit (received EAGAIN)");
                             }
                         }
                     }
-
-                    if (needCallback || nextOp == null)
-                    {
-                        break;
-                    }
-
-                    op = nextOp;
                 }
 
                 // Remove the op from the queue and see if there's more to process.
 
-                nextOp = null;
+                AsyncOperation nextOp = null;
                 using (Lock())
                 {
                     if (_state == QueueState.Stopped)
@@ -999,7 +987,7 @@ namespace System.Net.Sockets
 
                 if (nextOp != null)
                 {
-                    if (nextOp->Dispatch())
+                    if (nextOp.Dispatch())
                     {
                         ThreadPool.UnsafeQueueUserWorkItem(s_processingCallback, context);
                     }
@@ -1007,24 +995,23 @@ namespace System.Net.Sockets
 
                 if (needCallback)
                 {
-                    return true;
-                }
-                else
-                {
-//                    Debug.Assert(nextOp == null);
-                    return false;
+                    op.InvokeCallback(allowPooling: true);
                 }
             }
 
+#if false
             // Async only
             public void ProcessQueue(SocketAsyncContext context)
             {
-                bool success = ProcessQueue2();
+#if false
+                bool success = ProcessQueue2(context);
                 if (success)
                 {
                     op.InvokeCallback(allowPooling: true);
                 }
+#endif
             }
+#endif
 
             // Called when the socket is closed.
             public void StopAndAbort(SocketAsyncContext context)
