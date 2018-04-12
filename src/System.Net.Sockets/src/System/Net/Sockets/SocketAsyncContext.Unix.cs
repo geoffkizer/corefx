@@ -929,44 +929,41 @@ namespace System.Net.Sockets
                     }
                 }
 
-                if (wasCompleted || wasCancelled)
-                {
-                    // Remove the op from the queue and see if there's more to process.
+                // Remove the op from the queue and see if there's more to process.
 
-                    bool enqueue = false;
-                    using (Lock())
+                bool enqueue = false;
+                using (Lock())
+                {
+                    if (_state == QueueState.Stopped)
                     {
-                        if (_state == QueueState.Stopped)
+                        Debug.Assert(_tail == null);
+                        Trace(context, $"Exit (stopped)");
+                    }
+                    else
+                    {
+                        Debug.Assert(_state == QueueState.Processing, $"_state={_state} while processing queue!");
+                        Debug.Assert(_tail.Next == op, "Queue modified while processing queue");
+
+                        if (op == _tail)
                         {
-                            Debug.Assert(_tail == null);
-                            Trace(context, $"Exit (stopped)");
+                            // No more operations to process
+                            _tail = null;
+                            _state = QueueState.Ready;
+                            _sequenceNumber++;
+                            Trace(context, $"Exit (finished queue)");
                         }
                         else
                         {
-                            Debug.Assert(_state == QueueState.Processing, $"_state={_state} while processing queue!");
-                            Debug.Assert(_tail.Next == op, "Queue modified while processing queue");
-
-                            if (op == _tail)
-                            {
-                                // No more operations to process
-                                _tail = null;
-                                _state = QueueState.Ready;
-                                _sequenceNumber++;
-                                Trace(context, $"Exit (finished queue)");
-                            }
-                            else
-                            {
-                                // Pop current operation and advance to next
-                                _tail.Next = op.Next;
-                                enqueue = true;
-                            }
+                            // Pop current operation and advance to next
+                            _tail.Next = op.Next;
+                            enqueue = true;
                         }
                     }
+                }
 
-                    if (enqueue)
-                    {
-                        ThreadPool.UnsafeQueueUserWorkItem(s_processingCallback, context);
-                    }
+                if (enqueue)
+                {
+                    ThreadPool.UnsafeQueueUserWorkItem(s_processingCallback, context);
                 }
 
                 if (needCallback)
