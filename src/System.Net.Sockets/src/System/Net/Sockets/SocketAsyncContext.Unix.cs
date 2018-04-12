@@ -276,6 +276,13 @@ namespace System.Net.Sockets
                 return true;
             }
 
+            public void Dispatch(WaitCallback processingCallback)
+            {
+                // TODO: Dispatch for sync
+
+                ThreadPool.UnsafeQueueUserWorkItem(processingCallback, this);
+            }
+
             // Called when op is not in the queue yet, so can't be otherwise executing
             public void DoAbort()
             {
@@ -838,9 +845,8 @@ namespace System.Net.Sockets
                     }
                 }
 
-                // We just transitioned from Waiting to Processing.
-                // Spawn a work item to do the actual processing.
-                ThreadPool.UnsafeQueueUserWorkItem(s_processingCallback, op);
+                // Dispatch the op so we can try to process it.
+                op.Dispatch(s_processingCallback);
             }
             
             // TODO: Merge with below
@@ -967,7 +973,7 @@ namespace System.Net.Sockets
 
                 if (nextOp != null)
                 {
-                    ThreadPool.UnsafeQueueUserWorkItem(s_processingCallback, nextOp);
+                    nextOp.Dispatch(s_processingCallback);
                 }
 
                 if (needCallback)
