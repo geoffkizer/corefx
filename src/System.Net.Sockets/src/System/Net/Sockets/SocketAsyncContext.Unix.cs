@@ -865,7 +865,6 @@ namespace System.Net.Sockets
                 }
 
                 bool needCallback = false;
-                AsyncOperation nextOp;
                 while (true)
                 {
                     bool wasCompleted = false;
@@ -892,7 +891,7 @@ namespace System.Net.Sockets
                         wasCancelled = true;
                     }
 
-                    nextOp = null;
+                    bool needRetry = false;
                     if (wasCompleted || wasCancelled)
                     {
                         // Remove the op from the queue and see if there's more to process.
@@ -953,7 +952,7 @@ namespace System.Net.Sockets
                                     // So, we need to retry the operation.
                                     Debug.Assert(observedSequenceNumber - _sequenceNumber < 10000, "Very large sequence number increase???");
                                     observedSequenceNumber = _sequenceNumber;
-                                    nextOp = op;
+                                    needRetry = true;
                                 }
                                 else
                                 {
@@ -964,12 +963,10 @@ namespace System.Net.Sockets
                         }
                     }
 
-                    if (nextOp == null)
+                    if (!needRetry)
                     {
                         break;
                     }
-
-                    op = nextOp;
                 }
 
                 if (needCallback)
@@ -978,10 +975,6 @@ namespace System.Net.Sockets
                     // in the queue / no one else has a reference to it.  We can invoke
                     // the callback and let it pool the object if appropriate.
                     op.InvokeCallback(allowPooling: true);
-                }
-                else
-                {
-                    Debug.Assert(nextOp == null);
                 }
             }
 
