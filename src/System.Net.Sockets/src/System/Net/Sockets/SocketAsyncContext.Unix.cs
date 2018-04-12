@@ -865,62 +865,55 @@ namespace System.Net.Sockets
                 }
 
                 bool needCallback = false;
-                bool wasCompleted = false;
                 while (true)
                 {
-                    bool needRetry = false;
-
                     // Try to change the op state to Running.  
                     // If this fails, it means the operation was previously cancelled,
                     // and we should just remove it from the queue without further processing.
-                    if (op.TrySetRunning())
+                    if (!op.TrySetRunning())
                     {
-                        // Try to perform the IO
-                        wasCompleted = op.TryComplete(context);
-                        if (wasCompleted)
+                        break;
+                    }
+
+                    // Try to perform the IO
+                    bool wasCompleted = false;
+                    wasCompleted = op.TryComplete(context);
+                    if (wasCompleted)
+                    {
+                        needCallback = op.SetComplete();
+                        break;
+                    }
+
+                    op.SetWaiting();
+
+                    // Check for retry and reset queue state.
+
+                    using (Lock())
+                    {
+                        if (_state == QueueState.Stopped)
                         {
-                            needCallback = op.SetComplete();
+                            Debug.Assert(_tail == null);
+                            Trace(context, $"Exit (stopped)");
+                            return;
                         }
                         else
                         {
-                            op.SetWaiting();
+                            Debug.Assert(_state == QueueState.Processing, $"_state={_state} while processing queue!");
 
-                            // Check for retry and reset queue state.
-
-                            using (Lock())
+                            if (observedSequenceNumber != _sequenceNumber)
                             {
-                                if (_state == QueueState.Stopped)
-                                {
-                                    Debug.Assert(_tail == null);
-                                    Trace(context, $"Exit (stopped)");
-                                    return;
-                                }
-                                else
-                                {
-                                    Debug.Assert(_state == QueueState.Processing, $"_state={_state} while processing queue!");
-
-                                    if (observedSequenceNumber != _sequenceNumber)
-                                    {
-                                        // We received another epoll notification since we previously checked it.
-                                        // So, we need to retry the operation.
-                                        Debug.Assert(observedSequenceNumber - _sequenceNumber < 10000, "Very large sequence number increase???");
-                                        observedSequenceNumber = _sequenceNumber;
-                                        needRetry = true;
-                                    }
-                                    else
-                                    {
-                                        _state = QueueState.Waiting;
-                                        Trace(context, $"Exit (received EAGAIN)");
-                                        return;
-                                    }
-                                }
+                                // We received another epoll notification since we previously checked it.
+                                // So, we need to retry the operation.
+                                Debug.Assert(observedSequenceNumber - _sequenceNumber < 10000, "Very large sequence number increase???");
+                                observedSequenceNumber = _sequenceNumber;
+                            }
+                            else
+                            {
+                                _state = QueueState.Waiting;
+                                Trace(context, $"Exit (received EAGAIN)");
+                                return;
                             }
                         }
-                    }
-
-                    if (!needRetry)
-                    {
-                        break;
                     }
                 }
 
