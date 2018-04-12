@@ -177,6 +177,23 @@ namespace System.Net.Sockets
                 return true;
             }
 
+            public bool Dispatch()
+            {
+#if false
+                // Dispatch the operation for processing.
+                if (CallbackOrEvent is ManualResetEventSlim e)
+                {
+                    // Synchronous operation.  Wake up the waiting thread to process the operation.
+                    e.Set();
+                    return false;
+                }
+#endif
+
+                // Indicate to caller to dipatch to threadpool.
+                return true;
+            }
+
+            // TODO: Probably goes away
             public bool SetComplete()
             {
                 Debug.Assert(Volatile.Read(ref _state) == (int)State.Running);
@@ -800,6 +817,7 @@ namespace System.Net.Sockets
             // Called on the epoll thread whenever we receive an epoll notification.
             public void HandleEvent(SocketAsyncContext context)
             {
+                TOperation op;
                 using (Lock())
                 {
                     Trace(context, $"Enter");
@@ -815,6 +833,7 @@ namespace System.Net.Sockets
                         case QueueState.Waiting:
                             Debug.Assert(_tail != null, "State == Waiting but queue is empty!");
                             _state = QueueState.Processing;
+                            op = _tail.Next;        // head of queue
                             // Break out and release lock
                             break;
 
@@ -836,12 +855,20 @@ namespace System.Net.Sockets
                 }
 
                 // We just transitioned from Waiting to Processing.
-                // Spawn a work item to do the actual processing.
-                ThreadPool.UnsafeQueueUserWorkItem(s_processingCallback, context);
+                // Dispatch the operation for processing.
+                if (op->Dispatch())
+                {
+                    // Async operation, queue to threadpool for processing.
+                    ThreadPool.UnsafeQueueUserWorkItem(s_processingCallback, context);
+                }
             }
 
+            // I need something like ProcessOperation which can be called for both
+            // sync and async case.
+            // Possibly this should not be on the queue at all?  Not sure...
+
             // Called on the threadpool when data may be available.
-            public void ProcessQueue(SocketAsyncContext context)
+            private bool ProcessQueue2(SocketAsyncContext context)
             {
                 int observedSequenceNumber;
                 AsyncOperation op;
@@ -866,6 +893,8 @@ namespace System.Net.Sockets
 
                 bool needCallback = false;
                 AsyncOperation nextOp;
+
+                // TODO: This loop goes away, I think
                 while (true)
                 {
                     bool wasCompleted = false;
@@ -971,14 +1000,22 @@ namespace System.Net.Sockets
                         ThreadPool.UnsafeQueueUserWorkItem(s_processingCallback, context);
                     }
 
-                    // At this point, the operation has completed and it's no longer
-                    // in the queue / no one else has a reference to it.  We can invoke
-                    // the callback and let it pool the object if appropriate.
-                    op.InvokeCallback(allowPooling: true);
+                    return true;
                 }
                 else
                 {
                     Debug.Assert(nextOp == null);
+                    return false;
+                }
+            }
+
+            // Async only
+            public void ProcessQueue(SocketAsyncContext context)
+            {
+                bool success = ProcessQueue2();
+                if (success)
+                {
+                    op.InvokeCallback(allowPooling: true);
                 }
             }
 
