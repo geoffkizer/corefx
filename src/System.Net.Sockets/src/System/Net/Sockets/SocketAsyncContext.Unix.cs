@@ -924,6 +924,12 @@ namespace System.Net.Sockets
                                 }
                             }
                         }
+
+                        if (nextOp != null)
+                        {
+                            ThreadPool.UnsafeQueueUserWorkItem(s_processingCallback, context);
+                            nextOp = null;
+                        }
                     }
                     else
                     {
@@ -967,14 +973,6 @@ namespace System.Net.Sockets
 
                 if (needCallback)
                 {
-                    if (nextOp != null)
-                    {
-                        Debug.Assert(_state == QueueState.Processing);
-
-                        // Spawn a new work item to continue processing the queue.
-                        ThreadPool.UnsafeQueueUserWorkItem(s_processingCallback, context);
-                    }
-
                     // At this point, the operation has completed and it's no longer
                     // in the queue / no one else has a reference to it.  We can invoke
                     // the callback and let it pool the object if appropriate.
