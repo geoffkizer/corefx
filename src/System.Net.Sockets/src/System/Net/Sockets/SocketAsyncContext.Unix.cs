@@ -866,7 +866,6 @@ namespace System.Net.Sockets
 
                 bool needCallback = false;
                 bool wasCompleted = false;
-                bool wasCancelled = false;
                 while (true)
                 {
                     bool needRetry = false;
@@ -917,10 +916,6 @@ namespace System.Net.Sockets
                                 }
                             }
                         }
-                    }
-                    else
-                    {
-                        wasCancelled = true;
                     }
 
                     if (!needRetry)
