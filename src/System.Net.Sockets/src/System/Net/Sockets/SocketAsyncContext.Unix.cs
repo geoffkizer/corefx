@@ -177,7 +177,7 @@ namespace System.Net.Sockets
                 return true;
             }
 
-            public bool SetComplete()
+            public void Complete()
             {
                 Debug.Assert(Volatile.Read(ref _state) == (int)State.Running);
 
@@ -186,9 +186,6 @@ namespace System.Net.Sockets
                 if (CallbackOrEvent is ManualResetEventSlim e)
                 {
                     e.Set();
-
-                    // No callback needed
-                    return false;
                 }
                 else
                 {
@@ -196,8 +193,7 @@ namespace System.Net.Sockets
                     Debug.Assert(Interlocked.CompareExchange(ref _callbackQueued, 1, 0) == 0, $"Unexpected _callbackQueued: {_callbackQueued}");
 #endif
 
-                    // Indicate callback is needed
-                    return true;
+                    InvokeCallback(allowPooling: true);
                 }
             }
 
@@ -864,7 +860,6 @@ namespace System.Net.Sockets
                     }
                 }
 
-                bool needCallback = false;
                 while (true)
                 {
                     // Try to change the op state to Running.  
@@ -878,7 +873,7 @@ namespace System.Net.Sockets
                     // Try to perform the IO
                     if (op.TryComplete(context))
                     {
-                        needCallback = op.SetComplete();
+                        op.Complete();
                         break;
                     }
 
@@ -950,14 +945,6 @@ namespace System.Net.Sockets
                 if (enqueue)
                 {
                     ThreadPool.UnsafeQueueUserWorkItem(s_processingCallback, context);
-                }
-
-                if (needCallback)
-                {
-                    // At this point, the operation has completed and it's no longer
-                    // in the queue / no one else has a reference to it.  We can invoke
-                    // the callback and let it pool the object if appropriate.
-                    op.InvokeCallback(allowPooling: true);
                 }
             }
 
