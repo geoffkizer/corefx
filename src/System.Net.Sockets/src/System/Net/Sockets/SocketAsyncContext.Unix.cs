@@ -693,7 +693,6 @@ namespace System.Net.Sockets
 
             private LockToken Lock() => new LockToken(_queueLock);
 
-            // TODO: Can this be cleaned up?
             private static readonly WaitCallback s_processingCallback =
                 typeof(TOperation) == typeof(ReadOperation) ? ((op) => { var operation = ((ReadOperation)op); operation.AssociatedContext._receiveQueue.ProcessAsyncOperation(operation); }) :
                 typeof(TOperation) == typeof(WriteOperation) ? ((op) => { var operation = ((WriteOperation)op); operation.AssociatedContext._sendQueue.ProcessAsyncOperation(operation); }) :
@@ -844,16 +843,14 @@ namespace System.Net.Sockets
             {
                 OperationResult result = ProcessQueuedOperation(op);
 
-                // TODO: Remove this test
-                if (op.Event == null)
+                Debug.Assert(op.Event == null, "Sync operation encountered in ProcessAsyncOperation");
+
+                if (result == OperationResult.Completed)
                 {
-                    if (result == OperationResult.Completed)
-                    {
-                        // At this point, the operation has completed and it's no longer
-                        // in the queue / no one else has a reference to it.  We can invoke
-                        // the callback and let it pool the object if appropriate.
-                        op.InvokeCallback(allowPooling: true);
-                    }
+                    // At this point, the operation has completed and it's no longer
+                    // in the queue / no one else has a reference to it.  We can invoke
+                    // the callback and let it pool the object if appropriate.
+                    op.InvokeCallback(allowPooling: true);
                 }
             }
 
