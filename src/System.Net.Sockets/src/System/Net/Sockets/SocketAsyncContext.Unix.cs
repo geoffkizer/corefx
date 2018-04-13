@@ -982,8 +982,11 @@ namespace System.Net.Sockets
 
             public bool CancelAndContinueProcessing(TOperation op)
             {
+                printf("%s\n", $"Cancelling op due to timeout");
+
                 if (!op.TryCancel())
                 {
+                    printf("%s\n", $"Op completed before cancellation");
                     return false;
                 }
 
@@ -994,6 +997,8 @@ namespace System.Net.Sockets
                 AsyncOperation nextOp = null;
                 using (Lock())
                 {
+                    printf("%s\n", $"Found _state == {_state}");
+
                     if (_state == QueueState.Processing)
                     {
                         Debug.Assert(_tail != null, "Unexpected empty queue while processing I/O");
@@ -1001,6 +1006,8 @@ namespace System.Net.Sockets
                         {
                             // Pop the just-cancelled current operation and advance to next
                             nextOp = _tail.Next = op.Next;
+
+                            printf("%s\n", $"Removed head, nextOp == {nextOp}");
                         }
                     }
                 }
