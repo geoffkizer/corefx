@@ -177,28 +177,11 @@ namespace System.Net.Sockets
                 return true;
             }
 
-            public bool SetComplete()
+            public void SetComplete()
             {
                 Debug.Assert(Volatile.Read(ref _state) == (int)State.Running);
 
                 Volatile.Write(ref _state, (int)State.Complete);
-
-                if (CallbackOrEvent is ManualResetEventSlim e)
-                {
-                    e.Set();
-
-                    // No callback needed
-                    return false;
-                }
-                else
-                {
-#if DEBUG
-                    Debug.Assert(Interlocked.CompareExchange(ref _callbackQueued, 1, 0) == 0, $"Unexpected _callbackQueued: {_callbackQueued}");
-#endif
-
-                    // Indicate callback is needed
-                    return true;
-                }
             }
 
             public void SetWaiting()
@@ -279,8 +262,17 @@ namespace System.Net.Sockets
             public void Dispatch(WaitCallback processingCallback)
             {
                 // TODO: Dispatch for sync
-
-                ThreadPool.UnsafeQueueUserWorkItem(processingCallback, this);
+                ManualResetEventSlim e = Event;
+                if (e != null)
+                {
+                    // Sync operation.  Signal waiting thread to continue processing.
+                    e.Set();
+                }
+                else
+                {
+                    // Async operation.  Process the IO on the threadpool.
+                    ThreadPool.UnsafeQueueUserWorkItem(processingCallback, this);
+                }
             }
 
             // Called when op is not in the queue yet, so can't be otherwise executing
@@ -1118,6 +1110,8 @@ namespace System.Net.Sockets
         private void PerformSyncOperation<TOperation>(ref OperationQueue<TOperation> queue, TOperation operation, int timeout, int observedSequenceNumber)
             where TOperation : AsyncOperation
         {
+            Debug.Assert(timeout == -1 || timeout > 0, $"Unexpected timeout: {timeout}");
+
             using (var e = new ManualResetEventSlim(false, 0))
             {
                 operation.Event = e;
@@ -1128,16 +1122,48 @@ namespace System.Net.Sockets
                     return;
                 }
 
-                if (e.Wait(timeout))
+                bool timeoutExpired = false;
+                while (true)
                 {
-                    // Completed within timeout
-                    return;
+                    DateTime waitStart = DateTime.UtcNow;
+
+                    if (!e.Wait(timeout))
+                    {
+                        timeoutExpired = true;
+                        break;
+                    }
+
+                    // Reset the event now to avoid lost notifications if the processing is unsuccessful.
+                    e.Reset();
+
+                    // We've been signalled to try to process the operation.
+                    OperationQueue<TOperation>.OperationResult result = queue.ProcessQueuedOperation(operation);
+                    if (result == OperationQueue<TOperation>.OperationResult.Completed ||
+                        result == OperationQueue<TOperation>.OperationResult.Cancelled)
+                    {
+                        break;
+                    }
+
+                    // Couldn't process the operation.
+                    // Adjust timeout and try again.
+                    if (timeout > 0)
+                    {
+                        timeout -= (DateTime.UtcNow - waitStart).Milliseconds;
+                        if (timeout <= 0)
+                        {
+                            timeoutExpired = true;
+                            break;
+                        }
+                    }
                 }
 
-                bool cancelled = operation.TryCancel();
-                if (cancelled)
+                if (timeoutExpired)
                 {
-                    operation.ErrorCode = SocketError.TimedOut;
+                    bool cancelled = operation.TryCancel();
+                    if (cancelled)
+                    {
+                        operation.ErrorCode = SocketError.TimedOut;
+                    }
                 }
             }
         }
