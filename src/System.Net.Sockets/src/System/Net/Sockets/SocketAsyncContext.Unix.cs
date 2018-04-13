@@ -133,7 +133,7 @@ namespace System.Net.Sockets
 
             public ManualResetEventSlim Event
             {
-                private get { return (ManualResetEventSlim)CallbackOrEvent; }
+                get { return CallbackOrEvent as ManualResetEventSlim; }
                 set { CallbackOrEvent = value; }
             }
 
@@ -849,17 +849,31 @@ namespace System.Net.Sockets
                 op.Dispatch(s_processingCallback);
             }
             
-            // TODO: Merge with below
-            public void ProcessAsyncOperation(TOperation operation)
+            private void ProcessAsyncOperation(TOperation op)
             {
-                ProcessOperation(operation);
+                OperationResult result = ProcessQueuedOperation(op);
 
-                // TODO: Move callback here
+                // TODO: Remove this test
+                if (op.Event != null)
+                {
+                    if (result == OperationResult.Completed)
+                    {
+                        // At this point, the operation has completed and it's no longer
+                        // in the queue / no one else has a reference to it.  We can invoke
+                        // the callback and let it pool the object if appropriate.
+                        op.InvokeCallback(allowPooling: true);
+                    }
+                }
             }
 
-            // TODO: Rename to process operation?
-            // Called on the threadpool when data may be available.
-            public void ProcessOperation(TOperation op)
+            public enum OperationResult
+            {
+                Pending = 0,
+                Completed = 1,
+                Cancelled = 2
+            }
+
+            public OperationResult ProcessQueuedOperation(TOperation op)
             {
                 SocketAsyncContext context = op.AssociatedContext;
 
@@ -872,7 +886,7 @@ namespace System.Net.Sockets
                     {
                         Debug.Assert(_tail == null);
                         Trace(context, $"Exit (stopped)");
-                        return;
+                        return OperationResult.Cancelled;
                     }
                     else
                     {
@@ -884,7 +898,6 @@ namespace System.Net.Sockets
                 }
 
                 bool wasCompleted = false;
-                bool needCallback = false;
                 while (true)
                 {
                     // Try to change the op state to Running.  
@@ -898,6 +911,7 @@ namespace System.Net.Sockets
                     // Try to perform the IO
                     if (op.TryComplete(context))
                     {
+                        op.SetComplete();
                         wasCompleted = true;
                         break;
                     }
@@ -912,7 +926,7 @@ namespace System.Net.Sockets
                         {
                             Debug.Assert(_tail == null);
                             Trace(context, $"Exit (stopped)");
-                            return;
+                            return OperationResult.Cancelled;
                         }
                         else
                         {
@@ -929,15 +943,10 @@ namespace System.Net.Sockets
                             {
                                 _state = QueueState.Waiting;
                                 Trace(context, $"Exit (received EAGAIN)");
-                                return;
+                                return OperationResult.Pending;
                             }
                         }
                     }
-                }
-
-                if (wasCompleted)
-                {
-                    needCallback = op.SetComplete();
                 }
 
                 // Remove the op from the queue and see if there's more to process.
@@ -976,13 +985,7 @@ namespace System.Net.Sockets
                     nextOp.Dispatch(s_processingCallback);
                 }
 
-                if (needCallback)
-                {
-                    // At this point, the operation has completed and it's no longer
-                    // in the queue / no one else has a reference to it.  We can invoke
-                    // the callback and let it pool the object if appropriate.
-                    op.InvokeCallback(allowPooling: true);
-                }
+                return (wasCompleted ? OperationResult.Completed : OperationResult.Cancelled);
             }
 
             // Called when the socket is closed.
