@@ -980,6 +980,39 @@ namespace System.Net.Sockets
                 return (wasCompleted ? OperationResult.Completed : OperationResult.Cancelled);
             }
 
+            public bool CancelAndContinueProcessing(TOperation op)
+            {
+                if (!op.TryCancel())
+                {
+                    return false;
+                }
+
+                // We just cancelled the operation.
+                // If a notification came in since the last time the queue set our event,
+                // then the queue will still be expecting us to process it.
+                // Check for this and handle it.
+                AsyncOperation nextOp = null;
+                using (Lock())
+                {
+                    if (_state == QueueState.Processing)
+                    {
+                        Debug.Assert(_tail != null, "Unexpected empty queue while processing I/O");
+                        if (_tail.Next == op)
+                        {
+                            // Pop the just-cancelled current operation and advance to next
+                            nextOp = _tail.Next = op.Next;
+                        }
+                    }
+                }
+
+                if (nextOp != null)
+                {
+                    nextOp.Dispatch(s_processingCallback);
+                }
+
+                return true;
+            }
+
             // Called when the socket is closed.
             public void StopAndAbort(SocketAsyncContext context)
             {
@@ -1168,7 +1201,7 @@ namespace System.Net.Sockets
 
                 if (timeoutExpired)
                 {
-                    bool cancelled = operation.TryCancel();
+                    bool cancelled = queue.CancelAndContinueProcessing(operation);
                     if (cancelled)
                     {
                         operation.ErrorCode = SocketError.TimedOut;
