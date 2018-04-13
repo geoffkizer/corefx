@@ -1107,6 +1107,8 @@ namespace System.Net.Sockets
             }
         }
 
+        [DllImport("libc")] private static extern int printf(string format, string arg);
+
         private void PerformSyncOperation<TOperation>(ref OperationQueue<TOperation> queue, TOperation operation, int timeout, int observedSequenceNumber)
             where TOperation : AsyncOperation
         {
@@ -1126,6 +1128,8 @@ namespace System.Net.Sockets
                 while (true)
                 {
                     DateTime waitStart = DateTime.UtcNow;
+
+                    printf("%s\n", $"About to Wait in PerformSyncOperation, timeout={timeout}");
 
                     if (!e.Wait(timeout))
                     {
@@ -1148,7 +1152,12 @@ namespace System.Net.Sockets
                     // Adjust timeout and try again.
                     if (timeout > 0)
                     {
+                        printf("%s\n", $"Adjusting timeout: old timeout={timeout}");
+
                         timeout -= (DateTime.UtcNow - waitStart).Milliseconds;
+
+                        printf("%s\n", $"Adjusting timeout: new timeout={timeout}");
+
                         if (timeout <= 0)
                         {
                             timeoutExpired = true;
