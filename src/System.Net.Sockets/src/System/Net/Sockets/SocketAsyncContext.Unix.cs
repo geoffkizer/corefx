@@ -261,7 +261,6 @@ namespace System.Net.Sockets
 
             public void Dispatch(WaitCallback processingCallback)
             {
-                // TODO: Dispatch for sync
                 ManualResetEventSlim e = Event;
                 if (e != null)
                 {
@@ -1021,16 +1020,28 @@ namespace System.Net.Sockets
                             {
                                 // The queue has already handed off execution responsibility to us.
                                 // We need to dispatch to the next op.
-                                nextOp = _tail.Next;
-                                if (nextOp == null)
+                                if (_tail == null)
                                 {
                                     _state = QueueState.Ready;
                                     _sequenceNumber++;
+                                }
+                                else
+                                {
+                                    nextOp = _tail.Next;
+                                }
+                            }
+                            else if (_state == QueueState.Waiting)
+                            {
+                                if (_tail == null)
+                                {
+                                    _state = QueueState.Ready;
                                 }
                             }
                         }
                         else
                         {
+                            // We're not the head of the queue.
+                            // Just find this op and remove it.
                             AsyncOperation current = _tail.Next;
                             while (current.Next != op)
                             {
