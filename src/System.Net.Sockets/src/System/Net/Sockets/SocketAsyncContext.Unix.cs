@@ -980,34 +980,68 @@ namespace System.Net.Sockets
                 return (wasCompleted ? OperationResult.Completed : OperationResult.Cancelled);
             }
 
-            public bool CancelAndContinueProcessing(TOperation op)
+            public void CancelAndContinueProcessing(TOperation op)
             {
+                // Note, only sync operations use this method.
+                Debug.Assert(op.Event != null);
+
                 printf("%s\n", $"Cancelling op due to timeout");
 
-                if (!op.TryCancel())
-                {
-                    printf("%s\n", $"Op completed before cancellation");
-                    return false;
-                }
-
-                // We just cancelled the operation.
-                // If a notification came in since the last time the queue set our event,
-                // then the queue will still be expecting us to process it.
-                // Check for this and handle it.
+                // Remove operation from queue.
+                // Note it must be there since it can only be processed and removed by the caller.
                 AsyncOperation nextOp = null;
                 using (Lock())
                 {
                     printf("%s\n", $"Found _state == {_state}");
 
-                    if (_state == QueueState.Processing)
+                    if (_state == QueueState.Stopped)
                     {
-                        Debug.Assert(_tail != null, "Unexpected empty queue while processing I/O");
+                        Debug.Assert(_tail == null);
+                    }
+                    else
+                    {
+                        Debug.Assert(_tail != null, "Unexpected empty queue in CancelAndContinueProcessing");
+
                         if (_tail.Next == op)
                         {
-                            // Pop the just-cancelled current operation and advance to next
-                            nextOp = _tail.Next = op.Next;
+                            // We're the head of the queue
+                            if (op == _tail)
+                            {
+                                // No more operations 
+                                _tail = null;
+                            }
+                            else
+                            {
+                                // Pop current operation and advance to next
+                                _tail.Next = op.Next;
+                            }
 
-                            printf("%s\n", $"Removed head, nextOp == {nextOp}");
+                            // We're the first op in the queue.
+                            if (_state == QueueState.Processing)
+                            {
+                                // The queue has already handed off execution responsibility to us.
+                                // We need to dispatch to the next op.
+                                nextOp = _tail.Next;
+                                if (nextOp == null)
+                                {
+                                    _state = QueueState.Ready;
+                                    _sequenceNumber++;
+                                }
+                            }
+                        }
+                        else
+                        {
+                            AsyncOperation current = _tail.Next;
+                            while (current.Next != op)
+                            {
+                                current = current.Next;
+                            }
+
+                            if (current.Next == _tail)
+                            {
+                                _tail = current.Next.Next;
+                            }
+                            current.Next = current.Next.Next;
                         }
                     }
                 }
@@ -1016,8 +1050,6 @@ namespace System.Net.Sockets
                 {
                     nextOp.Dispatch(s_processingCallback);
                 }
-
-                return true;
             }
 
             // Called when the socket is closed.
@@ -1208,11 +1240,8 @@ namespace System.Net.Sockets
 
                 if (timeoutExpired)
                 {
-                    bool cancelled = queue.CancelAndContinueProcessing(operation);
-                    if (cancelled)
-                    {
-                        operation.ErrorCode = SocketError.TimedOut;
-                    }
+                    queue.CancelAndContinueProcessing(operation);
+                    operation.ErrorCode = SocketError.TimedOut;
                 }
             }
         }
