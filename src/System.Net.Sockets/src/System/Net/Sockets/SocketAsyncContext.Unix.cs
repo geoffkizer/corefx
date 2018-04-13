@@ -854,7 +854,7 @@ namespace System.Net.Sockets
                 OperationResult result = ProcessQueuedOperation(op);
 
                 // TODO: Remove this test
-                if (op.Event != null)
+                if (op.Event == null)
                 {
                     if (result == OperationResult.Completed)
                     {
