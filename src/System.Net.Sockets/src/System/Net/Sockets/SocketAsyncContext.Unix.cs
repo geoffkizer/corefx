@@ -1039,7 +1039,7 @@ namespace System.Net.Sockets
 
                             if (current.Next == _tail)
                             {
-                                _tail = current.Next.Next;
+                                _tail = current;
                             }
                             current.Next = current.Next.Next;
                         }
