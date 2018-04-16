@@ -184,7 +184,7 @@ namespace System.Net.Security
         private void ResetReadBuffer()
         {
             Debug.Assert(_decryptedBytesCount == 0);
-            Debug.Assert(_internalBuffer == null || _internalBufferCount > 0, $"_internalBuffer={_internalBuffer}, _internalBufferCount={_internalBufferCount}");
+            Debug.Assert(_internalBuffer == null || _internalBufferCount > 0, $"ID={GetHashCode():X}, _internalBuffer={_internalBuffer}, _internalBufferCount={_internalBufferCount}");
 
             if (_internalBuffer == null)
             {
