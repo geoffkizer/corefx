@@ -265,6 +265,7 @@ namespace System.Net.Security
                     int readBytes = await FillBufferAsync(adapter, SecureChannel.ReadHeaderSize).ConfigureAwait(false);
                     if (readBytes == 0)
                     {
+                        printf("%s\n", $"ReadAsyncInternal hit EOF: Id={this.GetHashCode():X}, _internalBuffer={_internalBuffer}, _internalBufferCount={_internalBufferCount}, _decryptedByteCount={_decryptedBytesCount}");
                         return 0;
                     }
 
