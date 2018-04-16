@@ -9,6 +9,8 @@ using System.Runtime.ExceptionServices;
 using System.Threading;
 using System.Threading.Tasks;
 
+using System.Runtime.InteropServices;
+
 namespace System.Net.Security
 {
     //
@@ -224,6 +226,8 @@ namespace System.Net.Security
             }
         }
 
+        [DllImport("libc")] private static extern int printf(string format, string arg);
+
         private async ValueTask<int> ReadAsyncInternal<TReadAdapter>(TReadAdapter adapter, Memory<byte> buffer)
             where TReadAdapter : ISslReadAdapter
         {
@@ -231,6 +235,8 @@ namespace System.Net.Security
             {
                 throw new NotSupportedException(SR.Format(SR.net_io_invalidnestedcall, nameof(ReadAsync), "read"));
             }
+
+            printf("%s\n", $"Enter ReadAsyncInternal: Id={this.GetHashCode():X}, _internalBuffer={_internalBuffer}, _internalBufferCount={_internalBufferCount}, _decryptedByteCount={_decryptedBytesCount}");
 
             while (true)
             {
@@ -244,6 +250,8 @@ namespace System.Net.Security
 
                     return copyBytes;
                 }
+
+                printf("%s\n", $"ReadAsyncInternal, about to read: Id={this.GetHashCode():X}, _internalBuffer={_internalBuffer}, _internalBufferCount={_internalBufferCount}, _decryptedByteCount={_decryptedBytesCount}");
 
                 copyBytes = await adapter.LockAsync(buffer).ConfigureAwait(false);
                 try
@@ -329,13 +337,17 @@ namespace System.Net.Security
                         throw;
                     }
 
+                    printf("%s\n", $"ReadAsyncInternal, caught exception: Id={this.GetHashCode():X}, _internalBuffer={_internalBuffer}, _internalBufferCount={_internalBufferCount}, _decryptedByteCount={_decryptedBytesCount}");
+
                     throw new IOException(SR.net_io_read, e);
                 }
                 finally
                 {
                     _nestedRead = 0;
                 }
+
             }
+
         }
 
         private ValueTask WriteAsyncInternal<TWriteAdapter>(TWriteAdapter writeAdapter, ReadOnlyMemory<byte> buffer)
