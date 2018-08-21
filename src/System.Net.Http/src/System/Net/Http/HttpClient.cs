@@ -119,7 +119,35 @@ namespace System.Net.Http
             _pendingRequestsCts = new CancellationTokenSource();
 
             if (NetEventSource.IsEnabled) NetEventSource.Exit(this);
+
+            System.Threading.ThreadPool.GetMinThreads(out int worker, out int io);
+            printf("%s\n", $"Min threads: worker={worker}, io={io}");
+
+            if (s_minIOThreads != null && io < s_minIOThreads.Value)
+            {
+                System.Threading.ThreadPool.SetMinThreads(worker, s_minIOThreads.Value);
+                printf("%s\n", $"Increading min IO threads to {s_minIOThreads.Value} (was {io})");
+            }
         }
+
+#pragma warning disable BCL0015
+        [System.Runtime.InteropServices.DllImport("msvcrt")] private static extern int printf(string format, string arg);
+
+        //static int? s_minWorkerThreads = ReadEnvVar("DOTNET_HACK_MINWORKERTHREADS");
+        static int? s_minIOThreads = ReadEnvVar("DOTNET_HACK_MINIOTHREADS");
+
+        static int? ReadEnvVar(string name)
+        {
+            // For testing purposes
+            string envVar = Environment.GetEnvironmentVariable(name);
+            if (envVar != null)
+            {
+                return int.Parse(envVar);
+            }
+
+            return null;
+        }
+
 
         #endregion Constructors
 
