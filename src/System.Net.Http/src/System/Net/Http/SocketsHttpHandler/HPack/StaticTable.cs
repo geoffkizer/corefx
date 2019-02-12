@@ -92,5 +92,7 @@ namespace System.Net.Http.HPack
         public const int MethodPost = 3;
         public const int PathSlash = 4;
         public const int SchemeHttps = 7;
+        public const int ContentLength = 28;
+        public const int Cookie = 32;
     }
 }

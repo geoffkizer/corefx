@@ -813,7 +813,7 @@ namespace System.Net.Http
                 string cookiesFromContainer = _pool.Settings._cookieContainer.GetCookieHeader(request.RequestUri);
                 if (cookiesFromContainer != string.Empty)
                 {
-                    WriteLiteralHeader(HttpKnownHeaderNames.Cookie, cookiesFromContainer);
+                    WriteIndexedHeaderName(StaticTable.Cookie, cookiesFromContainer);
                 }
             }
 
@@ -823,8 +823,7 @@ namespace System.Net.Http
                 // unless this is a method that never has a body.
                 if (normalizedMethod.MustHaveRequestBody)
                 {
-                    // TODO: ISSUE 31307: Use static table for Content-Length
-                    WriteLiteralHeader("Content-Length", "0");
+                    WriteIndexedHeaderName(StaticTable.ContentLength, "0");
                 }
             }
             else
