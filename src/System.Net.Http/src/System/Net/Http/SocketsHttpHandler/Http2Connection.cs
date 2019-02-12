@@ -688,10 +688,30 @@ namespace System.Net.Http
                 (buffer.Slice(0, maxSize), buffer.Slice(maxSize)) :
                 (buffer, Memory<byte>.Empty);
 
-        private void WriteHeader(string name, string value)
+        private void WriteIndexedHeaderField(int index)
         {
-            // TODO: ISSUE 31307: Use static table for known headers
+            int bytesWritten;
+            while (!HPackEncoder.EncodeIndexedField(index, _headerBuffer.AvailableSpan, out bytesWritten))
+            {
+                _headerBuffer.EnsureAvailableSpace(_headerBuffer.AvailableSpan.Length + 1);
+            }
 
+            _headerBuffer.Commit(bytesWritten);
+        }
+
+        private void WriteIndexedHeaderName(int index, string value)
+        {
+            int bytesWritten;
+            while (!HPackEncoder.EncodeIndexedName(index, value, _headerBuffer.AvailableSpan, out bytesWritten))
+            {
+                _headerBuffer.EnsureAvailableSpace(_headerBuffer.AvailableSpan.Length + 1);
+            }
+
+            _headerBuffer.Commit(bytesWritten);
+        }
+
+        private void WriteLiteralHeader(string name, string value)
+        {
             int bytesWritten;
             while (!HPackEncoder.EncodeHeader(name, value, _headerBuffer.AvailableSpan, out bytesWritten))
             {
@@ -703,6 +723,8 @@ namespace System.Net.Http
 
         private void WriteHeaderCollection(HttpHeaders headers)
         {
+            // TODO: ISSUE 31307: Use static table for known headers
+
             foreach (KeyValuePair<HeaderDescriptor, string[]> header in headers.GetHeaderDescriptorsAndValues())
             {
                 // The Host header is not sent for HTTP2 because we send the ":authority" pseudo-header instead
@@ -721,7 +743,7 @@ namespace System.Net.Http
                 Debug.Assert(header.Value.Length > 0, "No values for header??");
                 for (int i = 0; i < header.Value.Length; i++)
                 {
-                    WriteHeader(header.Key.Name, header.Value[i]);
+                    WriteLiteralHeader(header.Key.Name, header.Value[i]);
                 }
             }
         }
@@ -735,9 +757,21 @@ namespace System.Net.Http
 
             HttpMethod normalizedMethod = HttpMethod.Normalize(request.Method);
 
-            // TODO: ISSUE 31307: Use static table for pseudo-headers
-            WriteHeader(":method", normalizedMethod.Method);
-            WriteHeader(":scheme", "https");
+            // Method is normalized so we can do reference equality here.
+            if (ReferenceEquals(normalizedMethod, HttpMethod.Get))
+            {
+                WriteIndexedHeaderField(StaticTable.MethodGet);
+            }
+            else if (ReferenceEquals(normalizedMethod, HttpMethod.Post))
+            {
+                WriteIndexedHeaderField(StaticTable.MethodPost);
+            }
+            else
+            {
+                WriteIndexedHeaderName(StaticTable.MethodGet, normalizedMethod.Method);
+            }
+
+            WriteLiteralHeader(":scheme", "https");
 
             string authority;
             if (request.HasHeaders && request.Headers.Host != null)
@@ -754,8 +788,8 @@ namespace System.Net.Http
                 }
             }
 
-            WriteHeader(":authority", authority);
-            WriteHeader(":path", request.RequestUri.PathAndQuery);
+            WriteLiteralHeader(":authority", authority);
+            WriteLiteralHeader(":path", request.RequestUri.PathAndQuery);
 
             if (request.HasHeaders)
             {
@@ -768,7 +802,7 @@ namespace System.Net.Http
                 string cookiesFromContainer = _pool.Settings._cookieContainer.GetCookieHeader(request.RequestUri);
                 if (cookiesFromContainer != string.Empty)
                 {
-                    WriteHeader(HttpKnownHeaderNames.Cookie, cookiesFromContainer);
+                    WriteLiteralHeader(HttpKnownHeaderNames.Cookie, cookiesFromContainer);
                 }
             }
 
@@ -779,7 +813,7 @@ namespace System.Net.Http
                 if (normalizedMethod.MustHaveRequestBody)
                 {
                     // TODO: ISSUE 31307: Use static table for Content-Length
-                    WriteHeader("Content-Length", "0");
+                    WriteLiteralHeader("Content-Length", "0");
                 }
             }
             else
