@@ -710,6 +710,17 @@ namespace System.Net.Http
             _headerBuffer.Commit(bytesWritten);
         }
 
+        private void WriteIndexedHeaderName(int index, ReadOnlySpan<byte> value)
+        {
+            int bytesWritten;
+            while (!HPackEncoder.EncodeIndexedName(index, value, _headerBuffer.AvailableSpan, out bytesWritten))
+            {
+                _headerBuffer.EnsureAvailableSpace(_headerBuffer.AvailableSpan.Length + 1);
+            }
+
+            _headerBuffer.Commit(bytesWritten);
+        }
+
         private void WriteLiteralHeader(string name, string value)
         {
             int bytesWritten;
@@ -771,25 +782,25 @@ namespace System.Net.Http
                 WriteIndexedHeaderName(StaticTable.MethodGet, normalizedMethod.Method);
             }
 
-            WriteLiteralHeader(":scheme", "https");
+            WriteIndexedHeaderField(StaticTable.SchemeHttps);
 
-            string authority;
             if (request.HasHeaders && request.Headers.Host != null)
             {
-                authority = request.Headers.Host;
+                WriteIndexedHeaderName(StaticTable.Authority, request.Headers.Host);
             }
             else
             {
-                authority = request.RequestUri.IdnHost;
-                if (!request.RequestUri.IsDefaultPort)
-                {
-                    // TODO: Avoid allocation here by caching this on the connection or pool
-                    authority += ":" + request.RequestUri.Port;
-                }
+                WriteIndexedHeaderName(StaticTable.Authority, _pool.HostHeaderValueBytes);
             }
 
-            WriteLiteralHeader(":authority", authority);
-            WriteLiteralHeader(":path", request.RequestUri.PathAndQuery);
+            if (request.RequestUri.PathAndQuery == "/")
+            {
+                WriteIndexedHeaderField(StaticTable.PathSlash);
+            }
+            else
+            {
+                WriteIndexedHeaderName(StaticTable.PathSlash, request.RequestUri.PathAndQuery);
+            }
 
             if (request.HasHeaders)
             {

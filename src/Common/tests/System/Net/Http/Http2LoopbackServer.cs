@@ -282,6 +282,14 @@ namespace System.Net.Test.Common
             Frame frame = await ReadFrameAsync(TimeSpan.FromSeconds(30));
             Assert.Equal(FrameType.Headers, frame.Type);
             Assert.Equal(FrameFlags.EndHeaders | FrameFlags.EndStream, frame.Flags);
+
+            HeadersFrame headersFrame = (HeadersFrame)frame;
+
+            Console.WriteLine("Request headers:");
+            foreach (byte b in headersFrame.Data)
+                Console.Write($"{b:X2} ");
+
+            Console.WriteLine();
             return frame.StreamId;
         }
 
