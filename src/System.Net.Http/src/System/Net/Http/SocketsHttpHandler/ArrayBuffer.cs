@@ -77,27 +77,17 @@ namespace System.Net.Http
             _availableStart += byteCount;
         }
 
-        // Ensure at least [byteCount] bytes to write to.
-        public void EnsureAvailableSpace(int byteCount)
+        private void Compact()
         {
-            if (byteCount <= AvailableLength)
-            {
-                return;
-            }
+            ActiveSpan.CopyTo(new Span<byte>(_bytes));
+            _availableStart = ActiveSpan.Length;
+            _activeStart = 0;
+        }
 
-            int totalFree = _activeStart + AvailableLength;
-            if (byteCount <= totalFree)
-            {
-                // We can free up enough space by just shifting the bytes down, so do so.
-                Buffer.BlockCopy(_bytes, _activeStart, _bytes, 0, ActiveSpan.Length);
-                _availableStart = ActiveSpan.Length;
-                _activeStart = 0;
-                Debug.Assert(byteCount <= AvailableLength);
-                return;
-            }
+        private void GrowSize(int desiredSize)
+        {
+            Debug.Assert(desiredSize > _bytes.Length);
 
-            // Double the size of the buffer until we have enough space.
-            int desiredSize = ActiveSpan.Length + byteCount;
             int newSize = _bytes.Length;
             do
             {
@@ -109,11 +99,7 @@ namespace System.Net.Http
                 new byte[newSize];
             byte[] oldBytes = _bytes;
 
-            if (ActiveSpan.Length != 0)
-            {
-                Buffer.BlockCopy(oldBytes, _activeStart, newBytes, 0, ActiveSpan.Length);
-            }
-
+            ActiveSpan.CopyTo(new Span<byte>(newBytes));
             _availableStart = ActiveSpan.Length;
             _activeStart = 0;
 
@@ -121,6 +107,43 @@ namespace System.Net.Http
             if (_usePool)
             {
                 ArrayPool<byte>.Shared.Return(oldBytes);
+            }
+        }
+
+        // Unlike the routine below, this will always compact the buffer
+        // to maximize available space.
+        public void CompactAndEnsureAvailableSpace(int byteCount)
+        {
+            int totalFree = _activeStart + AvailableLength;
+
+            if (byteCount <= totalFree)
+            {
+                Compact();
+            }
+            else
+            {
+                GrowSize(ActiveSpan.Length + byteCount);
+            }
+
+            Debug.Assert(byteCount <= AvailableLength);
+        }
+
+        // Ensure at least [byteCount] bytes to write to.
+        public void EnsureAvailableSpace(int byteCount)
+        {
+            if (byteCount <= AvailableLength)
+            {
+                return;
+            }
+
+            int totalFree = _activeStart + AvailableLength;
+            if (byteCount <= totalFree)
+            {
+                Compact();
+            }
+            else
+            {
+                GrowSize(ActiveSpan.Length + byteCount);
             }
 
             Debug.Assert(byteCount <= AvailableLength);

@@ -135,7 +135,7 @@ namespace System.Net.Http
             }
 
             int bytesNeeded = minReadBytes - _incomingBuffer.ActiveSpan.Length;
-            _incomingBuffer.EnsureAvailableSpace(bytesNeeded);
+            _incomingBuffer.CompactAndEnsureAvailableSpace(bytesNeeded);
             int bytesRead = await ReadAtLeastAsync(_stream, _incomingBuffer.AvailableMemory, bytesNeeded).ConfigureAwait(false);
             _incomingBuffer.Commit(bytesRead);
         }
@@ -164,7 +164,6 @@ namespace System.Net.Http
             // Read frame header
             await EnsureIncomingBytesAsync(FrameHeader.Size).ConfigureAwait(false);
             FrameHeader frameHeader = FrameHeader.ReadFrom(_incomingBuffer.ActiveSpan);
-            _incomingBuffer.Discard(FrameHeader.Size);
 
             if (frameHeader.Length > FrameHeader.MaxLength)
             {
@@ -172,7 +171,9 @@ namespace System.Net.Http
             }
 
             // Read frame contents
-            await EnsureIncomingBytesAsync(frameHeader.Length).ConfigureAwait(false);
+            await EnsureIncomingBytesAsync(FrameHeader.Size + frameHeader.Length).ConfigureAwait(false);
+
+            _incomingBuffer.Discard(FrameHeader.Size);
 
             return frameHeader;
         }
