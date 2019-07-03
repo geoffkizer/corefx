@@ -197,7 +197,6 @@ namespace System.Net.Http.Functional.Tests
             }
         }
 
-        [ActiveIssue(35466)]
         [ConditionalTheory(nameof(SupportsAlpn))]
         [InlineData(SettingId.MaxFrameSize, 16383, ProtocolErrors.PROTOCOL_ERROR, true)]
         [InlineData(SettingId.MaxFrameSize, 162777216, ProtocolErrors.PROTOCOL_ERROR, true)]
