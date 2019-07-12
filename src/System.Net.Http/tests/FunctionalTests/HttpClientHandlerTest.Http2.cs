@@ -2078,8 +2078,6 @@ namespace System.Net.Http.Functional.Tests
 
                     // Complete sending the response body
                     await SendAndReceiveResponseEOFAsync(responseStream, connection, streamId);
-
-//                    await connection.ShutdownIgnoringErrorsAsync(streamId);
                 }
 
                 await connection.WaitForClientDisconnectAsync();
@@ -2137,8 +2135,57 @@ namespace System.Net.Http.Functional.Tests
 
                     // Complete sending the request body
                     await SendAndReceiveRequestEOFAsync(duplexContent, requestStream, connection, streamId);
+                }
 
-                    //                    await connection.ShutdownIgnoringErrorsAsync(streamId);
+                await connection.WaitForClientDisconnectAsync();
+            }
+        }
+
+        [Fact]
+        public async Task PostAsyncDuplex_NonSuccessStatusCode_ResetsStream()
+        {
+            byte[] contentBytes = Encoding.UTF8.GetBytes("Hello world");
+
+            using (var server = Http2LoopbackServer.CreateServer())
+            {
+                Http2LoopbackConnection connection;
+                using (HttpClient client = CreateHttpClient())
+                {
+                    var duplexContent = new DuplexContent();
+
+                    var request = new HttpRequestMessage(HttpMethod.Post, server.Address);
+                    request.Version = new Version(2, 0);
+                    request.Content = duplexContent;
+                    Task<HttpResponseMessage> responseTask = client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead);
+
+                    connection = await server.EstablishConnectionAsync();
+
+                    // Client should have sent the request headers, and the request stream should now be available
+                    Stream requestStream = await duplexContent.WaitForStreamAsync();
+
+                    (int streamId, _) = await connection.ReadAndParseRequestHeaderAsync(readBody: false);
+
+                    // Send data to the server, even before we've received response headers.
+                    await SendAndReceiveRequestDataAsync(contentBytes, requestStream, connection, streamId);
+
+                    // Send a non-success response code, which should cause the client to cancel sending the request.
+                    await connection.SendResponseHeadersAsync(streamId, endStream: false, statusCode: HttpStatusCode.Forbidden);
+                    HttpResponseMessage response = await responseTask;
+                    Stream responseStream = await response.Content.ReadAsStreamAsync();
+
+                    // ActiveIssue #9071:
+                    // We don't currently support cancellation on custom HttpContent classes.
+                    // This means that the client won't actually cancel the request body send.
+                    // Work around this by completing the content send ourselves.
+                    duplexContent.Complete();
+
+                    // Because we received a non-success response code, the client should cancel sending the request 
+                    // and send a RST_STREAM.
+                    await connection.ReadRstStreamAsync(streamId);
+
+                    // Attempting to write on the request body should now fail.
+                    Exception e = await Assert.ThrowsAsync<Exception>(async () => { await SendAndReceiveRequestDataAsync(contentBytes, requestStream, connection, streamId); });
+                    Console.WriteLine("***** Exception: {e}");
                 }
 
                 await connection.WaitForClientDisconnectAsync();
@@ -2198,7 +2245,12 @@ namespace System.Net.Http.Functional.Tests
                         await connection.ReadBodyAsync();
                         if (responseCode != HttpStatusCode.OK) Assert.True(false, "Should not be here");
                     }
-                    catch (IOException) when (responseCode != HttpStatusCode.OK) { };
+                    catch (IOException e) when (responseCode != HttpStatusCode.OK)
+                    {
+                        // Temporary
+                        Console.WriteLine($"SendAsync_ConcurentSendReceive_Ok: Caught {e}");
+
+                    }
                 }
                 var headers = new HttpHeaderData[] { new HttpHeaderData("x-last", "done") };
                 await connection.SendResponseHeadersAsync(streamId, endStream: true, isTrailingHeader : true, headers: headers);
