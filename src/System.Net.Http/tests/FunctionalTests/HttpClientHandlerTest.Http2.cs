@@ -16,8 +16,6 @@ using System.Threading.Tasks;
 
 using Xunit;
 using Xunit.Abstractions;
-using System.Drawing.Printing;
-using System.Reflection;
 
 namespace System.Net.Http.Functional.Tests
 {
@@ -2037,6 +2035,7 @@ namespace System.Net.Http.Functional.Tests
 
             using (var server = Http2LoopbackServer.CreateServer())
             {
+                Http2LoopbackConnection connection;
                 using (HttpClient client = CreateHttpClient())
                 {
                     var duplexContent = new DuplexContent();
@@ -2046,7 +2045,7 @@ namespace System.Net.Http.Functional.Tests
                     request.Content = duplexContent;
                     Task<HttpResponseMessage> responseTask = client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead);
 
-                    Http2LoopbackConnection connection = await server.EstablishConnectionAsync();
+                    connection = await server.EstablishConnectionAsync();
 
                     // Client should have sent the request headers, and the request stream should now be available
                     Stream requestStream = await duplexContent.WaitForStreamAsync();
@@ -2083,7 +2082,7 @@ namespace System.Net.Http.Functional.Tests
 //                    await connection.ShutdownIgnoringErrorsAsync(streamId);
                 }
 
-                // TODO: Wait for connection to close here?
+                await connection.WaitForClientDisconnectAsync();
             }
         }
 
@@ -2095,6 +2094,7 @@ namespace System.Net.Http.Functional.Tests
 
             using (var server = Http2LoopbackServer.CreateServer())
             {
+                Http2LoopbackConnection connection;
                 using (HttpClient client = CreateHttpClient())
                 {
                     var duplexContent = new DuplexContent();
@@ -2104,7 +2104,7 @@ namespace System.Net.Http.Functional.Tests
                     request.Content = duplexContent;
                     Task<HttpResponseMessage> responseTask = client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead);
 
-                    Http2LoopbackConnection connection = await server.EstablishConnectionAsync();
+                    connection = await server.EstablishConnectionAsync();
 
                     // Client should have sent the request headers, and the request stream should now be available
                     Stream requestStream = await duplexContent.WaitForStreamAsync();
@@ -2141,7 +2141,7 @@ namespace System.Net.Http.Functional.Tests
                     //                    await connection.ShutdownIgnoringErrorsAsync(streamId);
                 }
 
-                // TODO: Wait for connection to close here?
+                await connection.WaitForClientDisconnectAsync();
             }
         }
 

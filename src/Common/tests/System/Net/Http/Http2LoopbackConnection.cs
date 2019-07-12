@@ -214,6 +214,13 @@ namespace System.Net.Test.Common
             _ignoreWindowUpdates = true;
         }
 
+        // Wait for the client to close the connection, e.g. after the HttpClient is disposed.
+        public async Task WaitForClientDisconnectAsync()
+        {
+            Frame frame = await ReadFrameAsync(Timeout);
+            Assert.Null(frame);
+        }
+
         public void ShutdownSend()
         {
             _connectionSocket.Shutdown(SocketShutdown.Send);
