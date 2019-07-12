@@ -16,6 +16,8 @@ using System.Threading.Tasks;
 
 using Xunit;
 using Xunit.Abstractions;
+using System.Drawing.Printing;
+using System.Reflection;
 
 namespace System.Net.Http.Functional.Tests
 {
@@ -1940,6 +1942,207 @@ namespace System.Net.Http.Functional.Tests
 
                 await connection.ShutdownIgnoringErrorsAsync(streamId);
             });
+        }
+
+
+        class DuplexContent : HttpContent
+        {
+            private TaskCompletionSource<Stream> _waitForStream;
+            private TaskCompletionSource<bool> _waitForCompletion;
+
+            public DuplexContent()
+            {
+                _waitForStream = new TaskCompletionSource<Stream>(TaskCreationOptions.RunContinuationsAsynchronously);
+            }
+
+            protected override bool TryComputeLength(out long length)
+            {
+                length = 0;
+                return false;
+            }
+
+            protected override async Task SerializeToStreamAsync(Stream stream, TransportContext context)
+            {
+                _waitForCompletion = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+                _waitForStream.SetResult(stream);
+                await _waitForCompletion.Task;
+            }
+
+            public Task<Stream> WaitForStreamAsync()
+            {
+                return _waitForStream.Task;
+            }
+
+            public void Complete()
+            {
+                _waitForCompletion.SetResult(true);
+                _waitForCompletion = null;
+            }
+        }
+
+        private async Task SendAndReceiveResponseDataAsync(Memory<byte> data, Stream responseStream, Http2LoopbackConnection connection, int streamId)
+        {
+            byte[] readBuffer = new byte[data.Length];
+
+            await connection.SendResponseDataAsync(streamId, data, endStream: false);
+            int bytesRead = await responseStream.ReadAsync(readBuffer);
+            Assert.True(data.Span.SequenceEqual(readBuffer));
+        }
+
+        private async Task SendAndReceiveResponseEOFAsync(Stream responseStream, Http2LoopbackConnection connection, int streamId)
+        {
+            byte[] readBuffer = new byte[1];
+
+            // CONSIDER: Trailer?
+            //await connection.SendResponseHeadersAsync(streamId, endStream: true, isTrailingHeader: true, headers: headers);
+
+            await connection.SendResponseDataAsync(streamId, new byte[] { }, endStream: true);
+            int bytesRead = await responseStream.ReadAsync(readBuffer);
+            Assert.Equal(0, bytesRead);
+
+            // Another read should still give EOF
+            bytesRead = await responseStream.ReadAsync(readBuffer);
+            Assert.Equal(0, bytesRead);
+
+            // Dispose the response stream, to ensure that this doesn't affect the request stream
+            responseStream.Dispose();
+
+            // Attempting to read now should throw ObjectDisposedException
+            await Assert.ThrowsAsync<ObjectDisposedException>(async () => { await responseStream.ReadAsync(readBuffer); });
+        }
+
+        private async Task SendAndReceiveRequestDataAsync(Memory<byte> data, Stream requestStream, Http2LoopbackConnection connection, int streamId)
+        {
+            await requestStream.WriteAsync(data);
+            await requestStream.FlushAsync();
+            DataFrame dataFrame = (DataFrame)await connection.ReadFrameAsync(TimeSpan.FromSeconds(30));
+            Assert.True(data.Span.SequenceEqual(dataFrame.Data.Span));
+        }
+
+        private async Task SendAndReceiveRequestEOFAsync(DuplexContent duplexContent, Stream requestStream, Http2LoopbackConnection connection, int streamId)
+        {
+            duplexContent.Complete();
+            DataFrame dataFrame = (DataFrame)await connection.ReadFrameAsync(TimeSpan.FromSeconds(30));
+            Assert.True(dataFrame.EndStreamFlag);
+            Assert.Equal(0, dataFrame.Data.Length);
+
+            // Attempting to write now should throw ObjectDisposedException
+            await Assert.ThrowsAsync<ObjectDisposedException>(async () => { await requestStream.WriteAsync(new byte[1]); });
+        }
+
+        [Fact]
+        public async Task PostAsyncDuplex_ClientSendsEndStream_Success()
+        {
+            byte[] contentBytes = Encoding.UTF8.GetBytes("Hello world");
+
+            using (var server = Http2LoopbackServer.CreateServer())
+            {
+                using (HttpClient client = CreateHttpClient())
+                {
+                    var duplexContent = new DuplexContent();
+
+                    var request = new HttpRequestMessage(HttpMethod.Post, server.Address);
+                    request.Version = new Version(2, 0);
+                    request.Content = duplexContent;
+                    Task<HttpResponseMessage> responseTask = client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead);
+
+                    Http2LoopbackConnection connection = await server.EstablishConnectionAsync();
+
+                    // Client should have sent the request headers, and the request stream should now be available
+                    Stream requestStream = await duplexContent.WaitForStreamAsync();
+
+                    (int streamId, _) = await connection.ReadAndParseRequestHeaderAsync(readBody: false);
+
+                    // Send data to the server, even before we've received response headers.
+                    await SendAndReceiveRequestDataAsync(contentBytes, requestStream, connection, streamId);
+
+                    // Send response headers
+                    await connection.SendResponseHeadersAsync(streamId, endStream: false);
+                    HttpResponseMessage response = await responseTask;
+                    Stream responseStream = await response.Content.ReadAsStreamAsync();
+
+                    // Send some data back and forth
+                    await SendAndReceiveResponseDataAsync(contentBytes, responseStream, connection, streamId);
+                    await SendAndReceiveResponseDataAsync(contentBytes, responseStream, connection, streamId);
+                    await SendAndReceiveRequestDataAsync(contentBytes, requestStream, connection, streamId);
+                    await SendAndReceiveRequestDataAsync(contentBytes, requestStream, connection, streamId);
+                    await SendAndReceiveResponseDataAsync(contentBytes, responseStream, connection, streamId);
+                    await SendAndReceiveRequestDataAsync(contentBytes, requestStream, connection, streamId);
+                    await SendAndReceiveRequestDataAsync(contentBytes, requestStream, connection, streamId);
+                    await SendAndReceiveResponseDataAsync(contentBytes, responseStream, connection, streamId);
+
+                    // Complete sending the request body
+                    await SendAndReceiveRequestEOFAsync(duplexContent, requestStream, connection, streamId);
+
+                    // Send more data to the client
+                    await SendAndReceiveResponseDataAsync(contentBytes, responseStream, connection, streamId);
+
+                    // Complete sending the response body
+                    await SendAndReceiveResponseEOFAsync(responseStream, connection, streamId);
+
+//                    await connection.ShutdownIgnoringErrorsAsync(streamId);
+                }
+
+                // TODO: Wait for connection to close here?
+            }
+        }
+
+        [ActiveIssue(39404)]
+        [Fact]
+        public async Task PostAsyncDuplex_ServerSendsEndStream_Success()
+        {
+            byte[] contentBytes = Encoding.UTF8.GetBytes("Hello world");
+
+            using (var server = Http2LoopbackServer.CreateServer())
+            {
+                using (HttpClient client = CreateHttpClient())
+                {
+                    var duplexContent = new DuplexContent();
+
+                    var request = new HttpRequestMessage(HttpMethod.Post, server.Address);
+                    request.Version = new Version(2, 0);
+                    request.Content = duplexContent;
+                    Task<HttpResponseMessage> responseTask = client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead);
+
+                    Http2LoopbackConnection connection = await server.EstablishConnectionAsync();
+
+                    // Client should have sent the request headers, and the request stream should now be available
+                    Stream requestStream = await duplexContent.WaitForStreamAsync();
+
+                    (int streamId, _) = await connection.ReadAndParseRequestHeaderAsync(readBody: false);
+
+                    // Send data to the server, even before we've received response headers.
+                    await SendAndReceiveRequestDataAsync(contentBytes, requestStream, connection, streamId);
+
+                    // Send response headers
+                    await connection.SendResponseHeadersAsync(streamId, endStream: false);
+                    HttpResponseMessage response = await responseTask;
+                    Stream responseStream = await response.Content.ReadAsStreamAsync();
+
+                    // Send some data back and forth
+                    await SendAndReceiveResponseDataAsync(contentBytes, responseStream, connection, streamId);
+                    await SendAndReceiveResponseDataAsync(contentBytes, responseStream, connection, streamId);
+                    await SendAndReceiveRequestDataAsync(contentBytes, requestStream, connection, streamId);
+                    await SendAndReceiveRequestDataAsync(contentBytes, requestStream, connection, streamId);
+                    await SendAndReceiveResponseDataAsync(contentBytes, responseStream, connection, streamId);
+                    await SendAndReceiveRequestDataAsync(contentBytes, requestStream, connection, streamId);
+                    await SendAndReceiveRequestDataAsync(contentBytes, requestStream, connection, streamId);
+                    await SendAndReceiveResponseDataAsync(contentBytes, responseStream, connection, streamId);
+
+                    // Complete sending the response body
+                    await SendAndReceiveResponseEOFAsync(responseStream, connection, streamId);
+
+                    // Send more data to the server
+                    await SendAndReceiveRequestDataAsync(contentBytes, requestStream, connection, streamId);
+
+                    // Complete sending the request body
+                    await SendAndReceiveRequestEOFAsync(duplexContent, requestStream, connection, streamId);
+
+                    //                    await connection.ShutdownIgnoringErrorsAsync(streamId);
+                }
+
+                // TODO: Wait for connection to close here?
+            }
         }
 
         [Theory]

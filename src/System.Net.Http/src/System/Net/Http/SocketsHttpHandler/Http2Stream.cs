@@ -797,6 +797,7 @@ namespace System.Net.Http
                             IgnoreExceptions(http2Stream._connection.SendRstStreamAsync(http2Stream._streamId, Http2ProtocolErrorCode.Cancel));
                         }
 
+                        // TEST
                         http2Stream.Dispose();
                     }
 
