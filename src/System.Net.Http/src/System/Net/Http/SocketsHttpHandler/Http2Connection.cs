@@ -1560,13 +1560,19 @@ namespace System.Net.Http
             Http2Stream http2Stream = null;
 
             // TODO: Move try after SendHeadersAsync
+            // Actually, we can't do that. We need exceptions from SendHeadersAsync to get mapped.
+            // But, we can have two separate try/catch, outer for exception map, inner for ... whatever?
+            // Ideally we don't need the inner, and ideally we can move the http2Stream decl inside the outer try.
+
             try
             {
                 // Send request headers
                 bool shouldExpectContinue = request.Content != null && request.HasHeaders && request.Headers.ExpectContinue == true;
                 http2Stream = await SendHeadersAsync(request, cancellationToken, mustFlush: shouldExpectContinue).ConfigureAwait(false);
 
-                // Start sending the request body, if any.
+                // TODO: DOn't pass cancellationToken to SendRequestBody*. It shouldn't matter anyway.
+
+                // Send request body, if any, and read response headers.
                 Task requestBodyTask = 
                     request.Content == null ? Task.CompletedTask :
                     shouldExpectContinue ? http2Stream.SendRequestBodyWithExpect100ContinueAsync(cancellationToken) :
@@ -1574,6 +1580,8 @@ namespace System.Net.Http
 
                 // Start receiving the response headers.
                 Task responseHeadersTask = http2Stream.ReadResponseHeadersAsync(cancellationToken);
+
+                // TODO: Shouldn't we await response headers before we do this little nonsense below?
 
                 // Wait for either task to complete.  The best and most common case is when the request body completes
                 // before the response headers, in which case we can fully process the sending of the request and then
@@ -1634,6 +1642,8 @@ namespace System.Net.Http
                     {
                         http2Stream.Cancel();
                     }
+
+                    // TODO: When the hell does this happen??
 
                     if (cancellationToken.IsCancellationRequested && oce.CancellationToken != cancellationToken)
                     {

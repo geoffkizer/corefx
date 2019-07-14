@@ -193,6 +193,13 @@ namespace System.Net.Http
                 }
                 else
                 {
+                    // TODO: Fix this up
+                    // Leave as is for now, because it doesn't throw an exception (nor should it)
+                    // But, we need to do something like:
+                    // set _sendState = Abandoned
+                    // do not send a RST_STREAM here
+                    // return to caller, and let it check _sendState and eventually send RST_STREAM
+
                     // We received a negative response from server, so we will not send the request body, and instead we will reset the stream.
                     if (NetEventSource.IsEnabled) Trace("Avoiding sending 100-Continue request body content.");
                     _shouldSendRequestBody = false;
