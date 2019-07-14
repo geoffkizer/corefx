@@ -1558,6 +1558,8 @@ namespace System.Net.Http
             if (NetEventSource.IsEnabled) Trace($"{request}");
 
             Http2Stream http2Stream = null;
+
+            // TODO: Move try after SendHeadersAsync
             try
             {
                 // Send request headers
