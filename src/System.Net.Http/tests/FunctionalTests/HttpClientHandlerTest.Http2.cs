@@ -2290,6 +2290,59 @@ namespace System.Net.Http.Functional.Tests
             }
         }
 
+        [Fact]
+        public async Task PostAsyncDuplex_CancelledBeforeResponseHeadersReceived_ResetsStream()
+        {
+            byte[] contentBytes = Encoding.UTF8.GetBytes("Hello world");
+
+            using (var server = Http2LoopbackServer.CreateServer())
+            {
+                Http2LoopbackConnection connection;
+                using (HttpClient client = CreateHttpClient())
+                {
+                    var duplexContent = new DuplexContent();
+
+                    var request = new HttpRequestMessage(HttpMethod.Post, server.Address);
+                    request.Version = new Version(2, 0);
+                    request.Content = duplexContent;
+                    var cancellationTokenSource = new CancellationTokenSource();
+                    Task<HttpResponseMessage> responseTask = client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationTokenSource.Token);
+
+                    connection = await server.EstablishConnectionAsync();
+
+                    // Client should have sent the request headers, and the request stream should now be available
+                    Stream requestStream = await duplexContent.WaitForStreamAsync();
+
+                    // Flush the content stream. Otherwise, the request headers are not guaranteed to be sent.
+                    await requestStream.FlushAsync();
+
+                    (int streamId, _) = await connection.ReadAndParseRequestHeaderAsync(readBody: false);
+
+                    // Send data to the server, even before we've received response headers.
+                    await SendAndReceiveRequestDataAsync(contentBytes, requestStream, connection, streamId);
+
+                    // Cancel the request
+                    cancellationTokenSource.Cancel();
+
+                    // Attempting to write on the request body should now fail with OperationCanceledException.
+                    Exception e = await Assert.ThrowsAsync<OperationCanceledException>(async () => { await SendAndReceiveRequestDataAsync(contentBytes, requestStream, connection, streamId); });
+
+                    // Propagate the exception to the request stream serialization task.
+                    // This allows the request processing to complete.
+                    duplexContent.Fail(e);
+
+                    // Client should set RST_STREAM.
+                    await connection.ReadRstStreamAsync(streamId);
+
+                    // Request should fail.
+                    await Assert.ThrowsAsync<TaskCanceledException>(() => responseTask);
+                }
+
+                // On handler dispose, client should shutdown the connection without sending additional frames.
+                await connection.WaitForClientDisconnectAsync();
+            }
+        }
+
         [ActiveIssue(39458)]
         [Fact]
         public async Task PostAsyncDuplex_ServerResetsStream_Throws()
