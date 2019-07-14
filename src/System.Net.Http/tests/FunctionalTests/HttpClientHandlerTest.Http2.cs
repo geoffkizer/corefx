@@ -1976,6 +1976,12 @@ namespace System.Net.Http.Functional.Tests
                 _waitForCompletion.SetResult(true);
                 _waitForCompletion = null;
             }
+
+            public void Fail(Exception e)
+            {
+                _waitForCompletion.SetException(e);
+                _waitForCompletion = null;
+            }
         }
 
         private async Task SendAndReceiveResponseDataAsync(Memory<byte> data, Stream responseStream, Http2LoopbackConnection connection, int streamId)
@@ -2052,6 +2058,9 @@ namespace System.Net.Http.Functional.Tests
 
                     (int streamId, _) = await connection.ReadAndParseRequestHeaderAsync(readBody: false);
 
+                    // Flush the content stream. Otherwise, the request headers are not guaranteed to be sent.
+                    await requestStream.FlushAsync();
+
                     // Send data to the server, even before we've received response headers.
                     await SendAndReceiveRequestDataAsync(contentBytes, requestStream, connection, streamId);
 
@@ -2107,6 +2116,9 @@ namespace System.Net.Http.Functional.Tests
                     // Client should have sent the request headers, and the request stream should now be available
                     Stream requestStream = await duplexContent.WaitForStreamAsync();
 
+                    // Flush the content stream. Otherwise, the request headers are not guaranteed to be sent.
+                    await requestStream.FlushAsync();
+
                     (int streamId, _) = await connection.ReadAndParseRequestHeaderAsync(readBody: false);
 
                     // Send data to the server, even before we've received response headers.
@@ -2137,11 +2149,14 @@ namespace System.Net.Http.Functional.Tests
                     await SendAndReceiveRequestEOFAsync(duplexContent, requestStream, connection, streamId);
                 }
 
+                // On handler dispose, client should shutdown the connection, since there are no active requests remaining.
                 await connection.WaitForClientDisconnectAsync();
             }
         }
 
+        [ActiveIssue(0)]    // TODO
         [Fact]
+        [OuterLoop("Uses Task.Delay")]
         public async Task PostAsyncDuplex_NonSuccessStatusCode_ResetsStream()
         {
             byte[] contentBytes = Encoding.UTF8.GetBytes("Hello world");
@@ -2163,31 +2178,42 @@ namespace System.Net.Http.Functional.Tests
                     // Client should have sent the request headers, and the request stream should now be available
                     Stream requestStream = await duplexContent.WaitForStreamAsync();
 
+                    // Flush the content stream. Otherwise, the request headers are not guaranteed to be sent.
+                    await requestStream.FlushAsync();
+
                     (int streamId, _) = await connection.ReadAndParseRequestHeaderAsync(readBody: false);
 
                     // Send data to the server, even before we've received response headers.
                     await SendAndReceiveRequestDataAsync(contentBytes, requestStream, connection, streamId);
 
-                    // Send a non-success response code, which should cause the client to cancel sending the request.
+                    // Send a non-success response code, which should cause the client to stop sending the request.
                     await connection.SendResponseHeadersAsync(streamId, endStream: false, statusCode: HttpStatusCode.Forbidden);
                     HttpResponseMessage response = await responseTask;
                     Stream responseStream = await response.Content.ReadAsStreamAsync();
 
-                    // ActiveIssue #9071:
-                    // We don't currently support cancellation on custom HttpContent classes.
-                    // This means that the client won't actually cancel the request body send.
-                    // Work around this by completing the content send ourselves.
-                    duplexContent.Complete();
+                    // Ensure client has processed the response headers
+                    await connection.PingPong();
 
-                    // Because we received a non-success response code, the client should cancel sending the request 
-                    // and send a RST_STREAM.
+                    // Attempting to write on the request body should now fail with ObjectDisposedException.
+                    Exception e = await Assert.ThrowsAsync<ObjectDisposedException>(async () => { await SendAndReceiveRequestDataAsync(contentBytes, requestStream, connection, streamId); });
+
+                    // Propagate the exception to the request stream serialization task.
+                    duplexContent.Fail(e);
+
+                    // Wait a bit to try to ensure client does not send RST_STREAM yet.
+                    await Task.Delay(1000);
+                    await connection.PingPong();
+
+                    // Client should still be able to receive response body.
+                    await SendAndReceiveResponseDataAsync(contentBytes, responseStream, connection, streamId);
+                    await SendAndReceiveResponseDataAsync(contentBytes, responseStream, connection, streamId);
+
+                    // Complete response body. Client should receive EOF and reset the stream.
+                    await SendAndReceiveResponseEOFAsync(responseStream, connection, streamId);
                     await connection.ReadRstStreamAsync(streamId);
-
-                    // Attempting to write on the request body should now fail.
-                    Exception e = await Assert.ThrowsAsync<Exception>(async () => { await SendAndReceiveRequestDataAsync(contentBytes, requestStream, connection, streamId); });
-                    Console.WriteLine("***** Exception: {e}");
                 }
 
+                // On handler dispose, client should shutdown the connection, since there are no active requests remaining.
                 await connection.WaitForClientDisconnectAsync();
             }
         }
@@ -2241,6 +2267,9 @@ namespace System.Net.Http.Functional.Tests
                 {
                     try
                     {
+                        // Temporary
+                        Console.WriteLine($"****** SendAsync_ConcurentSendReceive_Ok: ReadBodyAsync");
+
                         // Client should send reset.
                         await connection.ReadBodyAsync();
                         if (responseCode != HttpStatusCode.OK) Assert.True(false, "Should not be here");
@@ -2248,7 +2277,7 @@ namespace System.Net.Http.Functional.Tests
                     catch (IOException e) when (responseCode != HttpStatusCode.OK)
                     {
                         // Temporary
-                        Console.WriteLine($"SendAsync_ConcurentSendReceive_Ok: Caught {e}");
+                        Console.WriteLine($"****** SendAsync_ConcurentSendReceive_Ok: Caught {e}");
 
                     }
                 }

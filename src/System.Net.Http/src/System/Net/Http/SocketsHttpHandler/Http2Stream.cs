@@ -139,10 +139,13 @@ namespace System.Net.Http
                 {
                     if (NetEventSource.IsEnabled) Trace($"Failed to send request body: {e}");
 
+                    Console.WriteLine($"----- Exception caught in SendRequestBodyAsync. _shouldSendRequestBody={_shouldSendRequestBody}, e={e}");
+
                     // if we decided abandon sending request and we get ObjectDisposed as result of it, just eat exception.
                     if (!_shouldSendRequestBody && (e is ObjectDisposedException || e.InnerException is ObjectDisposedException))
                     {
                         // Try to notify server if we did not finish sending request body.
+                        Console.WriteLine("----- Send RST_STREAM because we did not finish sending request body");
                         IgnoreExceptions(_connection.SendRstStreamAsync(_streamId, Http2ProtocolErrorCode.Cancel));
                         return;
                     }
@@ -194,6 +197,7 @@ namespace System.Net.Http
                     if (NetEventSource.IsEnabled) Trace("Avoiding sending 100-Continue request body content.");
                     _shouldSendRequestBody = false;
                     _shouldSendRequestBodyWaiter = null;
+                    Console.WriteLine("----- Send RST_STREAM due to negative response from server");
                     IgnoreExceptions(_connection.SendRstStreamAsync(_streamId, Http2ProtocolErrorCode.Cancel));
                 }
             }
@@ -690,6 +694,7 @@ namespace System.Net.Http
                 bool signalWaiter;
                 lock (SyncObject)
                 {
+                    Console.WriteLine("----- Send RST_STREAM due to Cancel call");
                     IgnoreExceptions(_connection.SendRstStreamAsync(_streamId, Http2ProtocolErrorCode.Cancel));
                     Interlocked.CompareExchange(ref _abortException, new OperationCanceledException(), null);
                     _state = StreamState.Aborted;
@@ -794,6 +799,7 @@ namespace System.Net.Http
                         if (http2Stream._state != StreamState.Aborted && http2Stream._state != StreamState.Complete)
                         {
                             // If we abort response stream before endOfStream, let server know.
+                            Console.WriteLine("----- Send RST_STREAM due to early Http2ReadStream.Dispose");
                             IgnoreExceptions(http2Stream._connection.SendRstStreamAsync(http2Stream._streamId, Http2ProtocolErrorCode.Cancel));
                         }
 
