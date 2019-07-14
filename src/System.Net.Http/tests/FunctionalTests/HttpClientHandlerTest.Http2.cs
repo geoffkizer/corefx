@@ -2056,10 +2056,10 @@ namespace System.Net.Http.Functional.Tests
                     // Client should have sent the request headers, and the request stream should now be available
                     Stream requestStream = await duplexContent.WaitForStreamAsync();
 
-                    (int streamId, _) = await connection.ReadAndParseRequestHeaderAsync(readBody: false);
-
                     // Flush the content stream. Otherwise, the request headers are not guaranteed to be sent.
                     await requestStream.FlushAsync();
+
+                    (int streamId, _) = await connection.ReadAndParseRequestHeaderAsync(readBody: false);
 
                     // Send data to the server, even before we've received response headers.
                     await SendAndReceiveRequestDataAsync(contentBytes, requestStream, connection, streamId);
@@ -2214,6 +2214,61 @@ namespace System.Net.Http.Functional.Tests
                 }
 
                 // On handler dispose, client should shutdown the connection, since there are no active requests remaining.
+                await connection.WaitForClientDisconnectAsync();
+            }
+        }
+
+        [Fact]
+        public async Task PostAsyncDuplex_RequestContentException_ResetsStream()
+        {
+            byte[] contentBytes = Encoding.UTF8.GetBytes("Hello world");
+
+            using (var server = Http2LoopbackServer.CreateServer())
+            {
+                Http2LoopbackConnection connection;
+                using (HttpClient client = CreateHttpClient())
+                {
+                    var duplexContent = new DuplexContent();
+
+                    var request = new HttpRequestMessage(HttpMethod.Post, server.Address);
+                    request.Version = new Version(2, 0);
+                    request.Content = duplexContent;
+                    Task<HttpResponseMessage> responseTask = client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead);
+
+                    connection = await server.EstablishConnectionAsync();
+
+                    // Client should have sent the request headers, and the request stream should now be available
+                    Stream requestStream = await duplexContent.WaitForStreamAsync();
+
+                    (int streamId, _) = await connection.ReadAndParseRequestHeaderAsync(readBody: false);
+
+                    // Flush the content stream. Otherwise, the request headers are not guaranteed to be sent.
+                    await requestStream.FlushAsync();
+
+                    // Send data to the server, even before we've received response headers.
+                    await SendAndReceiveRequestDataAsync(contentBytes, requestStream, connection, streamId);
+
+                    // Send response headers
+                    await connection.SendResponseHeadersAsync(streamId, endStream: false);
+                    HttpResponseMessage response = await responseTask;
+                    Stream responseStream = await response.Content.ReadAsStreamAsync();
+
+                    // Send some data back and forth
+                    await SendAndReceiveResponseDataAsync(contentBytes, responseStream, connection, streamId);
+                    await SendAndReceiveResponseDataAsync(contentBytes, responseStream, connection, streamId);
+                    await SendAndReceiveRequestDataAsync(contentBytes, requestStream, connection, streamId);
+                    await SendAndReceiveRequestDataAsync(contentBytes, requestStream, connection, streamId);
+
+                    // Throw an exception from the request content.
+                    duplexContent.Fail(new ArithmeticException());
+
+                    // Client should set RST_STREAM.
+                    await connection.ReadRstStreamAsync(streamId);
+
+                    // Trying to read on the response stream should fail now, and client should ignore any data received
+                    await Assert.ThrowsAsync<Exception>(async () => await SendAndReceiveResponseDataAsync(contentBytes, responseStream, connection, streamId));
+                }
+
                 await connection.WaitForClientDisconnectAsync();
             }
         }
