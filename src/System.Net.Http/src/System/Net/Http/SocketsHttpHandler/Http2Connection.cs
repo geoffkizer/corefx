@@ -1572,11 +1572,11 @@ namespace System.Net.Http
 
                 // TODO: DOn't pass cancellationToken to SendRequestBody*. It shouldn't matter anyway.
 
-                // Send request body, if any, and read response headers.
+                // Start to send request body, if any.
                 Task requestBodyTask = 
                     request.Content == null ? Task.CompletedTask :
                     shouldExpectContinue ? http2Stream.SendRequestBodyWithExpect100ContinueAsync(cancellationToken) :
-                    http2Stream.SendRequestBodyAsync(cancellationToken);
+                    http2Stream.SendRequestBodyAsync();
 
                 // Start receiving the response headers.
                 Task responseHeadersTask = http2Stream.ReadResponseHeadersAsync(cancellationToken);

@@ -103,43 +103,36 @@ namespace System.Net.Http
             public HttpRequestMessage Request => _request;
             public HttpResponseMessage Response => _response;
 
-            public async Task SendRequestBodyAsync(CancellationToken cancellationToken)
+            public async Task SendRequestBodyAsync()
             {
                 Debug.Assert(_request.Content != null);
                 if (NetEventSource.IsEnabled) Trace($"{_request.Content}");
+
+#if false
+                bool shouldSendBody = true;
+                bool shouldExpectContinue = _request.Content != null && _request.HasHeaders && _request.Headers.ExpectContinue == true;
+                if (shouldExpectContinue)
+                {
+                    shouldSendBody = await WaitForContinueAsync().ConfigureAwait(false);
+                }
+#endif
 
                 try
                 {
                     using (Http2WriteStream writeStream = new Http2WriteStream(this))
                     {
-                        // TODO: until #9071 is fixed, cancellation on content.CopyToAsync does not apply for most content types,
-                        // because most content types aren't passed the token given to this internal overload of CopyToAsync.
-                        // To work around it, we register to set _abortException as needed; this won't preempt reads issued to
-                        // the source content, but it will at least enable the writes then performed on our write stream to see
-                        // that cancellation was requested and abort, rather than waiting for the whole copy to complete.
-                        using (cancellationToken.UnsafeRegister(stream =>
-                        {
-                            var thisRef = (Http2Stream)stream;
-                            if (thisRef._abortException == null)
-                            {
-                                if (NetEventSource.IsEnabled) thisRef.Trace($"Canceling sending request body.");
-                                Interlocked.CompareExchange(ref thisRef._abortException, new OperationCanceledException(), null);
-                            }
-                        }, this))
-                        {
-                            await _request.Content.CopyToAsync(writeStream, null, cancellationToken).ConfigureAwait(false);
-                            if (NetEventSource.IsEnabled) Trace($"Finished sending request body.");
-                        }
+                        await _request.Content.CopyToAsync(writeStream, null, default).ConfigureAwait(false);
                     }
 
-                    // Don't wait for completion, which could happen asynchronously.
-                    _connection.LogExceptions(_connection.SendEndStreamAsync(_streamId));
+                    await _connection.SendEndStreamAsync(_streamId);
+
+                    if (NetEventSource.IsEnabled) Trace($"Finished sending request body.");
                 }
                 catch (Exception e)
                 {
                     if (NetEventSource.IsEnabled) Trace($"Failed to send request body: {e}");
 
-                    Console.WriteLine($"----- Exception caught in SendRequestBodyAsync. _shouldSendRequestBody={_shouldSendRequestBody}, e={e}");
+                    //Console.WriteLine($"----- Exception caught in SendRequestBodyAsync. _shouldSendRequestBody={_shouldSendRequestBody}, e={e}");
 
                     // if we decided abandon sending request and we get ObjectDisposed as result of it, just eat exception.
                     if (!_shouldSendRequestBody && (e is ObjectDisposedException || e.InnerException is ObjectDisposedException))
@@ -156,6 +149,61 @@ namespace System.Net.Http
 
                     throw;
                 }
+            }
+
+            // Wait for 100 response if we sent Expect: 100-continue. We can either get 100 response from server and send body
+            // or we may exceed timeout and send request body anyway.
+            // If we get response > 300, we will try to stop sending and we will send RST_STREAM.
+            public async Task<bool> WaitForContinueAsync()
+            {
+                Debug.Assert(_request.Content != null);
+                if (NetEventSource.IsEnabled) Trace($"Waiting to send request body content for 100-Continue.");
+
+                // Create a TCS that will complete when one of two things occurs:
+                // 1. if a timer fires before we receive the relevant response from the server.
+                // 2. if we receive the relevant response from the server before a timer fires.
+                // In the first case, we could run this continuation synchronously, but in the latter, we shouldn't,
+                // as we could end up starting the body copy operation on the main event loop thread, which could
+                // then starve the processing of other requests.  So, we make the TCS RunContinuationsAsynchronously.
+                bool sendRequestContent;
+                var waiter = _shouldSendRequestBodyWaiter = new TaskCompletionSource<bool>(TaskContinuationOptions.RunContinuationsAsynchronously);
+                using (var expect100Timer = new Timer(s =>
+                {
+                    var thisRef = (Http2Stream)s;
+                    if (NetEventSource.IsEnabled)
+                        thisRef.Trace($"100-Continue timer expired.");
+                    thisRef._shouldSendRequestBodyWaiter?.TrySetResult(true);
+                }, this, _connection._pool.Settings._expect100ContinueTimeout, Timeout.InfiniteTimeSpan))
+                {
+                    sendRequestContent = await waiter.Task.ConfigureAwait(false);
+                    // By now, either we got a response from the server or the timer expired.
+                }
+
+                if (sendRequestContent)
+                {
+                    // We received a positive response from the server, or we didn't receive a response but our timer expired.
+                    // In either case, start sending the request body.
+//                    await SendRequestBodyAsync().ConfigureAwait(false);
+                }
+                else
+                {
+                    // TODO: Fix this up
+                    // Leave as is for now, because it doesn't throw an exception (nor should it)
+                    // But, we need to do something like:
+                    // set _sendState = Abandoned
+                    // do not send a RST_STREAM here
+                    // return to caller, and let it check _sendState and eventually send RST_STREAM
+
+                    // We received a negative response from server, so we will not send the request body, and instead we will reset the stream.
+                    if (NetEventSource.IsEnabled)
+                        Trace("Avoiding sending 100-Continue request body content.");
+                    _shouldSendRequestBody = false;
+                    _shouldSendRequestBodyWaiter = null;
+                    Console.WriteLine("----- Send RST_STREAM due to negative response from server");
+                    IgnoreExceptions(_connection.SendRstStreamAsync(_streamId, Http2ProtocolErrorCode.Cancel));
+                }
+
+                return sendRequestContent;
             }
 
             // Process request body if we sent 100Continue. We can either get 100 response from server and send body
@@ -189,7 +237,7 @@ namespace System.Net.Http
                 {
                     // We received a positive response from the server, or we didn't receive a response but our timer expired.
                     // In either case, start sending the request body.
-                    await SendRequestBodyAsync(cancellationToken).ConfigureAwait(false);
+                    await SendRequestBodyAsync().ConfigureAwait(false);
                 }
                 else
                 {
